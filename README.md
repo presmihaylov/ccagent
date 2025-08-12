@@ -2,12 +2,6 @@
 
 A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [Claude Control platform](https://claudecontrol.com).
 
-## Overview
-
-ccagent is part of the **Claude Control** ecosystem - a platform that enables teams to interact with AI assistants directly from their existing communication channels. 
-
-Instead of context-switching to separate AI tools, team members can mention AI assistants in Slack or Discord and receive intelligent responses with full access to your codebase.
-
 ### Supported AI Assistants
 
 - **Claude Code**: Anthropic's official CLI tool for software engineering (default)
