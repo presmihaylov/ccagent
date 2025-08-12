@@ -1,4 +1,4 @@
-.PHONY: run build clean release test test-verbose lint lint-fix
+.PHONY: run build clean release test test-verbose lint lint-fix changelog
 
 run:
 	go run cmd/*.go
@@ -24,3 +24,6 @@ lint:
 
 lint-fix:
 	golangci-lint run --fix
+
+changelog:
+	git-cliff --output CHANGELOG.md
