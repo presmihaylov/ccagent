@@ -86,9 +86,9 @@ if command -v git-cliff &> /dev/null; then
     # Generate release notes for GitHub release from last tag to current
     LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
     if [ -n "$LAST_TAG" ]; then
-        RELEASE_NOTES=$(git-cliff "$LAST_TAG".."$TAG")
+        RELEASE_NOTES=$(git-cliff "$LAST_TAG".."$TAG" --strip header)
     else
-        RELEASE_NOTES=$(git-cliff --unreleased)
+        RELEASE_NOTES=$(git-cliff --unreleased --strip header)
     fi
     
     # If no conventional commits found, use a default message
