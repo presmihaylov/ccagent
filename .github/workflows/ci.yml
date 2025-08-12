@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build ccagent
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Build ccagent
+      run: make build
+
+  test:
+    name: Test ccagent
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Run ccagent tests
+      run: make test
+
+  lint:
+    name: Lint ccagent
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Install Go tools
+      run: |
+        go install github.com/segmentio/golines@latest
+        go install golang.org/x/tools/cmd/goimports@latest
+        
+    - name: Run ccagent linting  
+      run: |
+        goimports -d .
+        golines --max-len=120 --dry-run .
+        
+    - name: Run golangci-lint on ccagent
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        args: --timeout=5m
