@@ -83,9 +83,9 @@ if command -v git-cliff &> /dev/null; then
     # Generate changelog from last tag to current
     LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
     if [ -n "$LAST_TAG" ]; then
-        RELEASE_NOTES=$(git-cliff --strip=header,footer "$LAST_TAG".."$TAG")
+        RELEASE_NOTES=$(git-cliff "$LAST_TAG".."$TAG")
     else
-        RELEASE_NOTES=$(git-cliff --strip=header,footer --unreleased)
+        RELEASE_NOTES=$(git-cliff --unreleased)
     fi
     
     # If no conventional commits found, use a default message
