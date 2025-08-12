@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Features
 
 - Testing
+- Generate PR titles with git-cliff conventions out of the box
 
 ## [0.0.1] - 2025-08-12
 
