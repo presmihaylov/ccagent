@@ -77,10 +77,13 @@ echo "Creating new 'latest' tag..."
 git tag -a "latest" -m "Latest release - $TAG"
 git push origin "latest"
 
-# Generate changelog for this release
+# Generate and commit changelog
 echo "Generating changelog for $TAG..."
 if command -v git-cliff &> /dev/null; then
-    # Generate changelog from last tag to current
+    # Generate full changelog
+    git-cliff --output CHANGELOG.md
+    
+    # Generate release notes for GitHub release from last tag to current
     LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
     if [ -n "$LAST_TAG" ]; then
         RELEASE_NOTES=$(git-cliff "$LAST_TAG".."$TAG")
@@ -93,6 +96,11 @@ if command -v git-cliff &> /dev/null; then
         RELEASE_NOTES="## Changes
 - Version $VERSION release"
     fi
+    
+    # Commit the changelog
+    echo "Committing changelog..."
+    git add CHANGELOG.md
+    git commit -m "changelog for $VERSION"
 else
     echo "Warning: git-cliff not found. Install with: cargo install git-cliff"
     RELEASE_NOTES="## Changes
