@@ -98,6 +98,7 @@ type Options struct {
 	Agent string `long:"agent" description:"CLI agent to use (claude or cursor)" choice:"claude" choice:"cursor" default:"claude"`
 	BypassPermissions bool `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude (only applies when --agent=claude) (WARNING: Only use in controlled sandbox environments)"`
 	CursorModel string `long:"cursor-model" description:"Model to use with Cursor agent (only applies when --agent=cursor)" choice:"gpt-5" choice:"sonnet-4" choice:"sonnet-4-thinking"`
+	Version bool `long:"version" short:"v" description:"Show version information"`
 }
 
 func main() {
@@ -111,6 +112,12 @@ func main() {
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Handle version flag
+	if opts.Version {
+		fmt.Printf("%s\n", core.GetVersion())
+		os.Exit(0)
 	}
 
 	// Always enable info level logging
