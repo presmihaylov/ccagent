@@ -124,15 +124,13 @@ make lint-fix
 
 ## Security Recommendations
 
-### Permission Modes
-
 ccagent operates in different permission modes depending on the AI assistant and configuration:
 
-#### Secure Mode (Recommended)
+### Secure Mode (Recommended)
 - **Claude Code (default)**: Runs in `acceptEdits` mode, requiring explicit approval for all file modifications
 - **Best Practice**: Use this mode when running ccagent on your local development machine
 
-#### Bypass Permissions Mode
+### Bypass Permissions Mode
 - **Claude Code with `--claude-bypass-permissions`**: Allows unrestricted system access
 - **Cursor Agent**: **Always runs in bypass mode by default**
 
