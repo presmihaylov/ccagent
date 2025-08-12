@@ -19,6 +19,7 @@ Instead of context-switching to separate AI tools, team members can mention AI a
 
 - Go 1.24 or later
 - Git (for repository integration)
+- GitHub CLI (`gh`) - [Install here](https://cli.github.com/)
 - Claude Control account (sign up [here](https://claudecontrol.com))
 
 ### From Source
@@ -46,16 +47,39 @@ You can generate an API key from the Claude Control dashboard.
 
 ### Basic Usage
 
-Run ccagent in your development project directory:
+#### Repository Setup
 
-```bash
-./bin/ccagent
-```
+**Important**: ccagent will autonomously create branches, make changes, and create pull requests. To avoid conflicts with your main development workflow, it's **strongly recommended** to clone your repository separately for ccagent use.
+
+#### Prerequisites Setup
+
+Before running ccagent, ensure you have:
+
+1. **GitHub CLI Authentication**: ccagent uses the GitHub CLI to create pull requests
+   ```bash
+   # Login to GitHub
+   gh auth login
+   
+   # Verify authentication
+   gh auth status
+   ```
+
+2. **Repository Access**: If using SSH, ensure your key is loaded
+   ```bash
+   ssh-add ~/.ssh/id_rsa
+   ```
+
+#### GitHub Account Options
+
+You can use ccagent with:
+- **Your personal GitHub account**: ccagent will create PRs on your behalf
+- **Dedicated bot account**: Create a separate GitHub account for ccagent to use (recommended for teams)
+
+#### Running ccagent
+
+Once setup is complete, run ccagent in your repository directory.
 
 By default, ccagent uses Claude Code as the AI assistant with `acceptEdits` permission mode.
-
-### Other Requirements
-ccagent must be run from within a Git repository. It will validate the Git environment on startup and exit with an error if requirements aren't met.
 
 ### Command Line Options
 
