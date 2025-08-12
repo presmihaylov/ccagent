@@ -75,7 +75,9 @@ func TestDirLockTryLockAndUnlock(t *testing.T) {
 	if err == nil {
 		t.Errorf("Second TryLock() should fail when directory is already locked")
 		// Clean up the unexpected lock
-		lock2.Unlock()
+		if unlockErr := lock2.Unlock(); unlockErr != nil {
+			t.Errorf("Failed to unlock lock2: %v", unlockErr)
+		}
 	}
 
 	// Unlock the first lock
@@ -101,7 +103,9 @@ func TestDirLockTryLockAndUnlock(t *testing.T) {
 	}
 
 	// Clean up
-	lock3.Unlock()
+	if err := lock3.Unlock(); err != nil {
+		t.Errorf("Failed to unlock lock3: %v", err)
+	}
 }
 
 func TestDirLockUnlockIdempotent(t *testing.T) {
