@@ -70,6 +70,7 @@ echo "Creating GitHub release $TAG..."
 RELEASE_NOTES="
 ## Changes
 - TBD
+"
 
 gh release create "$TAG" \
     --title "ccagent $TAG" \
