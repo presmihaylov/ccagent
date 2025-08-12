@@ -4,7 +4,7 @@ set -e
 
 # Get version from VERSION file
 VERSION=$(cat core/VERSION)
-TAG="v$VERSION"
+TAG="$VERSION"
 TARGET_DIR="bin"
 TEMP_DIR=$(mktemp -d)
 
@@ -67,20 +67,9 @@ git push origin "$TAG"
 
 # Create GitHub release with all binaries
 echo "Creating GitHub release $TAG..."
-RELEASE_NOTES="Release $TAG
-
+RELEASE_NOTES="
 ## Changes
-- Version $VERSION release with production binaries for multiple platforms
-
-## Binaries
-- Windows x86_64
-- macOS x86_64 (Intel)
-- macOS ARM64 (Apple Silicon)
-- Linux x86_64
-- Linux ARM64
-
-## Installation
-Download the appropriate binary for your platform and run it in your project directory."
+- TBD
 
 gh release create "$TAG" \
     --title "ccagent $TAG" \
