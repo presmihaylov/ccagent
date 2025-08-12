@@ -25,8 +25,13 @@ ccagent runs on **macOS**, **Linux**, and **Windows** with native binaries for b
 brew install presmihaylov/taps/ccagent
 ```
 
-### From Source
+To upgrade to the latest version:
+```bash
+brew upgrade presmihaylov/taps/ccagent
+```
 
+### From Source
+You will need to have Go 1.24 installed:
 ```bash
 git clone https://github.com/presmihaylov/ccagent.git
 cd ccagent
@@ -35,24 +40,13 @@ make build
 
 The compiled binary will be available at `bin/ccagent`.
 
+## Usage
+
 ### Prerequisites
 
-- Git (for repository integration)
+- Git
 - GitHub CLI (`gh`) - [Install here](https://cli.github.com/)
 - Claude Control account (sign up [here](https://claudecontrol.com))
-
-### Environment Setup
-
-ccagent requires the following environment variables:
-
-```bash
-# Required: API key from your Claude Control organization
-export CCAGENT_API_KEY=your_api_key_here
-```
-
-You can generate an API key from the Claude Control dashboard.
-
-## Usage
 
 ### Basic Usage
 
@@ -83,6 +77,17 @@ Before running ccagent, ensure you have:
 You can use ccagent with:
 - **Your personal GitHub account**: ccagent will create PRs on your behalf
 - **Dedicated bot account**: Create a separate GitHub account for ccagent to use (recommended for teams)
+
+#### Environment Setup
+
+ccagent requires the following environment variables:
+
+```bash
+# Required: API key from your Claude Control organization
+export CCAGENT_API_KEY=your_api_key_here
+```
+
+You can generate an API key from the Claude Control dashboard.
 
 #### Running ccagent
 
