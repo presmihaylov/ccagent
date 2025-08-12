@@ -1,4 +1,4 @@
-.PHONY: run build clean build-prod test test-verbose lint lint-fix
+.PHONY: run build clean release test test-verbose lint lint-fix
 
 run:
 	go run cmd/*.go
@@ -10,7 +10,7 @@ build:
 clean:
 	rm -rf bin/
 
-build-prod:
+release:
 	./scripts/build_binaries.sh
 
 test:
