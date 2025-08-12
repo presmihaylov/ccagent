@@ -13,24 +13,33 @@ Instead of context-switching to separate AI tools, team members can mention AI a
 - **Claude Code**: Anthropic's official CLI tool for software engineering (default)
 - **Cursor**: Popular AI-powered code editor integration
 
+### Supported Platforms
+
+ccagent runs on **macOS**, **Linux**, and **Windows** with native binaries for both Intel and ARM architectures.
+
 ## Installation
 
-### Prerequisites
+### Via Homebrew (Recommended)
 
-- Go 1.24 or later
-- Git (for repository integration)
-- GitHub CLI (`gh`) - [Install here](https://cli.github.com/)
-- Claude Control account (sign up [here](https://claudecontrol.com))
+```bash
+brew install presmihaylov/taps/ccagent
+```
 
 ### From Source
 
 ```bash
-git clone https://github.com/your-org/ccagent.git
+git clone https://github.com/presmihaylov/ccagent.git
 cd ccagent
 make build
 ```
 
 The compiled binary will be available at `bin/ccagent`.
+
+### Prerequisites
+
+- Git (for repository integration)
+- GitHub CLI (`gh`) - [Install here](https://cli.github.com/)
+- Claude Control account (sign up [here](https://claudecontrol.com))
 
 ### Environment Setup
 
@@ -84,7 +93,7 @@ By default, ccagent uses Claude Code as the AI assistant with `acceptEdits` perm
 ### Command Line Options
 
 ```bash
-./bin/ccagent [OPTIONS]
+ccagent [OPTIONS]
 
 Options:
   --agent=[claude|cursor]              AI assistant to use (default: claude)
@@ -99,16 +108,16 @@ Options:
 #### Claude Code Agent (Default)
 ```bash
 # Standard mode - requires approval for file edits
-./bin/ccagent --agent claude
+ccagent --agent claude
 
 # Bypass permissions (Recommended in a secure sandbox environment only)
-./bin/ccagent --agent claude --claude-bypass-permissions
+ccagent --agent claude --claude-bypass-permissions
 ```
 
 #### Cursor Agent
 ```bash
 # Use Cursor with specific model
-./bin/ccagent --agent cursor --cursor-model sonnet-4
+ccagent --agent cursor --cursor-model sonnet-4
 ```
 
 ### Logging
