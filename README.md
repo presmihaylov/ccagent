@@ -77,7 +77,7 @@ Options:
 # Standard mode - requires approval for file edits
 ./bin/ccagent --agent claude
 
-# Bypass permissions (USE ONLY IN SECURE SANDBOX ENVIRONMENTS)
+# Bypass permissions (Recommended in a secure sandbox environment only)
 ./bin/ccagent --agent claude --claude-bypass-permissions
 ```
 
@@ -121,6 +121,58 @@ make lint
 # Auto-fix linting issues
 make lint-fix
 ```
+
+## Security Recommendations
+
+### Permission Modes
+
+ccagent operates in different permission modes depending on the AI assistant and configuration:
+
+#### Secure Mode (Recommended)
+- **Claude Code (default)**: Runs in `acceptEdits` mode, requiring explicit approval for all file modifications
+- **Best Practice**: Use this mode when running ccagent on your local development machine
+
+#### Bypass Permissions Mode
+- **Claude Code with `--claude-bypass-permissions`**: Allows unrestricted system access
+- **Cursor Agent**: **Always runs in bypass mode by default**
+
+When running in bypass permissions mode, **anyone with access to your Slack workspace or Discord server can execute arbitrary commands on your system with your user privileges**. It's recommended that you use this mode only if you're running the agent in a secure environment like a docker container or a remote, isolated server.
+
+### Deployment Recommendations
+
+#### Safe Environments for Bypass Mode
+Only use bypass permissions mode in these secure environments:
+- **Remote servers** with limited access and no sensitive data
+- **Docker containers** with restricted capabilities and isolated filesystems
+- **Virtual machines** dedicated solely to AI assistance
+- **Sandboxed environments** with network and filesystem restrictions
+
+#### Unsafe Environments
+**NEVER** use bypass permissions mode on:
+- Your primary development machine
+- Systems with access to sensitive data, credentials, or production resources
+- Shared computers or environments
+- Systems connected to corporate networks without proper isolation
+
+### Best Practices
+
+1. **Use Secure Mode by Default**: Always start with Claude Code in standard mode unless you specifically need bypass permissions
+2. **Isolate Bypass Deployments**: If you need bypass mode, deploy ccagent in a completely isolated environment
+3. **Monitor Access**: Regularly audit who has access to your Slack/Discord channels where AI assistants are active
+4. **Limit Repository Scope**: Run ccagent only in repositories that don't contain sensitive information when using bypass mode
+5. **Regular Updates**: Keep ccagent updated to receive security patches and improvements
+
+### Agent-Specific Security Considerations
+
+#### Claude Code Agent
+- Default secure mode requires manual approval for file changes
+- Bypass mode available but should be used with extreme caution
+- Explicit warning displayed when bypass mode is enabled
+
+#### Cursor Agent
+- **Always operates in bypass mode** - no secure mode available
+- Should only be used in isolated, secure environments
+- Consider the security implications before using Cursor agent
 
 ## Contributing
 
