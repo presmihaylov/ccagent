@@ -132,5 +132,5 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
-For support, please contact us at support@claudecontrol.com
+Contact us at support@claudecontrol.com
 
