@@ -33,18 +33,32 @@ Files changed:
 Actual code changes:
 %s
 
-Generate a SHORT pull request title. Follow these strict rules:
-- Maximum 40 characters (STRICT LIMIT)
-- Start with action verb (Add, Fix, Update, Improve, etc.)
-- Be concise and specific
+Generate a SHORT pull request title following conventional commits format. Follow these strict rules:
+- Maximum 50 characters (STRICT LIMIT)
+- Use conventional commits format: "type: description"
+- Choose appropriate type: feat, fix, docs, chore, refactor, test, perf, ci, build, style
+- Be concise and specific in description
 - No unnecessary words or phrases
 - Don't mention "Claude", "agent", or implementation details
 - Base the title on the actual changes shown above
 
+Type Guidelines:
+- feat: new features or functionality
+- fix: bug fixes
+- docs: documentation changes
+- refactor: code restructuring without behavior change
+- chore: maintenance, dependencies, configuration
+- test: adding or fixing tests
+- perf: performance improvements
+- ci: CI/CD pipeline changes
+- build: build system or external dependencies
+- style: formatting, missing semicolons (no code change)
+
 Examples:
-- "Fix error handling in message processor"
-- "Add user authentication middleware"
-- "Update API response format"
+- "fix: resolve error handling in message processor"
+- "feat: add user authentication middleware" 
+- "docs: update API response format documentation"
+- "chore: bump dependency versions"
 
 CRITICAL: Your response must contain ONLY the PR title text. Do not include:
 - Any explanations or reasoning
@@ -114,19 +128,31 @@ INSTRUCTIONS:
 - Review the current title and the latest changes made to this branch
 - ONLY update the title if the current title has become obsolete or doesn't accurately reflect the work
 - If the current title still accurately captures the main purpose, return it unchanged
-- If updating, make it additive - build upon the existing title rather than replacing it entirely
-- Maximum 40 characters (STRICT LIMIT)
-- Start with action verb (Add, Fix, Update, Improve, etc.)
-- Be concise and specific
+- If updating, use conventional commits format: "type: description"
+- Choose appropriate type: feat, fix, docs, chore, refactor, test, perf, ci, build, style
+- Maximum 50 characters (STRICT LIMIT)
+- Be concise and specific in description
 - Don't mention "Claude", "agent", or implementation details
 
+Type Guidelines:
+- feat: new features or functionality
+- fix: bug fixes  
+- docs: documentation changes
+- refactor: code restructuring without behavior change
+- chore: maintenance, dependencies, configuration
+- test: adding or fixing tests
+- perf: performance improvements
+- ci: CI/CD pipeline changes
+- build: build system or external dependencies
+- style: formatting, missing semicolons (no code change)
+
 Examples of when to update:
-- Current: "Fix error handling" → New commits add user auth → Updated: "Fix error handling and add user auth"
-- Current: "Add basic feature" → New commits improve performance → Updated: "Add feature with performance improvements"
+- Current: "Fix error handling" → New commits add user auth → Updated: "feat: add auth and fix error handling"
+- Current: "Add basic feature" → New commits improve performance → Updated: "feat: add feature with performance improvements"
 
 Examples of when NOT to update:
-- Current: "Fix authentication issues" → New commits fix more auth bugs → Keep: "Fix authentication issues"
-- Current: "Add user dashboard" → New commits fix small UI bugs → Keep: "Add user dashboard"
+- Current: "fix: authentication issues" → New commits fix more auth bugs → Keep: "fix: authentication issues"
+- Current: "feat: add user dashboard" → New commits fix small UI bugs → Keep: "feat: add user dashboard"
 
 CRITICAL: Your response must contain ONLY the PR title text. Do not include:
 - Any explanations or reasoning about your decision
