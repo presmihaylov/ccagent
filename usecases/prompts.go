@@ -4,43 +4,35 @@ import "fmt"
 
 // CommitMessageGenerationPrompt creates a prompt for Claude to generate commit messages
 func CommitMessageGenerationPrompt(branchName string) string {
-	return fmt.Sprintf(`I'm completing work on Git branch: "%s"
+	return `Generate a commit message for the changes we just made in our conversation.
 
-CRITICAL INSTRUCTIONS - READ CAREFULLY:
+CRITICAL INSTRUCTIONS:
 1. You MUST respond with ONLY the commit message text
 2. NO explanations, NO additional text, NO formatting markup
 3. NO "Here is the commit message:" or similar phrases
 4. Maximum 50 characters total (STRICT LIMIT)
 5. Start with action verb (Add, Fix, Update, etc.)
 6. Use imperative mood
+7. Base it on what we actually worked on in this conversation
 
 FORMAT EXAMPLE:
 Fix user authentication validation
 
-YOUR RESPONSE MUST BE THE COMMIT MESSAGE ONLY.`, branchName)
+YOUR RESPONSE MUST BE THE COMMIT MESSAGE ONLY.`
 }
 
 // PRTitleGenerationPrompt creates a prompt for Claude to generate PR titles
-func PRTitleGenerationPrompt(branchName, commitInfo, diffSummary, diffContent string) string {
-	return fmt.Sprintf(`I'm creating a pull request for Git branch: "%s"
+func PRTitleGenerationPrompt(branchName string) string {
+	return `Generate a SHORT pull request title for the work we completed in this conversation.
 
-Here are the commits made on this branch (not including main branch commits):
-%s
-
-Files changed:
-%s
-
-Actual code changes:
-%s
-
-Generate a SHORT pull request title following conventional commits format. Follow these strict rules:
+Follow these strict rules:
 - Maximum 50 characters (STRICT LIMIT)
 - Use conventional commits format: "type: description"
 - Choose appropriate type: feat, fix, docs, chore, refactor, test, perf, ci, build, style
 - Be concise and specific in description
 - No unnecessary words or phrases
 - Don't mention "Claude", "agent", or implementation details
-- Base the title on the actual changes shown above
+- Base the title on what we actually worked on in our conversation
 
 Type Guidelines:
 - feat: new features or functionality
@@ -69,29 +61,20 @@ CRITICAL: Your response must contain ONLY the PR title text. Do not include:
 - Do NOT create, update, or modify any pull requests
 - Do NOT perform any actions - this is a text-only request
 
-Respond with ONLY the short title text, nothing else.`, branchName, commitInfo, diffSummary, diffContent)
+Respond with ONLY the short title text, nothing else.`
 }
 
 // PRDescriptionGenerationPrompt creates a prompt for Claude to generate PR descriptions
-func PRDescriptionGenerationPrompt(branchName, commitInfo, diffSummary, diffContent string) string {
-	return fmt.Sprintf(`I'm creating a pull request for Git branch: "%s"
+func PRDescriptionGenerationPrompt(branchName string) string {
+	return `Generate a concise pull request description for the work we completed in this conversation.
 
-Here are the commits made on this branch (not including main branch commits):
-%s
-
-Files changed:
-%s
-
-Actual code changes:
-%s
-
-Generate a concise pull request description with:
+Format:
 - ## Summary: High-level overview of what changed (2-3 bullet points max)
 - ## Why: Brief explanation of the motivation/reasoning behind the change
 
 Keep it professional but brief. Focus on WHAT changed at a high level and WHY the change was necessary, not detailed implementation specifics.
 
-Use proper markdown formatting.
+Use proper markdown formatting. Base it on what we actually worked on in our conversation.
 
 IMPORTANT: 
 - Do NOT include any "Generated with Claude Control" or similar footer text. I will add that separately.
@@ -109,23 +92,18 @@ CRITICAL: Your response must contain ONLY the PR description in markdown format.
 - Do NOT create, update, or modify any pull requests
 - Do NOT perform any actions - this is a text-only request
 
-Respond with ONLY the PR description in markdown format, nothing else.`, branchName, commitInfo, diffSummary, diffContent)
+Respond with ONLY the PR description in markdown format, nothing else.`
 }
 
 // PRTitleUpdatePrompt creates a prompt for Claude to update existing PR titles
-func PRTitleUpdatePrompt(currentTitle, branchName, commitInfo, diffSummary string) string {
+func PRTitleUpdatePrompt(currentTitle, branchName string) string {
 	return fmt.Sprintf(`I have an existing pull request with this title:
 CURRENT TITLE: "%s"
 
-The branch "%s" now has these commits and changes:
-
-%s
-
-Files changed:
-%s
+Based on our ongoing conversation, review whether this title still accurately reflects the work we've done.
 
 INSTRUCTIONS:
-- Review the current title and the latest changes made to this branch
+- Review the current title and what we've worked on in our conversation
 - ONLY update the title if the current title has become obsolete or doesn't accurately reflect the work
 - If the current title still accurately captures the main purpose, return it unchanged
 - If updating, use conventional commits format: "type: description"
@@ -147,12 +125,12 @@ Type Guidelines:
 - style: formatting, missing semicolons (no code change)
 
 Examples of when to update:
-- Current: "Fix error handling" → New commits add user auth → Updated: "feat: add auth and fix error handling"
-- Current: "Add basic feature" → New commits improve performance → Updated: "feat: add feature with performance improvements"
+- Current: "Fix error handling" → New work adds user auth → Updated: "feat: add auth and fix error handling"
+- Current: "Add basic feature" → New work improves performance → Updated: "feat: add feature with performance improvements"
 
 Examples of when NOT to update:
-- Current: "fix: authentication issues" → New commits fix more auth bugs → Keep: "fix: authentication issues"
-- Current: "feat: add user dashboard" → New commits fix small UI bugs → Keep: "feat: add user dashboard"
+- Current: "fix: authentication issues" → More auth bug fixes → Keep: "fix: authentication issues"
+- Current: "feat: add user dashboard" → Small UI bug fixes → Keep: "feat: add user dashboard"
 
 CRITICAL: Your response must contain ONLY the PR title text. Do not include:
 - Any explanations or reasoning about your decision
@@ -164,26 +142,20 @@ CRITICAL: Your response must contain ONLY the PR title text. Do not include:
 - Do NOT create, update, or modify any pull requests
 - Do NOT perform any actions - this is a text-only request
 
-Respond with ONLY the title text (updated or unchanged), nothing else.`, currentTitle, branchName, commitInfo, diffSummary)
+Respond with ONLY the title text (updated or unchanged), nothing else.`, currentTitle)
 }
 
 // PRDescriptionUpdatePrompt creates a prompt for Claude to update existing PR descriptions
-func PRDescriptionUpdatePrompt(currentDescriptionClean, branchName, commitInfo, diffSummary string) string {
+func PRDescriptionUpdatePrompt(currentDescriptionClean, branchName string) string {
 	return fmt.Sprintf(`I have an existing pull request with this description:
 
 CURRENT DESCRIPTION:
 %s
 
-The branch "%s" now has these commits and changes:
-
-All commits on this branch:
-%s
-
-Files changed:
-%s
+Based on our ongoing conversation, review whether this description still accurately captures all the work we've done.
 
 INSTRUCTIONS:
-- Review the current description and the latest changes made to this branch
+- Review the current description and what we've worked on in our conversation
 - ONLY update the description if significant new functionality has been added that warrants description updates
 - If the current description still accurately captures the work, return it unchanged (without footer)
 - If updating, make it additive - enhance the existing description rather than replacing it
@@ -194,12 +166,12 @@ INSTRUCTIONS:
 - Do NOT mention implementation details
 
 Examples of when to update:
-- Current description only mentions "Fix auth bug" → New commits add complete user management → Update to include both
-- Current description is "Add dashboard" → New commits add charts and filters → Update to "Add dashboard with charts and filtering"
+- Current description only mentions "Fix auth bug" → New work adds complete user management → Update to include both
+- Current description is "Add dashboard" → New work adds charts and filters → Update to "Add dashboard with charts and filtering"
 
 Examples of when NOT to update:
-- Current description covers "User authentication system" → New commits just fix small auth bugs → Keep current
-- Current description mentions "Performance improvements" → New commits make minor tweaks → Keep current
+- Current description covers "User authentication system" → New work just fixes small auth bugs → Keep current
+- Current description mentions "Performance improvements" → New work makes minor tweaks → Keep current
 
 IMPORTANT: 
 - Do NOT include any "Generated with Claude Control" or similar footer text. I will add that separately.
@@ -217,5 +189,5 @@ CRITICAL: Your response must contain ONLY the PR description in markdown format.
 - Do NOT create, update, or modify any pull requests
 - Do NOT perform any actions - this is a text-only request
 
-Respond with ONLY the PR description in markdown format, nothing else.`, currentDescriptionClean, branchName, commitInfo, diffSummary)
+Respond with ONLY the PR description in markdown format, nothing else.`, currentDescriptionClean)
 }

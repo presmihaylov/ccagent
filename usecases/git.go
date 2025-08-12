@@ -197,7 +197,7 @@ func (g *GitUseCase) resetAndPullDefaultBranch() error {
 	return nil
 }
 
-func (g *GitUseCase) AutoCommitChangesIfNeeded(slackThreadLink string) (*AutoCommitResult, error) {
+func (g *GitUseCase) AutoCommitChangesIfNeeded(slackThreadLink, sessionID string) (*AutoCommitResult, error) {
 	log.Info("📋 Starting to auto-commit changes if needed")
 
 	// Get current branch first (needed for both cases)
@@ -230,7 +230,7 @@ func (g *GitUseCase) AutoCommitChangesIfNeeded(slackThreadLink string) (*AutoCom
 	log.Info("✅ Uncommitted changes detected - proceeding with auto-commit")
 
 	// Generate commit message using Claude
-	commitMessage, err := g.generateCommitMessageWithClaude(currentBranch)
+	commitMessage, err := g.generateCommitMessageWithClaude(sessionID, currentBranch)
 	if err != nil {
 		log.Error("❌ Failed to generate commit message with Claude: %v", err)
 		return nil, fmt.Errorf("failed to generate commit message with Claude: %w", err)
@@ -271,7 +271,7 @@ func (g *GitUseCase) AutoCommitChangesIfNeeded(slackThreadLink string) (*AutoCom
 	}
 
 	// Handle PR creation/update
-	prResult, err := g.handlePRCreationOrUpdate(currentBranch, slackThreadLink)
+	prResult, err := g.handlePRCreationOrUpdate(sessionID, currentBranch, slackThreadLink)
 	if err != nil {
 		log.Error("❌ Failed to handle PR creation/update: %v", err)
 		return nil, fmt.Errorf("failed to handle PR creation/update: %w", err)
@@ -307,12 +307,12 @@ func (g *GitUseCase) generateRandomBranchName() (string, error) {
 	return finalBranchName, nil
 }
 
-func (g *GitUseCase) generateCommitMessageWithClaude(branchName string) (string, error) {
+func (g *GitUseCase) generateCommitMessageWithClaude(sessionID, branchName string) (string, error) {
 	log.Info("🤖 Asking Claude to generate commit message")
 
 	prompt := CommitMessageGenerationPrompt(branchName)
 
-	result, err := g.claudeService.StartNewConversationWithDisallowedTools(prompt, []string{"Bash(gh:*)"})
+	result, err := g.claudeService.ContinueConversation(sessionID, prompt)
 	if err != nil {
 		return "", fmt.Errorf("claude failed to generate commit message: %w", err)
 	}
@@ -320,7 +320,7 @@ func (g *GitUseCase) generateCommitMessageWithClaude(branchName string) (string,
 	return strings.TrimSpace(result.Output), nil
 }
 
-func (g *GitUseCase) handlePRCreationOrUpdate(branchName, slackThreadLink string) (*AutoCommitResult, error) {
+func (g *GitUseCase) handlePRCreationOrUpdate(sessionID, branchName, slackThreadLink string) (*AutoCommitResult, error) {
 	log.Info("📋 Starting to handle PR creation or update for branch: %s", branchName)
 
 	// Check if a PR already exists for this branch
@@ -342,7 +342,7 @@ func (g *GitUseCase) handlePRCreationOrUpdate(branchName, slackThreadLink string
 		}
 
 		// Update PR title and description based on new changes
-		if err := g.updatePRTitleAndDescriptionIfNeeded(branchName, slackThreadLink); err != nil {
+		if err := g.updatePRTitleAndDescriptionIfNeeded(sessionID, branchName, slackThreadLink); err != nil {
 			log.Error("❌ Failed to update PR title/description: %v", err)
 			// Log error but don't fail the entire operation
 		}
@@ -366,13 +366,13 @@ func (g *GitUseCase) handlePRCreationOrUpdate(branchName, slackThreadLink string
 
 	// Start PR title generation
 	go func() {
-		output, err := g.generatePRTitleWithClaude(branchName)
+		output, err := g.generatePRTitleWithClaude(sessionID, branchName)
 		titleChan <- CLIAgentResult{Output: output, Err: err}
 	}()
 
 	// Start PR body generation
 	go func() {
-		output, err := g.generatePRBodyWithClaude(branchName, slackThreadLink)
+		output, err := g.generatePRBodyWithClaude(sessionID, branchName, slackThreadLink)
 		bodyChan <- CLIAgentResult{Output: output, Err: err}
 	}()
 
@@ -422,42 +422,12 @@ func (g *GitUseCase) handlePRCreationOrUpdate(branchName, slackThreadLink string
 	}, nil
 }
 
-func (g *GitUseCase) generatePRTitleWithClaude(branchName string) (string, error) {
+func (g *GitUseCase) generatePRTitleWithClaude(sessionID, branchName string) (string, error) {
 	log.Info("🤖 Asking Claude to generate PR title")
 
-	// Get default branch to compare against
-	defaultBranch, err := g.gitClient.GetDefaultBranch()
-	if err != nil {
-		return "", fmt.Errorf("failed to get default branch: %w", err)
-	}
+	prompt := PRTitleGenerationPrompt(branchName)
 
-	// Get commit messages specific to this branch
-	commitMessages, err := g.gitClient.GetBranchCommitMessages(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch commit messages: %w", err)
-	}
-
-	// Get diff summary
-	diffSummary, err := g.gitClient.GetBranchDiffSummary(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch diff summary: %w", err)
-	}
-
-	// Get actual diff content for better context
-	diffContent, err := g.gitClient.GetBranchDiffContent(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch diff content: %w", err)
-	}
-
-	// Build commit info for context
-	commitInfo := "No commits found"
-	if len(commitMessages) > 0 {
-		commitInfo = fmt.Sprintf("Recent commits:\n%s", strings.Join(commitMessages, "\n"))
-	}
-
-	prompt := PRTitleGenerationPrompt(branchName, commitInfo, diffSummary, diffContent)
-
-	result, err := g.claudeService.StartNewConversationWithDisallowedTools(prompt, []string{"Bash(gh:*)"})
+	result, err := g.claudeService.ContinueConversation(sessionID, prompt)
 	if err != nil {
 		return "", fmt.Errorf("claude failed to generate PR title: %w", err)
 	}
@@ -465,43 +435,12 @@ func (g *GitUseCase) generatePRTitleWithClaude(branchName string) (string, error
 	return strings.TrimSpace(result.Output), nil
 }
 
-func (g *GitUseCase) generatePRBodyWithClaude(branchName, slackThreadLink string) (string, error) {
+func (g *GitUseCase) generatePRBodyWithClaude(sessionID, branchName, slackThreadLink string) (string, error) {
 	log.Info("🤖 Asking Claude to generate PR body")
 
-	// Get default branch to compare against
-	defaultBranch, err := g.gitClient.GetDefaultBranch()
-	if err != nil {
-		return "", fmt.Errorf("failed to get default branch: %w", err)
-	}
+	prompt := PRDescriptionGenerationPrompt(branchName)
 
-	// Get commit messages specific to this branch
-	commitMessages, err := g.gitClient.GetBranchCommitMessages(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch commit messages: %w", err)
-	}
-
-	// Get diff summary
-	diffSummary, err := g.gitClient.GetBranchDiffSummary(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch diff summary: %w", err)
-	}
-
-	// Get actual diff content for better context
-	diffContent, err := g.gitClient.GetBranchDiffContent(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch diff content: %w", err)
-	}
-
-	// Build commit info for context
-	commitInfo := "No commits found"
-	if len(commitMessages) > 0 {
-		commitInfo = strings.Join(commitMessages, "\n- ")
-		commitInfo = "- " + commitInfo // Add bullet to first item
-	}
-
-	prompt := PRDescriptionGenerationPrompt(branchName, commitInfo, diffSummary, diffContent)
-
-	result, err := g.claudeService.StartNewConversationWithDisallowedTools(prompt, []string{"Bash(gh:*)"})
+	result, err := g.claudeService.ContinueConversation(sessionID, prompt)
 	if err != nil {
 		return "", fmt.Errorf("claude failed to generate PR body: %w", err)
 	}
@@ -770,7 +709,7 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 	return nil
 }
 
-func (g *GitUseCase) updatePRTitleAndDescriptionIfNeeded(branchName, slackThreadLink string) error {
+func (g *GitUseCase) updatePRTitleAndDescriptionIfNeeded(sessionID, branchName, slackThreadLink string) error {
 	log.Info("📋 Starting to update PR title and description if needed for branch: %s", branchName)
 
 	// Get current PR title and description
@@ -792,13 +731,14 @@ func (g *GitUseCase) updatePRTitleAndDescriptionIfNeeded(branchName, slackThread
 
 	// Start updated PR title generation
 	go func() {
-		output, err := g.generateUpdatedPRTitleWithClaude(branchName, currentTitle)
+		output, err := g.generateUpdatedPRTitleWithClaude(sessionID, branchName, currentTitle)
 		titleUpdateChan <- CLIAgentResult{Output: output, Err: err}
 	}()
 
 	// Start updated PR description generation
 	go func() {
 		output, err := g.generateUpdatedPRDescriptionWithClaude(
+			sessionID,
 			branchName,
 			currentDescription,
 			slackThreadLink,
@@ -852,36 +792,12 @@ func (g *GitUseCase) updatePRTitleAndDescriptionIfNeeded(branchName, slackThread
 	return nil
 }
 
-func (g *GitUseCase) generateUpdatedPRTitleWithClaude(branchName, currentTitle string) (string, error) {
+func (g *GitUseCase) generateUpdatedPRTitleWithClaude(sessionID, branchName, currentTitle string) (string, error) {
 	log.Info("🤖 Asking Claude to generate updated PR title")
 
-	// Get default branch to compare against
-	defaultBranch, err := g.gitClient.GetDefaultBranch()
-	if err != nil {
-		return "", fmt.Errorf("failed to get default branch: %w", err)
-	}
+	prompt := PRTitleUpdatePrompt(currentTitle, branchName)
 
-	// Get recent commits since the branch was created
-	commitMessages, err := g.gitClient.GetBranchCommitMessages(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch commit messages: %w", err)
-	}
-
-	// Get diff summary
-	diffSummary, err := g.gitClient.GetBranchDiffSummary(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch diff summary: %w", err)
-	}
-
-	// Build commit info for context
-	commitInfo := "No commits found"
-	if len(commitMessages) > 0 {
-		commitInfo = fmt.Sprintf("All commits on this branch:\n%s", strings.Join(commitMessages, "\n"))
-	}
-
-	prompt := PRTitleUpdatePrompt(currentTitle, branchName, commitInfo, diffSummary)
-
-	result, err := g.claudeService.StartNewConversationWithDisallowedTools(prompt, []string{"Bash(gh:*)"})
+	result, err := g.claudeService.ContinueConversation(sessionID, prompt)
 	if err != nil {
 		return "", fmt.Errorf("claude failed to generate updated PR title: %w", err)
 	}
@@ -890,41 +806,16 @@ func (g *GitUseCase) generateUpdatedPRTitleWithClaude(branchName, currentTitle s
 }
 
 func (g *GitUseCase) generateUpdatedPRDescriptionWithClaude(
-	branchName, currentDescription, slackThreadLink string,
+	sessionID, branchName, currentDescription, slackThreadLink string,
 ) (string, error) {
 	log.Info("🤖 Asking Claude to generate updated PR description")
-
-	// Get default branch to compare against
-	defaultBranch, err := g.gitClient.GetDefaultBranch()
-	if err != nil {
-		return "", fmt.Errorf("failed to get default branch: %w", err)
-	}
-
-	// Get recent commits since the branch was created
-	commitMessages, err := g.gitClient.GetBranchCommitMessages(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch commit messages: %w", err)
-	}
-
-	// Get diff summary
-	diffSummary, err := g.gitClient.GetBranchDiffSummary(branchName, defaultBranch)
-	if err != nil {
-		return "", fmt.Errorf("failed to get branch diff summary: %w", err)
-	}
-
-	// Build commit info for context
-	commitInfo := "No commits found"
-	if len(commitMessages) > 0 {
-		commitInfo = strings.Join(commitMessages, "\n- ")
-		commitInfo = "- " + commitInfo // Add bullet to first item
-	}
 
 	// Remove existing footer from current description for analysis
 	currentDescriptionClean := g.removeFooterFromDescription(currentDescription)
 
-	prompt := PRDescriptionUpdatePrompt(currentDescriptionClean, branchName, commitInfo, diffSummary)
+	prompt := PRDescriptionUpdatePrompt(currentDescriptionClean, branchName)
 
-	result, err := g.claudeService.StartNewConversationWithDisallowedTools(prompt, []string{"Bash(gh:*)"})
+	result, err := g.claudeService.ContinueConversation(sessionID, prompt)
 	if err != nil {
 		return "", fmt.Errorf("claude failed to generate updated PR description: %w", err)
 	}

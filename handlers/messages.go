@@ -114,7 +114,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	}
 
 	// Auto-commit changes if needed
-	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink)
+	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
 	if err != nil {
 		log.Info("❌ Auto-commit failed: %v", err)
 		return fmt.Errorf("auto-commit failed: %w", err)
@@ -233,7 +233,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	}
 
 	// Auto-commit changes if needed
-	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink)
+	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
 	if err != nil {
 		log.Info("❌ Auto-commit failed: %v", err)
 		return fmt.Errorf("auto-commit failed: %w", err)
