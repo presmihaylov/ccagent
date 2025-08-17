@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -34,7 +33,7 @@ import (
 type CmdRunner struct {
 	messageHandler *handlers.MessageHandler
 	gitUseCase     *usecases.GitUseCase
-	logFilePath    string
+	rotatingWriter *log.RotatingWriter
 	agentID        string
 	reconnectChan  chan struct{}
 }
@@ -95,10 +94,10 @@ func createCLIAgent(agentType, permissionMode, cursorModel, logDir string) (serv
 
 type Options struct {
 	//nolint
-	Agent string `long:"agent" description:"CLI agent to use (claude or cursor)" choice:"claude" choice:"cursor" default:"claude"`
-	BypassPermissions bool `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude (only applies when --agent=claude) (WARNING: Only use in controlled sandbox environments)"`
-	CursorModel string `long:"cursor-model" description:"Model to use with Cursor agent (only applies when --agent=cursor)" choice:"gpt-5" choice:"sonnet-4" choice:"sonnet-4-thinking"`
-	Version bool `long:"version" short:"v" description:"Show version information"`
+	Agent             string `long:"agent" description:"CLI agent to use (claude or cursor)" choice:"claude" choice:"cursor" default:"claude"`
+	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude (only applies when --agent=claude) (WARNING: Only use in controlled sandbox environments)"`
+	CursorModel       string `long:"cursor-model" description:"Model to use with Cursor agent (only applies when --agent=cursor)" choice:"gpt-5" choice:"sonnet-4" choice:"sonnet-4-thinking"`
+	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
 func main() {
@@ -166,12 +165,11 @@ func main() {
 	}
 
 	// Setup program-wide logging from start
-	logFilePath, err := cmdRunner.setupProgramLogging()
+	_, err = cmdRunner.setupProgramLogging()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error setting up program logging: %v\n", err)
 		os.Exit(1)
 	}
-	cmdRunner.logFilePath = logFilePath
 
 	// Validate Git environment before starting
 	err = cmdRunner.gitUseCase.ValidateGitEnvironment()
@@ -195,11 +193,20 @@ func main() {
 
 	// Set up deferred cleanup
 	defer func() {
-		fmt.Fprintf(
-			os.Stderr,
-			"\n📝 App execution finished, logs for this session are stored in %s\n",
-			cmdRunner.logFilePath,
-		)
+		// Close rotating writer to prevent file handle leak
+		if cmdRunner.rotatingWriter != nil {
+			if err := cmdRunner.rotatingWriter.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to close log files: %v\n", err)
+			}
+		}
+
+		if cmdRunner.rotatingWriter != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"\n📝 App execution finished, logs for this session are in %s\n",
+				cmdRunner.rotatingWriter.GetCurrentLogPath(),
+			)
+		}
 	}()
 
 	// Start Socket.IO client
@@ -371,27 +378,27 @@ func (cr *CmdRunner) setupProgramLogging() (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	// Create ~/.config/ccagent/logs directory if it doesn't exist
+	// Create ~/.config/ccagent/logs directory
 	logsDir := filepath.Join(homeDir, ".config", "ccagent", "logs")
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create logs directory: %w", err)
-	}
 
-	// Create log file with timestamp only
-	timestamp := time.Now().Format("20060102-150405")
-	logFileName := fmt.Sprintf("%s.log", timestamp)
-	logFilePath := filepath.Join(logsDir, logFileName)
-
-	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Set up rotating writer with 10MB file size limit
+	rotatingWriter, err := log.NewRotatingWriter(log.RotatingWriterConfig{
+		LogDir:      logsDir,
+		MaxFileSize: 1024, // 10MB
+		FilePrefix:  "ccagent",
+		Stdout:      os.Stdout,
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to create log file: %w", err)
+		return "", fmt.Errorf("failed to create rotating writer: %w", err)
 	}
 
-	// Always write to both stdout and file
-	writer := io.MultiWriter(os.Stdout, logFile)
-	log.SetWriter(writer)
+	// Store rotating writer reference for cleanup
+	cr.rotatingWriter = rotatingWriter
 
-	return logFilePath, nil
+	// Set the rotating writer as the log output
+	log.SetWriter(rotatingWriter)
+
+	return rotatingWriter.GetCurrentLogPath(), nil
 }
 
 func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.Socket) {
