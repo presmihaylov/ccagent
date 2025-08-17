@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -32,11 +31,11 @@ import (
 )
 
 type CmdRunner struct {
-	messageHandler  *handlers.MessageHandler
-	gitUseCase      *usecases.GitUseCase
-	rotatingWriter  *log.RotatingWriter
-	agentID         string
-	reconnectChan   chan struct{}
+	messageHandler *handlers.MessageHandler
+	gitUseCase     *usecases.GitUseCase
+	rotatingWriter *log.RotatingWriter
+	agentID        string
+	reconnectChan  chan struct{}
 }
 
 func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, error) {
@@ -384,7 +383,7 @@ func (cr *CmdRunner) setupProgramLogging() (string, error) {
 	// Set up rotating writer with 10MB file size limit
 	rotatingWriter, err := log.NewRotatingWriter(log.RotatingWriterConfig{
 		LogDir:      logsDir,
-		MaxFileSize: 10 * 1024 * 1024, // 10MB
+		MaxFileSize: 1024, // 1MB
 		FilePrefix:  "ccagent",
 		Stdout:      os.Stdout,
 	})
