@@ -165,12 +165,11 @@ func main() {
 	}
 
 	// Setup program-wide logging from start
-	logFilePath, err := cmdRunner.setupProgramLogging()
+	_, err = cmdRunner.setupProgramLogging()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error setting up program logging: %v\n", err)
 		os.Exit(1)
 	}
-	cmdRunner.logFilePath = logFilePath
 
 	// Validate Git environment before starting
 	err = cmdRunner.gitUseCase.ValidateGitEnvironment()
@@ -201,11 +200,13 @@ func main() {
 			}
 		}
 
-		fmt.Fprintf(
-			os.Stderr,
-			"\n📝 App execution finished, logs for this session are in %s\n",
-			logFilePath,
-		)
+		if cmdRunner.rotatingWriter != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"\n📝 App execution finished, logs for this session are in %s\n",
+				cmdRunner.rotatingWriter.GetCurrentLogPath(),
+			)
+		}
 	}()
 
 	// Start Socket.IO client
@@ -383,7 +384,7 @@ func (cr *CmdRunner) setupProgramLogging() (string, error) {
 	// Set up rotating writer with 10MB file size limit
 	rotatingWriter, err := log.NewRotatingWriter(log.RotatingWriterConfig{
 		LogDir:      logsDir,
-		MaxFileSize: 1024, // 1MB
+		MaxFileSize: 1024, // 10MB
 		FilePrefix:  "ccagent",
 		Stdout:      os.Stdout,
 	})
