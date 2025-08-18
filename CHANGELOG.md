@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.2] - 2025-08-17
+
+### Documentation
+
+- Add project overview and architecture guide ([#1](https://github.com/your-org/ccagent/issues/1))
+
+### Refactor
+
+- Improve session context and clean Git methods ([#2](https://github.com/your-org/ccagent/issues/2))
+
 ## [0.0.1] - 2025-08-12
 
 ### Features
