@@ -102,10 +102,7 @@ func (em *EnvManager) Reload() error {
 		return fmt.Errorf("failed to reload .env file: %w", err)
 	}
 
-	for key := range em.envVars {
-		delete(em.envVars, key)
-	}
-
+	// Update/add keys from the .env file
 	for key, value := range envMap {
 		em.envVars[key] = value
 	}
