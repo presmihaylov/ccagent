@@ -8,12 +8,6 @@ import (
 	"time"
 )
 
-type mockLogger struct{}
-
-func (m *mockLogger) Info(msg string, args ...interface{})  {}
-func (m *mockLogger) Error(msg string, args ...interface{}) {}
-func (m *mockLogger) Debug(msg string, args ...interface{}) {}
-
 func TestEnvManager_Basic(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir, err := os.MkdirTemp("", "ccagent-test")
