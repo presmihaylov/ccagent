@@ -20,6 +20,7 @@ import (
 	claudeclient "ccagent/clients/claude"
 	cursorclient "ccagent/clients/cursor"
 	"ccagent/core"
+	"ccagent/core/env"
 	"ccagent/core/log"
 	"ccagent/handlers"
 	"ccagent/models"
@@ -34,6 +35,7 @@ type CmdRunner struct {
 	messageHandler *handlers.MessageHandler
 	gitUseCase     *usecases.GitUseCase
 	rotatingWriter *log.RotatingWriter
+	envManager     *env.EnvManager
 	agentID        string
 	reconnectChan  chan struct{}
 }
@@ -61,6 +63,15 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 		// Don't exit - this is not critical for agent operation
 	}
 
+	// Initialize environment manager
+	envManager, err := env.NewEnvManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create environment manager: %w", err)
+	}
+
+	// Start periodic refresh every 10 minutes
+	envManager.StartPeriodicRefresh(10 * time.Minute)
+
 	gitClient := clients.NewGitClient()
 	appState := models.NewAppState()
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
@@ -73,6 +84,7 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	return &CmdRunner{
 		messageHandler: messageHandler,
 		gitUseCase:     gitUseCase,
+		envManager:     envManager,
 		agentID:        agentID,
 		reconnectChan:  make(chan struct{}, 1),
 	}, nil
@@ -141,13 +153,6 @@ func main() {
 		}
 	}()
 
-	// Validate CCAGENT_API_KEY environment variable
-	ccagentAPIKey := os.Getenv("CCAGENT_API_KEY")
-	if ccagentAPIKey == "" {
-		fmt.Fprintf(os.Stderr, "Error: CCAGENT_API_KEY environment variable is required but not set\n")
-		os.Exit(1)
-	}
-
 	// Determine permission mode based on flag
 	permissionMode := "acceptEdits"
 	if opts.BypassPermissions {
@@ -161,6 +166,13 @@ func main() {
 	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.CursorModel)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing CmdRunner: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Validate CCAGENT_API_KEY environment variable using envManager
+	ccagentAPIKey := cmdRunner.envManager.Get("CCAGENT_API_KEY")
+	if ccagentAPIKey == "" {
+		fmt.Fprintf(os.Stderr, "Error: CCAGENT_API_KEY environment variable is required but not set\n")
 		os.Exit(1)
 	}
 
@@ -185,14 +197,19 @@ func main() {
 		// Don't exit - this is not critical for agent operation
 	}
 
-	// Get WebSocket URL from environment variable with default fallback
-	wsURL := os.Getenv("CCAGENT_WS_API_URL")
+	// Get WebSocket URL from environment variable with default fallback using envManager
+	wsURL := cmdRunner.envManager.Get("CCAGENT_WS_API_URL")
 	if wsURL == "" {
 		wsURL = "https://claudecontrol.onrender.com/socketio/"
 	}
 
 	// Set up deferred cleanup
 	defer func() {
+		// Stop environment manager periodic refresh
+		if cmdRunner.envManager != nil {
+			cmdRunner.envManager.Stop()
+		}
+
 		// Close rotating writer to prevent file handle leak
 		if cmdRunner.rotatingWriter != nil {
 			if err := cmdRunner.rotatingWriter.Close(); err != nil {
