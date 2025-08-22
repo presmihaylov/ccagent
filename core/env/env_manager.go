@@ -71,6 +71,7 @@ func (em *EnvManager) Load() error {
 
 	for key, value := range envMap {
 		em.envVars[key] = value
+		os.Setenv(key, value)
 	}
 
 	log.Debug("Loaded %d environment variables from %s", len(envMap), em.envPath)
@@ -105,6 +106,7 @@ func (em *EnvManager) Reload() error {
 	// Update/add keys from the .env file
 	for key, value := range envMap {
 		em.envVars[key] = value
+		os.Setenv(key, value)
 	}
 
 	log.Info("Reloaded %d environment variables from %s", len(envMap), em.envPath)
