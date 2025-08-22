@@ -1,4 +1,4 @@
-.PHONY: run build clean release test test-verbose lint lint-fix changelog version-patch version-minor version-major
+.PHONY: run build clean release test test-verbose lint lint-fix version-patch version-minor version-major
 
 run:
 	go run cmd/*.go
@@ -25,8 +25,6 @@ lint:
 lint-fix:
 	golangci-lint run --fix
 
-changelog:
-	git-cliff --output CHANGELOG.md
 
 version-patch:
 	@CURRENT_VERSION=$$(cat core/VERSION); \
