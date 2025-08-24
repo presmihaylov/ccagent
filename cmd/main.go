@@ -80,14 +80,21 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	agentID := core.NewID("ccaid")
 	log.Info("🆔 Using persistent agent ID: %s", agentID)
 
-	log.Info("📋 Completed successfully - initialized CmdRunner with %s agent", agentType)
-	return &CmdRunner{
+	// Create the CmdRunner instance
+	cr := &CmdRunner{
 		messageHandler: messageHandler,
 		gitUseCase:     gitUseCase,
 		envManager:     envManager,
 		agentID:        agentID,
 		reconnectChan:  make(chan struct{}, 1),
-	}, nil
+	}
+
+	// Register GitHub token update hook
+	envManager.RegisterReloadHook(gitUseCase.GithubTokenUpdateHook)
+	log.Info("📎 Registered GitHub token update hook")
+
+	log.Info("📋 Completed successfully - initialized CmdRunner with %s agent", agentType)
+	return cr, nil
 }
 
 // createCLIAgent creates the appropriate CLI agent based on the agent type

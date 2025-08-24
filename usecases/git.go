@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -44,6 +45,24 @@ func NewGitUseCase(
 		claudeService: claudeService,
 		appState:      appState,
 	}
+}
+
+func (g *GitUseCase) GithubTokenUpdateHook() {
+	// Get the GitHub token from environment
+	ghToken := os.Getenv("GH_TOKEN")
+	if ghToken == "" {
+		log.Debug("No GH_TOKEN environment variable found, skipping remote URL update")
+		return
+	}
+
+	log.Info("🔄 GH_TOKEN detected, updating Git remote URL with token")
+	if err := g.gitClient.UpdateRemoteURLWithToken(ghToken); err != nil {
+		log.Error("Failed to update Git remote URL with token: %v", err)
+		// Don't fail the entire reload process, just log the error
+		return
+	}
+
+	log.Info("✅ Successfully updated Git remote URL with refreshed token")
 }
 
 func (g *GitUseCase) ValidateGitEnvironment() error {

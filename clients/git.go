@@ -769,3 +769,101 @@ func (g *GitClient) parseRemoteAccessError(err error, output, remoteURL string) 
 	// Generic fallback
 	return fmt.Errorf("remote repository access failed for %s: %w\nOutput: %s", remoteURL, err, output)
 }
+
+type RemoteRepoDetails struct {
+	Owner string
+	Repo  string
+}
+
+func (g *GitClient) extractRemoteRepoDetails(remoteURL string) (*RemoteRepoDetails, error) {
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		// SSH format: git@github.com:owner/repo.git
+		parts := strings.TrimPrefix(remoteURL, "git@github.com:")
+		parts = strings.TrimSuffix(parts, ".git")
+		pathParts := strings.Split(parts, "/")
+		if len(pathParts) != 2 {
+			return nil, fmt.Errorf("invalid SSH URL format: %s", remoteURL)
+		}
+		return &RemoteRepoDetails{
+			Owner: pathParts[0],
+			Repo:  pathParts[1],
+		}, nil
+	} else if strings.Contains(remoteURL, "github.com") {
+		// HTTPS format: https://github.com/owner/repo.git or https://x-access-token:TOKEN@github.com/owner/repo.git
+		// Extract the path part after github.com
+		var pathPart string
+		if strings.Contains(remoteURL, "@github.com") {
+			// Already has token format
+			parts := strings.Split(remoteURL, "@github.com")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid HTTPS URL format: %s", remoteURL)
+			}
+			pathPart = parts[1]
+		} else {
+			// Standard HTTPS format
+			parts := strings.Split(remoteURL, "github.com")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid HTTPS URL format: %s", remoteURL)
+			}
+			pathPart = parts[1]
+		}
+		
+		// Remove leading slash and .git suffix
+		pathPart = strings.TrimPrefix(pathPart, "/")
+		pathPart = strings.TrimSuffix(pathPart, ".git")
+		
+		pathParts := strings.Split(pathPart, "/")
+		if len(pathParts) != 2 {
+			return nil, fmt.Errorf("invalid HTTPS URL path: %s", pathPart)
+		}
+		return &RemoteRepoDetails{
+			Owner: pathParts[0],
+			Repo:  pathParts[1],
+		}, nil
+	}
+	
+	// Not a GitHub repository
+	return nil, nil
+}
+
+func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
+	log.Info("📋 Starting to update remote URL with GitHub token")
+
+	// Get current remote URL
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error("❌ Failed to get current remote URL: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to get current remote URL: %w\nOutput: %s", err, string(output))
+	}
+
+	currentURL := strings.TrimSpace(string(output))
+	log.Info("🔍 Current remote URL: %s", currentURL)
+
+	// Extract repository details
+	repoDetails, err := g.extractRemoteRepoDetails(currentURL)
+	if err != nil {
+		log.Error("❌ Failed to parse remote URL: %v", err)
+		return fmt.Errorf("failed to parse remote URL: %w", err)
+	}
+	
+	if repoDetails == nil {
+		log.Info("⚠️ Not a GitHub repository, skipping token update: %s", currentURL)
+		return nil
+	}
+
+	// Construct new URL with token
+	newURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", token, repoDetails.Owner, repoDetails.Repo)
+	
+	// Update the remote URL
+	cmd = exec.Command("git", "remote", "set-url", "origin", newURL)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		log.Error("❌ Failed to update remote URL: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to update remote URL: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully updated remote URL with GitHub token for %s/%s", repoDetails.Owner, repoDetails.Repo)
+	log.Info("📋 Completed successfully - updated remote URL with token")
+	return nil
+}
