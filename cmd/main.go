@@ -252,10 +252,18 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	opts := socket.DefaultOptions()
 	opts.SetTransports(types.NewSet(transports.Polling, transports.WebSocket))
 
+	// Get repository identifier for header
+	gitClient := clients.NewGitClient()
+	repoIdentifier, err := gitClient.GetRepositoryIdentifier()
+	if err != nil {
+		return fmt.Errorf("failed to get repository identifier: %w", err)
+	}
+
 	// Set authentication headers
 	opts.SetExtraHeaders(map[string][]string{
 		"X-CCAGENT-API-KEY": {apiKey},
 		"X-CCAGENT-ID":      {cr.agentID},
+		"X-CCAGENT-REPO":    {repoIdentifier},
 	})
 
 	manager := socket.NewManager(serverURLStr, opts)
@@ -275,7 +283,7 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	disconnected := make(chan string, 1)
 
 	// Connection event handlers
-	err := socketClient.On("connect", func(args ...any) {
+	err = socketClient.On("connect", func(args ...any) {
 		log.Info("✅ Connected to Socket.IO server, socket ID: %s", socketClient.Id())
 		connected <- true
 	})
