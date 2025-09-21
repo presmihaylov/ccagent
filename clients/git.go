@@ -520,16 +520,16 @@ func (g *GitClient) GetRepositoryIdentifier() (string, error) {
 	}
 
 	// Extract the repository identifier from the URL (e.g., "github.com/owner/repo")
-	if strings.HasPrefix(remoteURL, "https://") {
-		// Remove https:// prefix
-		repoIdentifier := strings.TrimPrefix(remoteURL, "https://")
-		log.Info("✅ Repository identifier: %s", repoIdentifier)
-		log.Info("📋 Completed successfully - got repository identifier")
-		return repoIdentifier, nil
+	if !strings.HasPrefix(remoteURL, "https://") {
+		log.Error("❌ Unsupported remote URL format: %s", remoteURL)
+		return "", fmt.Errorf("unsupported remote URL format: %s", remoteURL)
 	}
 
-	log.Error("❌ Unsupported remote URL format: %s", remoteURL)
-	return "", fmt.Errorf("unsupported remote URL format: %s", remoteURL)
+	// Remove https:// prefix
+	repoIdentifier := strings.TrimPrefix(remoteURL, "https://")
+	log.Info("✅ Repository identifier: %s", repoIdentifier)
+	log.Info("📋 Completed successfully - got repository identifier")
+	return repoIdentifier, nil
 }
 
 func (g *GitClient) GetPRDescription(branchName string) (string, error) {

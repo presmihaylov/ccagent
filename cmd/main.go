@@ -256,21 +256,16 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	gitClient := clients.NewGitClient()
 	repoIdentifier, err := gitClient.GetRepositoryIdentifier()
 	if err != nil {
-		log.Info("⚠️ Could not get repository identifier, continuing without X-CCAGENT-REPO header: %v", err)
-		repoIdentifier = ""
+		return fmt.Errorf("failed to get repository identifier: %w", err)
 	}
 
 	// Set authentication headers
 	headers := map[string][]string{
 		"X-CCAGENT-API-KEY": {apiKey},
 		"X-CCAGENT-ID":      {cr.agentID},
+		"X-CCAGENT-REPO":    {repoIdentifier},
 	}
-
-	// Add repository header if available
-	if repoIdentifier != "" {
-		headers["X-CCAGENT-REPO"] = []string{repoIdentifier}
-		log.Info("📦 Adding repository header: %s", repoIdentifier)
-	}
+	log.Info("📦 Adding repository header: %s", repoIdentifier)
 
 	opts.SetExtraHeaders(headers)
 
