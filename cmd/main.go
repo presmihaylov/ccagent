@@ -260,13 +260,11 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	}
 
 	// Set authentication headers
-	headers := map[string][]string{
+	opts.SetExtraHeaders(map[string][]string{
 		"X-CCAGENT-API-KEY": {apiKey},
 		"X-CCAGENT-ID":      {cr.agentID},
 		"X-CCAGENT-REPO":    {repoIdentifier},
-	}
-
-	opts.SetExtraHeaders(headers)
+	})
 
 	manager := socket.NewManager(serverURLStr, opts)
 	socketClient := manager.Socket("/", opts)
