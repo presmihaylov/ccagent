@@ -527,6 +527,16 @@ func (g *GitClient) GetRepositoryIdentifier() (string, error) {
 
 	// Remove https:// prefix
 	repoIdentifier := strings.TrimPrefix(remoteURL, "https://")
+
+	// Strip x-access-token authentication if present (e.g., "x-access-token:ghs_...@github.com/owner/repo")
+	if strings.Contains(repoIdentifier, "@") {
+		parts := strings.Split(repoIdentifier, "@")
+		if len(parts) >= 2 {
+			// Take everything after the last @ symbol (handles multiple @ symbols)
+			repoIdentifier = parts[len(parts)-1]
+		}
+	}
+
 	log.Info("✅ Repository identifier: %s", repoIdentifier)
 	log.Info("📋 Completed successfully - got repository identifier")
 	return repoIdentifier, nil
