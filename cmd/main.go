@@ -265,7 +265,6 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		"X-CCAGENT-ID":      {cr.agentID},
 		"X-CCAGENT-REPO":    {repoIdentifier},
 	}
-	log.Info("📦 Adding repository header: %s", repoIdentifier)
 
 	opts.SetExtraHeaders(headers)
 
