@@ -490,6 +490,29 @@ func extractPRNumber(prURL string) string {
 	return ""
 }
 
+// stripAccessTokenFromURL removes x-access-token authentication from URLs
+// Converts: https://x-access-token:TOKEN@github.com/owner/repo
+// To: https://github.com/owner/repo
+func stripAccessTokenFromURL(url string) string {
+	if url == "" {
+		return ""
+	}
+
+	// Check if URL contains x-access-token
+	if strings.Contains(url, "x-access-token") && strings.Contains(url, "@") {
+		// Split by @ to separate credentials from host
+		parts := strings.Split(url, "@")
+		if len(parts) >= 2 {
+			// Take everything after the last @ symbol (handles multiple @ symbols)
+			hostAndPath := parts[len(parts)-1]
+			// Reconstruct URL with https://
+			return "https://" + hostAndPath
+		}
+	}
+
+	return url
+}
+
 func (mh *MessageHandler) sendGitActivitySystemMessage(
 	socketClient *socket.Socket,
 	commitResult *usecases.AutoCommitResult,
@@ -513,7 +536,9 @@ func (mh *MessageHandler) sendGitActivitySystemMessage(
 		if len(shortHash) > 7 {
 			shortHash = shortHash[:7]
 		}
-		commitURL := fmt.Sprintf("%s/commit/%s", commitResult.RepositoryURL, commitResult.CommitHash)
+		// Strip access token from repository URL before sending
+		cleanRepoURL := stripAccessTokenFromURL(commitResult.RepositoryURL)
+		commitURL := fmt.Sprintf("%s/commit/%s", cleanRepoURL, commitResult.CommitHash)
 		message := fmt.Sprintf("New commit added: [%s](%s)", shortHash, commitURL)
 
 		// Add PR link if available
