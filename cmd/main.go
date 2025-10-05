@@ -69,8 +69,8 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 		return nil, fmt.Errorf("failed to create environment manager: %w", err)
 	}
 
-	// Start periodic refresh every 10 minutes
-	envManager.StartPeriodicRefresh(10 * time.Minute)
+	// Start periodic refresh every 1 minute
+	envManager.StartPeriodicRefresh(1 * time.Minute)
 
 	gitClient := clients.NewGitClient()
 	appState := models.NewAppState()
