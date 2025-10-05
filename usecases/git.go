@@ -19,6 +19,7 @@ type GitUseCase struct {
 	gitClient     *clients.GitClient
 	claudeService services.CLIAgent
 	appState      *models.AppState
+	lastGHToken   string
 }
 
 type CLIAgentResult struct {
@@ -55,13 +56,21 @@ func (g *GitUseCase) GithubTokenUpdateHook() {
 		return
 	}
 
-	log.Info("🔄 GH_TOKEN detected, updating Git remote URL with token")
+	// Only update if token has changed
+	if ghToken == g.lastGHToken {
+		log.Debug("GH_TOKEN unchanged, skipping remote URL update")
+		return
+	}
+
+	log.Info("🔄 GH_TOKEN changed, updating Git remote URL with new token")
 	if err := g.gitClient.UpdateRemoteURLWithToken(ghToken); err != nil {
 		log.Error("Failed to update Git remote URL with token: %v", err)
 		// Don't fail the entire reload process, just log the error
 		return
 	}
 
+	// Store the new token after successful update
+	g.lastGHToken = ghToken
 	log.Info("✅ Successfully updated Git remote URL with refreshed token")
 }
 
