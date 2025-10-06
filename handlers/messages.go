@@ -9,6 +9,7 @@ import (
 	"github.com/zishang520/socket.io-client-go/socket"
 
 	"ccagent/core"
+	"ccagent/core/env"
 	"ccagent/core/log"
 	"ccagent/models"
 	"ccagent/services"
@@ -20,17 +21,20 @@ type MessageHandler struct {
 	claudeService services.CLIAgent
 	gitUseCase    *usecases.GitUseCase
 	appState      *models.AppState
+	envManager    *env.EnvManager
 }
 
 func NewMessageHandler(
 	claudeService services.CLIAgent,
 	gitUseCase *usecases.GitUseCase,
 	appState *models.AppState,
+	envManager *env.EnvManager,
 ) *MessageHandler {
 	return &MessageHandler{
 		claudeService: claudeService,
 		gitUseCase:    gitUseCase,
 		appState:      appState,
+		envManager:    envManager,
 	}
 }
 
@@ -91,6 +95,13 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 		log.Error("❌ Failed to prepare Git environment: %v", err)
 		return fmt.Errorf("failed to prepare Git environment: %w", err)
 	}
+
+	// Refresh environment variables before starting conversation
+	if err := mh.envManager.Reload(); err != nil {
+		log.Error("❌ Failed to refresh environment variables: %v", err)
+		return fmt.Errorf("failed to refresh environment variables: %w", err)
+	}
+	log.Info("🔄 Refreshed environment variables before starting conversation")
 
 	// Get appropriate system prompt based on agent type
 	systemPrompt := GetClaudeSystemPrompt()
@@ -216,6 +227,20 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 		return fmt.Errorf("failed to switch to job branch %s: %w", jobData.BranchName, err)
 	}
 	log.Info("✅ Successfully switched to job branch: %s", jobData.BranchName)
+
+	// Pull latest changes before continuing conversation
+	if err := mh.gitUseCase.PullLatestChanges(); err != nil {
+		log.Error("❌ Failed to pull latest changes: %v", err)
+		return fmt.Errorf("failed to pull latest changes: %w", err)
+	}
+	log.Info("✅ Pulled latest changes from remote")
+
+	// Refresh environment variables before continuing conversation
+	if err := mh.envManager.Reload(); err != nil {
+		log.Error("❌ Failed to refresh environment variables: %v", err)
+		return fmt.Errorf("failed to refresh environment variables: %w", err)
+	}
+	log.Info("🔄 Refreshed environment variables before continuing conversation")
 
 	claudeResult, err := mh.claudeService.ContinueConversation(sessionID, payload.Message)
 	if err != nil {
