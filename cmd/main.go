@@ -403,40 +403,26 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect_failed handler: %v", err))
 
 	// Wait for initial connection or detect auth failure
-	var connectionErr error
-	go func() {
-		// Wait up to 10 seconds for initial connection
-		select {
-		case <-connected:
-			log.Info("✅ Successfully authenticated with Socket.IO server")
-		case err := <-connectionError:
-			connectionErr = err
-			return
-		case <-time.After(10 * time.Second):
-			connectionErr = fmt.Errorf("connection timeout - server may have rejected authentication")
-			log.Error("❌ Connection timeout - server may have rejected authentication. Please check your CCAGENT_API_KEY environment variable")
-			return
-		}
-
-		// After successful connection, watch for immediate disconnection
-		select {
-		case reason := <-disconnected:
-			connectionErr = fmt.Errorf("disconnected immediately after connection: %s", reason)
-			log.Error("❌ Disconnected immediately after connection for unknown reason: %s", reason)
-			return
-		case <-time.After(5 * time.Second):
-			// No immediate disconnection - connection appears stable
-			log.Info("✅ Connection appears stable, continuing normal operation")
-		}
-	}()
-
-	// Give the connection check goroutine time to complete
-	time.Sleep(16 * time.Second) // 10s connection timeout + 5s stability check + 1s buffer
-
-	// Check if there was a connection error
-	if connectionErr != nil {
+	// Wait up to 10 seconds for initial connection
+	select {
+	case <-connected:
+		log.Info("✅ Successfully authenticated with Socket.IO server")
+	case err := <-connectionError:
 		socketClient.Disconnect()
-		return connectionErr
+		return err
+	case <-time.After(10 * time.Second):
+		socketClient.Disconnect()
+		return fmt.Errorf("connection timeout - server may have rejected authentication")
+	}
+
+	// After successful connection, watch for immediate disconnection
+	select {
+	case reason := <-disconnected:
+		socketClient.Disconnect()
+		return fmt.Errorf("disconnected immediately after connection: %s", reason)
+	case <-time.After(5 * time.Second):
+		// No immediate disconnection - connection appears stable
+		log.Info("✅ Connection appears stable, continuing normal operation")
 	}
 
 	// Start ping routine once connected
