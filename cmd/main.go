@@ -287,10 +287,10 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 
 	// Enable automatic reconnection
 	opts.SetReconnection(true)
-	opts.SetReconnectionAttempts(999999) // Effectively infinite retries
-	opts.SetReconnectionDelay(1000)      // Start with 1 second delay
-	opts.SetReconnectionDelayMax(5000)   // Max 5 seconds between retries
-	opts.SetRandomizationFactor(0.5)     // Add jitter to prevent thundering herd
+	opts.SetReconnectionAttempts(10)  // Max 10 reconnection attempts
+	opts.SetReconnectionDelay(1000)   // Start with 1 second delay
+	opts.SetReconnectionDelayMax(5000) // Max 5 seconds between retries
+	opts.SetRandomizationFactor(0.5)  // Add jitter to prevent thundering herd
 
 	// Get repository identifier for header
 	gitClient := clients.NewGitClient()
