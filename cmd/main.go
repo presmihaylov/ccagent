@@ -234,16 +234,50 @@ func main() {
 		}
 	}()
 
-	// Start Socket.IO client with backoff retry
-	err = cmdRunner.startSocketIOClientWithRetry(wsURL, ccagentAPIKey)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting WebSocket client after retries: %v\n", err)
-		os.Exit(1)
+	// Set up global interrupt handling for reconnection loop
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
+	// Start Socket.IO client with automatic reconnection
+	cmdRunner.runWithAutoReconnect(wsURL, ccagentAPIKey, interrupt)
+}
+
+// runWithAutoReconnect runs the Socket.IO client with automatic reconnection on disconnect
+func (cr *CmdRunner) runWithAutoReconnect(serverURLStr, apiKey string, interrupt chan os.Signal) {
+	for {
+		log.Info("🔄 Starting Socket.IO connection...")
+		err := cr.startSocketIOClientWithRetry(serverURLStr, apiKey, interrupt)
+
+		// Check if we received an interrupt signal (graceful shutdown)
+		select {
+		case <-interrupt:
+			log.Info("🔌 Graceful shutdown requested, exiting...")
+			return
+		default:
+			// Not an interrupt, continue with reconnection
+		}
+
+		if err != nil {
+			log.Error("❌ Socket.IO connection lost: %v", err)
+			log.Info("🔄 Attempting to reconnect in 5 seconds...")
+
+			// Wait 5 seconds before reconnecting, or exit on interrupt
+			select {
+			case <-time.After(5 * time.Second):
+				// Continue to reconnection
+			case <-interrupt:
+				log.Info("🔌 Graceful shutdown requested during reconnection wait, exiting...")
+				return
+			}
+		} else {
+			// Connection closed gracefully
+			return
+		}
 	}
 }
 
 // startSocketIOClientWithRetry wraps startSocketIOClient with exponential backoff retry logic
-func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string) error {
+func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string, interrupt chan os.Signal) error {
 	// Configure exponential backoff with max 3 attempts
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 5 * time.Second
@@ -255,10 +289,17 @@ func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string) e
 
 	attempt := 0
 	operation := func() error {
+		// Check for interrupt before attempting connection
+		select {
+		case <-interrupt:
+			return fmt.Errorf("connection cancelled by interrupt")
+		default:
+		}
+
 		attempt++
 		log.Info("🔄 Connection attempt %d/3", attempt)
 
-		err := cr.startSocketIOClient(serverURLStr, apiKey)
+		err := cr.startSocketIOClient(serverURLStr, apiKey, interrupt)
 		if err != nil {
 			log.Error("❌ Connection attempt %d failed: %v", attempt, err)
 			return err
@@ -274,12 +315,8 @@ func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string) e
 	return nil
 }
 
-func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
+func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string, interrupt chan os.Signal) error {
 	log.Info("📋 Starting to connect to Socket.IO server at %s", serverURLStr)
-
-	// Set up global interrupt handling
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
 
 	// Set up Socket.IO client options
 	opts := socket.DefaultOptions()
@@ -430,12 +467,21 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	defer pingCancel()
 	cr.startPingRoutine(pingCtx, socketClient)
 
-	// Wait for interrupt signal
-	<-interrupt
-	log.Info("🔌 Interrupt received, closing Socket.IO connection...")
-
-	socketClient.Disconnect()
-	return nil
+	// Wait for interrupt signal or unexpected disconnect
+	select {
+	case <-interrupt:
+		log.Info("🔌 Interrupt received, closing Socket.IO connection...")
+		socketClient.Disconnect()
+		return nil
+	case reason := <-disconnected:
+		log.Info("🔌 Unexpected disconnect during operation: %s, triggering reconnection...", reason)
+		socketClient.Disconnect()
+		return fmt.Errorf("unexpected disconnect: %s", reason)
+	case err := <-connectionError:
+		log.Info("🔌 Connection error during operation: %v, triggering reconnection...", err)
+		socketClient.Disconnect()
+		return err
+	}
 }
 
 func (cr *CmdRunner) setupProgramLogging() (string, error) {
