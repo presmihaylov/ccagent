@@ -467,7 +467,13 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string, interrupt 
 	defer pingCancel()
 	cr.startPingRoutine(pingCtx, socketClient)
 
-	// Wait for interrupt signal or unexpected disconnect
+	// Start connection health monitor
+	healthCtx, healthCancel := context.WithCancel(context.Background())
+	defer healthCancel()
+	healthCheckFailed := make(chan struct{}, 1)
+	cr.startConnectionHealthMonitor(healthCtx, socketClient, healthCheckFailed)
+
+	// Wait for interrupt signal, unexpected disconnect, or health check failure
 	select {
 	case <-interrupt:
 		log.Info("🔌 Interrupt received, closing Socket.IO connection...")
@@ -481,6 +487,10 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string, interrupt 
 		log.Info("🔌 Connection error during operation: %v, triggering reconnection...", err)
 		socketClient.Disconnect()
 		return err
+	case <-healthCheckFailed:
+		log.Info("🔌 Connection health check failed, triggering reconnection...")
+		socketClient.Disconnect()
+		return fmt.Errorf("connection health check failed")
 	}
 }
 
@@ -514,8 +524,36 @@ func (cr *CmdRunner) setupProgramLogging() (string, error) {
 	return rotatingWriter.GetCurrentLogPath(), nil
 }
 
+func (cr *CmdRunner) startConnectionHealthMonitor(ctx context.Context, socketClient *socket.Socket, healthCheckFailed chan struct{}) {
+	log.Info("📋 Starting connection health monitor (checks every 30 seconds)")
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("📋 Connection health monitor stopped")
+				return
+			case <-ticker.C:
+				// Check if socket is still connected
+				if !socketClient.Connected() {
+					log.Error("❌ Health check failed: Socket is disconnected but no disconnect event was fired")
+					// Signal that health check failed
+					select {
+					case healthCheckFailed <- struct{}{}:
+					default:
+						// Channel already has a signal, ignore
+					}
+					return
+				}
+				log.Info("✅ Connection health check passed")
+			}
+		}
+	}()
+}
+
 func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.Socket) {
-	log.Info("📋 Starting ping routine")
+	log.Info("📋 Starting ping routine with connection health monitoring")
 	go func() {
 		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
@@ -525,9 +563,16 @@ func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.
 				log.Info("📋 Ping routine stopped")
 				return
 			case <-ticker.C:
+				// Check if socket is actually connected before sending ping
+				if !socketClient.Connected() {
+					log.Error("❌ Socket is disconnected, ping not sent. Connection health check failed.")
+					// The disconnect handler should have already triggered reconnection
+					continue
+				}
+
 				log.Info("💓 Sending ping to server")
 				if err := socketClient.Emit("ping"); err != nil {
-					log.Error("❌ Failed to send ping: %v", err)
+					log.Error("❌ Failed to send ping: %v (socket may be disconnected)", err)
 				}
 			}
 		}
