@@ -104,6 +104,18 @@ func (g *GitClient) PullLatest() error {
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
+		outputStr := strings.ToLower(string(output))
+
+		// Check if error is due to no upstream branch configured
+		// This happens when branch hasn't been pushed to remote yet
+		if strings.Contains(outputStr, "no tracking information") ||
+			strings.Contains(outputStr, "no upstream branch") ||
+			strings.Contains(outputStr, "there is no tracking information for the current branch") {
+			log.Info("ℹ️ No remote branch exists yet - nothing to pull")
+			log.Info("📋 Completed successfully - no remote branch to pull from")
+			return nil
+		}
+
 		log.Error("❌ Git pull failed: %v\nOutput: %s", err, string(output))
 		return fmt.Errorf("git pull failed: %w\nOutput: %s", err, string(output))
 	}
