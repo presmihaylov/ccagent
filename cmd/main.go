@@ -33,12 +33,11 @@ import (
 )
 
 type CmdRunner struct {
-	messageHandler *handlers.MessageHandler
-	gitUseCase     *usecases.GitUseCase
-	rotatingWriter *log.RotatingWriter
-	envManager     *env.EnvManager
-	agentID        string
-	reconnectChan  chan struct{}
+    messageHandler *handlers.MessageHandler
+    gitUseCase     *usecases.GitUseCase
+    rotatingWriter *log.RotatingWriter
+    envManager     *env.EnvManager
+    agentID        string
 }
 
 func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, error) {
@@ -82,13 +81,12 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	log.Info("🆔 Using persistent agent ID: %s", agentID)
 
 	// Create the CmdRunner instance
-	cr := &CmdRunner{
-		messageHandler: messageHandler,
-		gitUseCase:     gitUseCase,
-		envManager:     envManager,
-		agentID:        agentID,
-		reconnectChan:  make(chan struct{}, 1),
-	}
+    cr := &CmdRunner{
+        messageHandler: messageHandler,
+        gitUseCase:     gitUseCase,
+        envManager:     envManager,
+        agentID:        agentID,
+    }
 
 	// Register GitHub token update hook
 	envManager.RegisterReloadHook(gitUseCase.GithubTokenUpdateHook)
@@ -244,53 +242,51 @@ func main() {
 
 // startSocketIOClientWithRetry wraps startSocketIOClient with exponential backoff retry logic
 func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string) error {
-	// Configure exponential backoff with max 3 attempts
-	expBackoff := backoff.NewExponentialBackOff()
-	expBackoff.InitialInterval = 5 * time.Second
-	expBackoff.MaxInterval = 40 * time.Second
-	expBackoff.MaxElapsedTime = 0 // No time limit, rely on MaxRetries
+    // Configure exponential backoff with unlimited retries
+    expBackoff := backoff.NewExponentialBackOff()
+    expBackoff.InitialInterval = 2 * time.Second
+    expBackoff.MaxInterval = 30 * time.Second
+    expBackoff.MaxElapsedTime = 0 // No time limit
 
-	// Wrap with max retry count of 3 attempts
-	retryBackoff := backoff.WithMaxRetries(expBackoff, 2) // 2 retries = 3 total attempts
+    attempt := 0
+    operation := func() error {
+        attempt++
+        log.Info("🔄 Connection attempt %d", attempt)
 
-	attempt := 0
-	operation := func() error {
-		attempt++
-		log.Info("🔄 Connection attempt %d/3", attempt)
+        err := cr.startSocketIOClient(serverURLStr, apiKey)
+        if err != nil {
+            log.Error("❌ Connection attempt %d failed: %v", attempt, err)
+            return err
+        }
+        return nil
+    }
 
-		err := cr.startSocketIOClient(serverURLStr, apiKey)
-		if err != nil {
-			log.Error("❌ Connection attempt %d failed: %v", attempt, err)
-			return err
-		}
-		return nil
-	}
+    notify := func(err error, next time.Duration) {
+        log.Info("⏳ Retrying in %v...", next)
+    }
 
-	err := backoff.Retry(operation, retryBackoff)
-	if err != nil {
-		return fmt.Errorf("failed to connect after %d attempts: %w", attempt, err)
-	}
+    err := backoff.RetryNotify(operation, expBackoff, notify)
+    if err != nil {
+        return fmt.Errorf("failed to connect after %d attempts: %w", attempt, err)
+    }
 
-	return nil
+    return nil
 }
 
 func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
-	log.Info("📋 Starting to connect to Socket.IO server at %s", serverURLStr)
+    log.Info("📋 Starting to connect to Socket.IO server at %s", serverURLStr)
 
-	// Set up global interrupt handling
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
+    // Set up global interrupt handling
+    interrupt := make(chan os.Signal, 1)
+    signal.Notify(interrupt, os.Interrupt)
+    defer signal.Stop(interrupt)
 
 	// Set up Socket.IO client options
 	opts := socket.DefaultOptions()
 	opts.SetTransports(types.NewSet(transports.Polling, transports.WebSocket))
 
-	// Enable automatic reconnection
-	opts.SetReconnection(true)
-	opts.SetReconnectionAttempts(10)  // Max 10 reconnection attempts
-	opts.SetReconnectionDelay(1000)   // Start with 1 second delay
-	opts.SetReconnectionDelayMax(5000) // Max 5 seconds between retries
-	opts.SetRandomizationFactor(0.5)  // Add jitter to prevent thundering herd
+	// Disable automatic reconnection - handle reconnection externally with backoff
+	opts.SetReconnection(false)
 
 	// Get repository identifier for header
 	gitClient := clients.NewGitClient()
@@ -318,10 +314,10 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	instantWorkerPool := workerpool.New(5)
 	defer instantWorkerPool.StopWait()
 
-	// Track connection state for auth failure detection
-	connected := make(chan bool, 1)
-	disconnected := make(chan string, 1)
-	connectionError := make(chan error, 1)
+    // Track connection state for auth failure detection
+    connected := make(chan bool, 1)
+    connectionError := make(chan error, 1)
+    runtimeErrorChan := make(chan error, 1) // Errors after successful connection
 
 	// Connection event handlers
 	err = socketClient.On("connect", func(args ...any) {
@@ -339,11 +335,14 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	err = socketClient.On("disconnect", func(args ...any) {
 		log.Info("🔌 Socket.IO disconnected: %v", args)
 
-		// Send disconnect reason to the channel
+		// Send disconnect error to trigger reconnection
 		reason := "unknown"
+		if len(args) > 0 {
+			reason = fmt.Sprintf("%v", args[0])
+		}
 
 		select {
-		case disconnected <- reason:
+		case runtimeErrorChan <- fmt.Errorf("socket disconnected: %s", reason):
 		default:
 			// Channel full, ignore
 		}
@@ -393,27 +392,6 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	})
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up cc_message handler: %v", err))
 
-	// Built-in reconnection handlers
-	err = manager.On("reconnect", func(attempt ...any) {
-		log.Info("✅ Reconnected to Socket.IO server after disconnect (attempt: %v)", attempt)
-	})
-	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect handler: %v", err))
-
-	err = manager.On("reconnect_attempt", func(attempt ...any) {
-		log.Info("🔄 Attempting to reconnect to Socket.IO server (attempt: %v)", attempt)
-	})
-	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect_attempt handler: %v", err))
-
-	err = manager.On("reconnect_error", func(errs ...any) {
-		log.Error("❌ Socket.IO reconnection error: %v", errs)
-	})
-	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect_error handler: %v", err))
-
-	err = manager.On("reconnect_failed", func(errs ...any) {
-		log.Error("❌ Socket.IO reconnection failed after all attempts: %v", errs)
-	})
-	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect_failed handler: %v", err))
-
 	// Wait for initial connection or detect auth failure
 	// Wait up to 10 seconds for initial connection
 	select {
@@ -427,27 +405,27 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		return fmt.Errorf("connection timeout - server may have rejected authentication")
 	}
 
-	// After successful connection, watch for immediate disconnection
-	select {
-	case reason := <-disconnected:
-		socketClient.Disconnect()
-		return fmt.Errorf("disconnected immediately after connection: %s", reason)
-	case <-time.After(5 * time.Second):
-		// No immediate disconnection - connection appears stable
-		log.Info("✅ Connection appears stable, continuing normal operation")
-	}
+    // Connection appears stable if not immediately disconnected within 5s (legacy guard removed)
+    time.AfterFunc(5*time.Second, func() {
+        log.Info("✅ Connection appears stable, continuing normal operation")
+    })
 
 	// Start ping routine once connected
 	pingCtx, pingCancel := context.WithCancel(context.Background())
 	defer pingCancel()
-	cr.startPingRoutine(pingCtx, socketClient)
+	cr.startPingRoutine(pingCtx, socketClient, runtimeErrorChan)
 
-	// Wait for interrupt signal
-	<-interrupt
-	log.Info("🔌 Interrupt received, closing Socket.IO connection...")
-
-	socketClient.Disconnect()
-	return nil
+	// Wait for interrupt signal or runtime error
+	select {
+	case <-interrupt:
+		log.Info("🔌 Interrupt received, closing Socket.IO connection...")
+		socketClient.Disconnect()
+		return nil
+	case err := <-runtimeErrorChan:
+		log.Error("❌ Runtime error occurred: %v", err)
+		socketClient.Disconnect()
+		return err
+	}
 }
 
 func (cr *CmdRunner) setupProgramLogging() (string, error) {
@@ -480,7 +458,7 @@ func (cr *CmdRunner) setupProgramLogging() (string, error) {
 	return rotatingWriter.GetCurrentLogPath(), nil
 }
 
-func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.Socket) {
+func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.Socket, runtimeErrorChan chan<- error) {
 	log.Info("📋 Starting ping routine")
 	go func() {
 		ticker := time.NewTicker(2 * time.Minute)
@@ -491,9 +469,26 @@ func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.
 				log.Info("📋 Ping routine stopped")
 				return
 			case <-ticker.C:
+				// Check if socket is still connected
+				if !socketClient.Connected() {
+					log.Error("❌ Socket disconnected, stopping ping routine")
+					select {
+					case runtimeErrorChan <- fmt.Errorf("socket disconnected during ping"):
+					default:
+						// Channel full, ignore
+					}
+					return
+				}
+
 				log.Info("💓 Sending ping to server")
 				if err := socketClient.Emit("ping"); err != nil {
 					log.Error("❌ Failed to send ping: %v", err)
+					select {
+					case runtimeErrorChan <- fmt.Errorf("failed to send ping: %w", err):
+					default:
+						// Channel full, ignore
+					}
+					return
 				}
 			}
 		}
