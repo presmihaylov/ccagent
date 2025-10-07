@@ -239,25 +239,27 @@ func (g *GitUseCase) resetAndPullDefaultBranch() error {
 }
 
 func (g *GitUseCase) AutoCommitChangesIfNeeded(slackThreadLink, sessionID string) (*AutoCommitResult, error) {
-	log.Info("📋 Starting to auto-commit changes if needed")
+	timer := log.StartTimer("auto_commit")
+	defer timer.LogElapsed()
+
+	log.InfoWith("📋 Starting auto-commit check", "session_id", sessionID)
 
 	// Get current branch first (needed for both cases)
 	currentBranch, err := g.gitClient.GetCurrentBranch()
 	if err != nil {
-		log.Error("❌ Failed to get current branch: %v", err)
+		log.ErrorWith("❌ Failed to get current branch", "error", err, "session_id", sessionID)
 		return nil, fmt.Errorf("failed to get current branch: %w", err)
 	}
 
 	// Check if there are any uncommitted changes
 	hasChanges, err := g.gitClient.HasUncommittedChanges()
 	if err != nil {
-		log.Error("❌ Failed to check for uncommitted changes: %v", err)
+		log.ErrorWith("❌ Failed to check for uncommitted changes", "error", err, "branch", currentBranch)
 		return nil, fmt.Errorf("failed to check for uncommitted changes: %w", err)
 	}
 
 	if !hasChanges {
-		log.Info("ℹ️ No uncommitted changes found - skipping auto-commit")
-		log.Info("📋 Completed successfully - no changes to commit")
+		log.InfoWith("ℹ️ No uncommitted changes found", "branch", currentBranch)
 		return &AutoCommitResult{
 			JustCreatedPR:   false,
 			PullRequestLink: "",
@@ -268,53 +270,53 @@ func (g *GitUseCase) AutoCommitChangesIfNeeded(slackThreadLink, sessionID string
 		}, nil
 	}
 
-	log.Info("✅ Uncommitted changes detected - proceeding with auto-commit")
+	log.InfoWith("✅ Uncommitted changes detected", "branch", currentBranch)
 
 	// Generate commit message using Claude
 	commitMessage, err := g.generateCommitMessageWithClaude(sessionID, currentBranch)
 	if err != nil {
-		log.Error("❌ Failed to generate commit message with Claude: %v", err)
+		log.ErrorWith("❌ Failed to generate commit message", "error", err, "session_id", sessionID, "branch", currentBranch)
 		return nil, fmt.Errorf("failed to generate commit message with Claude: %w", err)
 	}
 
-	log.Info("📝 Generated commit message: %s", commitMessage)
+	log.InfoWith("📝 Generated commit message", "branch", currentBranch, "message_length", len(commitMessage))
 
 	// Add all changes
 	if err := g.gitClient.AddAll(); err != nil {
-		log.Error("❌ Failed to add all changes: %v", err)
+		log.ErrorWith("❌ Failed to add all changes", "error", err, "branch", currentBranch)
 		return nil, fmt.Errorf("failed to add all changes: %w", err)
 	}
 
 	// Commit with message
 	if err := g.gitClient.Commit(commitMessage); err != nil {
-		log.Error("❌ Failed to commit changes: %v", err)
+		log.ErrorWith("❌ Failed to commit changes", "error", err, "branch", currentBranch)
 		return nil, fmt.Errorf("failed to commit changes: %w", err)
 	}
 
 	// Get commit hash after successful commit
 	commitHash, err := g.gitClient.GetLatestCommitHash()
 	if err != nil {
-		log.Error("❌ Failed to get commit hash: %v", err)
+		log.ErrorWith("❌ Failed to get commit hash", "error", err, "branch", currentBranch)
 		return nil, fmt.Errorf("failed to get commit hash: %w", err)
 	}
 
 	// Get repository URL for commit link
 	repositoryURL, err := g.gitClient.GetRemoteURL()
 	if err != nil {
-		log.Error("❌ Failed to get repository URL: %v", err)
+		log.ErrorWith("❌ Failed to get repository URL", "error", err)
 		return nil, fmt.Errorf("failed to get repository URL: %w", err)
 	}
 
 	// Push current branch to remote
 	if err := g.gitClient.PushBranch(currentBranch); err != nil {
-		log.Error("❌ Failed to push branch %s: %v", currentBranch, err)
+		log.ErrorWith("❌ Failed to push branch", "error", err, "branch", currentBranch)
 		return nil, fmt.Errorf("failed to push branch %s: %w", currentBranch, err)
 	}
 
 	// Handle PR creation/update
 	prResult, err := g.handlePRCreationOrUpdate(sessionID, currentBranch, slackThreadLink)
 	if err != nil {
-		log.Error("❌ Failed to handle PR creation/update: %v", err)
+		log.ErrorWith("❌ Failed to handle PR creation/update", "error", err, "branch", currentBranch)
 		return nil, fmt.Errorf("failed to handle PR creation/update: %w", err)
 	}
 
@@ -327,8 +329,7 @@ func (g *GitUseCase) AutoCommitChangesIfNeeded(slackThreadLink, sessionID string
 		prResult.PullRequestID = g.gitClient.ExtractPRIDFromURL(prResult.PullRequestLink)
 	}
 
-	log.Info("✅ Successfully auto-committed and pushed changes")
-	log.Info("📋 Completed successfully - auto-committed changes")
+	log.InfoWith("✅ Auto-commit completed", "branch", currentBranch, "commit_hash", commitHash[:7], "created_pr", prResult.JustCreatedPR)
 	return prResult, nil
 }
 

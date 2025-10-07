@@ -74,34 +74,37 @@ func (mh *MessageHandler) HandleMessage(msg models.BaseMessage, socketClient *so
 }
 
 func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socketClient *socket.Socket) error {
-	log.Info("📋 Starting to handle start conversation message")
+	timer := log.StartTimer("start_conversation")
+	defer timer.LogElapsed()
+
+	log.InfoWith("📋 Starting to handle start conversation message", "message_id", msg.ID)
 	var payload models.StartConversationPayload
 	if err := unmarshalPayload(msg.Payload, &payload); err != nil {
-		log.Info("❌ Failed to unmarshal start conversation payload: %v", err)
+		log.ErrorWith("❌ Failed to unmarshal start conversation payload", "error", err)
 		return fmt.Errorf("failed to unmarshal start conversation payload: %w", err)
 	}
 
 	// Send processing message notification that agent is starting to process
 	if err := mh.sendProcessingMessage(socketClient, payload.ProcessedMessageID, payload.JobID); err != nil {
-		log.Info("❌ Failed to send processing message notification: %v", err)
+		log.ErrorWith("❌ Failed to send processing message notification", "error", err, "job_id", payload.JobID)
 		return fmt.Errorf("failed to send processing message notification: %w", err)
 	}
 
-	log.Info("🚀 Starting new conversation with message: %s", payload.Message)
+	log.InfoWith("🚀 Starting new conversation", "job_id", payload.JobID, "message_length", len(payload.Message))
 
 	// Prepare Git environment for new conversation - FAIL if this doesn't work
 	branchName, err := mh.gitUseCase.PrepareForNewConversation(payload.Message)
 	if err != nil {
-		log.Error("❌ Failed to prepare Git environment: %v", err)
+		log.ErrorWith("❌ Failed to prepare Git environment", "error", err, "job_id", payload.JobID)
 		return fmt.Errorf("failed to prepare Git environment: %w", err)
 	}
 
 	// Refresh environment variables before starting conversation
 	if err := mh.envManager.Reload(); err != nil {
-		log.Error("❌ Failed to refresh environment variables: %v", err)
+		log.ErrorWith("❌ Failed to refresh environment variables", "error", err, "job_id", payload.JobID)
 		return fmt.Errorf("failed to refresh environment variables: %w", err)
 	}
-	log.Info("🔄 Refreshed environment variables before starting conversation")
+	log.InfoWith("🔄 Refreshed environment variables", "job_id", payload.JobID)
 
 	// Get appropriate system prompt based on agent type
 	systemPrompt := GetClaudeSystemPrompt()
@@ -111,7 +114,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 
 	claudeResult, err := mh.claudeService.StartNewConversationWithSystemPrompt(payload.Message, systemPrompt)
 	if err != nil {
-		log.Info("❌ Error starting Claude session: %v", err)
+		log.ErrorWith("❌ Error starting AI agent session", "error", err, "job_id", payload.JobID, "agent", mh.claudeService.AgentName())
 		systemErr := mh.sendSystemMessage(
 			socketClient,
 			fmt.Sprintf("ccagent encountered error: %v", err),
@@ -119,7 +122,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 			payload.JobID,
 		)
 		if systemErr != nil {
-			log.Error("❌ Failed to send system message for Claude error: %v", systemErr)
+			log.ErrorWith("❌ Failed to send system message", "error", systemErr, "job_id", payload.JobID)
 		}
 		return fmt.Errorf("error starting Claude session: %w", err)
 	}
@@ -127,7 +130,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	// Auto-commit changes if needed
 	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
 	if err != nil {
-		log.Info("❌ Auto-commit failed: %v", err)
+		log.ErrorWith("❌ Auto-commit failed", "error", err, "job_id", payload.JobID, "session_id", claudeResult.SessionID)
 		return fmt.Errorf("auto-commit failed: %w", err)
 	}
 
@@ -164,28 +167,28 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 		Payload: assistantPayload,
 	}
 	if err := socketClient.Emit("cc_message", assistantMsg); err != nil {
-		log.Info("❌ Failed to send assistant response: %v", err)
+		log.ErrorWith("❌ Failed to send assistant response", "error", err, "job_id", payload.JobID)
 		return fmt.Errorf("failed to send assistant response: %w", err)
 	}
 
-	log.Info("🤖 Sent assistant response (message ID: %s)", assistantMsg.ID)
+	log.InfoWith("🤖 Sent assistant response", "message_id", assistantMsg.ID, "job_id", payload.JobID, "response_length", len(claudeResult.Output))
 
 	// Add delay to ensure git activity message comes after assistant message
 	time.Sleep(200 * time.Millisecond)
 
 	// Send system message after assistant message for git activity
 	if err := mh.sendGitActivitySystemMessage(socketClient, commitResult, payload.ProcessedMessageID, payload.JobID); err != nil {
-		log.Info("❌ Failed to send git activity system message: %v", err)
+		log.ErrorWith("❌ Failed to send git activity system message", "error", err, "job_id", payload.JobID)
 		return fmt.Errorf("failed to send git activity system message: %w", err)
 	}
 
 	// Validate and restore PR description footer if needed
 	if err := mh.gitUseCase.ValidateAndRestorePRDescriptionFooter(payload.MessageLink); err != nil {
-		log.Info("❌ Failed to validate PR description footer: %v", err)
+		log.ErrorWith("❌ Failed to validate PR description footer", "error", err, "job_id", payload.JobID)
 		return fmt.Errorf("failed to validate PR description footer: %w", err)
 	}
 
-	log.Info("📋 Completed successfully - handled start conversation message")
+	log.InfoWith("✅ Completed start conversation successfully", "job_id", payload.JobID, "branch", finalBranchName, "session_id", claudeResult.SessionID)
 	return nil
 }
 

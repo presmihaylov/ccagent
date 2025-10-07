@@ -321,26 +321,25 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 
 	// Connection event handlers
 	err = socketClient.On("connect", func(args ...any) {
-		log.Info("✅ Connected to Socket.IO server, socket ID: %s", socketClient.Id())
+		log.InfoWith("✅ Connected to Socket.IO server", "socket_id", socketClient.Id(), "agent_id", cr.agentID)
 		connected <- true
 	})
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up connect handler: %v", err))
 
 	err = socketClient.On("connect_error", func(args ...any) {
-		log.Error("❌ Socket.IO connection error: %v", args)
+		log.ErrorWith("❌ Socket.IO connection error", "error", args, "agent_id", cr.agentID)
 		connectionError <- fmt.Errorf("socket.io connection error: %v", args)
 	})
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up connect_error handler: %v", err))
 
 	err = socketClient.On("disconnect", func(args ...any) {
-		log.Info("🔌 Socket.IO disconnected: %v", args)
-
-		// Send disconnect error to trigger reconnection
 		reason := "unknown"
 		if len(args) > 0 {
 			reason = fmt.Sprintf("%v", args[0])
 		}
+		log.InfoWith("🔌 Socket.IO disconnected", "reason", reason, "agent_id", cr.agentID)
 
+		// Send disconnect error to trigger reconnection
 		select {
 		case runtimeErrorChan <- fmt.Errorf("socket disconnected: %s", reason):
 		default:
@@ -352,24 +351,24 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	// Set up message handler for cc_message event
 	err = socketClient.On("cc_message", func(data ...any) {
 		if len(data) == 0 {
-			log.Info("❌ No data received for cc_message event")
+			log.ErrorWith("❌ No data received for cc_message event", "agent_id", cr.agentID)
 			return
 		}
 
 		var msg models.BaseMessage
 		msgBytes, err := json.Marshal(data[0])
 		if err != nil {
-			log.Info("❌ Failed to marshal message data: %v", err)
+			log.ErrorWith("❌ Failed to marshal message data", "error", err, "agent_id", cr.agentID)
 			return
 		}
 
 		err = json.Unmarshal(msgBytes, &msg)
 		if err != nil {
-			log.Info("❌ Failed to unmarshal message data: %v", err)
+			log.ErrorWith("❌ Failed to unmarshal message data", "error", err, "agent_id", cr.agentID)
 			return
 		}
 
-		log.Info("📨 Received message type: %s", msg.Type)
+		log.InfoWith("📨 Received message", "type", msg.Type, "message_id", msg.ID, "agent_id", cr.agentID)
 
 		// Route messages to appropriate worker pool
 		switch msg.Type {
