@@ -76,7 +76,7 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	gitClient := clients.NewGitClient()
 	appState := models.NewAppState()
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
-	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState)
+	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager)
 
 	agentID := core.NewID("ccaid")
 	log.Info("🆔 Using persistent agent ID: %s", agentID)

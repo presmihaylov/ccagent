@@ -113,6 +113,19 @@ func (g *GitUseCase) ValidateGitEnvironment() error {
 }
 
 // SwitchToJobBranch switches to the specified branch, discarding local changes and pulling latest from main
+func (g *GitUseCase) PullLatestChanges() error {
+	log.Info("📋 Starting to pull latest changes")
+
+	if err := g.gitClient.PullLatest(); err != nil {
+		log.Error("❌ Failed to pull latest changes: %v", err)
+		return fmt.Errorf("failed to pull latest changes: %w", err)
+	}
+
+	log.Info("✅ Successfully pulled latest changes")
+	log.Info("📋 Completed successfully - pulled latest changes")
+	return nil
+}
+
 func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 	log.Info("📋 Starting to switch to job branch: %s", branchName)
 
