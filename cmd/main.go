@@ -285,6 +285,13 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	opts := socket.DefaultOptions()
 	opts.SetTransports(types.NewSet(transports.Polling, transports.WebSocket))
 
+	// Enable automatic reconnection
+	opts.SetReconnection(true)
+	opts.SetReconnectionAttempts(10)  // Max 10 reconnection attempts
+	opts.SetReconnectionDelay(1000)   // Start with 1 second delay
+	opts.SetReconnectionDelayMax(5000) // Max 5 seconds between retries
+	opts.SetRandomizationFactor(0.5)  // Add jitter to prevent thundering herd
+
 	// Get repository identifier for header
 	gitClient := clients.NewGitClient()
 	repoIdentifier, err := gitClient.GetRepositoryIdentifier()
@@ -387,18 +394,23 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up cc_message handler: %v", err))
 
 	// Built-in reconnection handlers
-	err = manager.On("reconnect", func(...any) {
-		log.Info("✅ Reconnected to Socket.IO server")
+	err = manager.On("reconnect", func(attempt ...any) {
+		log.Info("✅ Reconnected to Socket.IO server after disconnect (attempt: %v)", attempt)
 	})
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect handler: %v", err))
 
+	err = manager.On("reconnect_attempt", func(attempt ...any) {
+		log.Info("🔄 Attempting to reconnect to Socket.IO server (attempt: %v)", attempt)
+	})
+	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect_attempt handler: %v", err))
+
 	err = manager.On("reconnect_error", func(errs ...any) {
-		log.Info("❌ Socket.IO reconnection error: %v", errs)
+		log.Error("❌ Socket.IO reconnection error: %v", errs)
 	})
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect_error handler: %v", err))
 
 	err = manager.On("reconnect_failed", func(errs ...any) {
-		log.Info("❌ Socket.IO reconnection failed: %v", errs)
+		log.Error("❌ Socket.IO reconnection failed after all attempts: %v", errs)
 	})
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up reconnect_failed handler: %v", err))
 
