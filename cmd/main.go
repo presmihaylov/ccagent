@@ -140,6 +140,22 @@ func main() {
 	// Always enable info level logging
 	log.SetLevel(slog.LevelInfo)
 
+	// Log startup information
+	log.Info("🚀 ccagent starting - version %s", core.GetVersion())
+	log.Info("⚙️  Configuration: agent=%s, permission_mode=%s", opts.Agent, func() string {
+		if opts.BypassPermissions {
+			return "bypassPermissions"
+		}
+		return "acceptEdits"
+	}())
+	if opts.Agent == "cursor" && opts.CursorModel != "" {
+		log.Info("⚙️  Cursor model: %s", opts.CursorModel)
+	}
+	cwd, err := os.Getwd()
+	if err == nil {
+		log.Info("📁 Working directory: %s", cwd)
+	}
+
 	// Acquire directory lock to prevent multiple instances in same directory
 	dirLock, err := utils.NewDirLock()
 	if err != nil {
@@ -183,11 +199,12 @@ func main() {
 	}
 
 	// Setup program-wide logging from start
-	_, err = cmdRunner.setupProgramLogging()
+	logPath, err := cmdRunner.setupProgramLogging()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error setting up program logging: %v\n", err)
 		os.Exit(1)
 	}
+	log.Info("📝 Logging to: %s", logPath)
 
 	// Validate Git environment before starting
 	err = cmdRunner.gitUseCase.ValidateGitEnvironment()
@@ -208,6 +225,8 @@ func main() {
 	if wsURL == "" {
 		wsURL = "https://claudecontrol.onrender.com/socketio/"
 	}
+	log.Info("🌐 WebSocket URL: %s", wsURL)
+	log.Info("🔑 Agent ID: %s", cmdRunner.agentID)
 
 	// Set up deferred cleanup
 	defer func() {
