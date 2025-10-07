@@ -77,9 +77,13 @@ echo "Creating new 'latest' tag..."
 git tag -a "latest" -m "Latest release - $TAG"
 git push origin "latest"
 
-# Default release notes
-RELEASE_NOTES="## Changes
+# Check if release notes file exists, otherwise use default
+if [ -f "/tmp/release_notes.md" ]; then
+    RELEASE_NOTES=$(cat /tmp/release_notes.md)
+else
+    RELEASE_NOTES="## Changes
 - Version $VERSION release"
+fi
 
 # Create GitHub release with all binaries
 echo "Creating GitHub release $TAG..."
