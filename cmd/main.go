@@ -73,12 +73,39 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	envManager.StartPeriodicRefresh(1 * time.Minute)
 
 	gitClient := clients.NewGitClient()
-	appState := models.NewAppState()
+
+	// Determine state file path (reuse homeDir from above)
+	statePath := filepath.Join(homeDir, ".config", "ccagent", "state.json")
+
+	// Try to load existing state
+	loadedAgentID, loadedJobs, stateLoaded, loadErr := models.LoadState(statePath)
+	if loadErr != nil {
+		log.Warn("⚠️ Failed to load persisted state: %v (will start fresh)", loadErr)
+	}
+
+	// Determine agent ID (use loaded or generate new)
+	var agentID string
+	if stateLoaded && loadedAgentID != "" {
+		agentID = loadedAgentID
+		log.Info("🔄 Restored agent ID from persisted state: %s", agentID)
+	} else {
+		agentID = core.NewID("ccaid")
+		log.Info("🆔 Generated new agent ID: %s", agentID)
+	}
+
+	// Create app state with agent ID and state path
+	appState := models.NewAppState(agentID, statePath)
+
+	// Restore jobs if state was loaded
+	if stateLoaded && loadedJobs != nil {
+		for jobID, jobData := range loadedJobs {
+			appState.UpdateJobData(jobID, *jobData)
+			log.Info("📥 Restored job state: %s (branch: %s, session: %s)", jobID, jobData.BranchName, jobData.ClaudeSessionID)
+		}
+	}
+
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
 	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager)
-
-	agentID := core.NewID("ccaid")
-	log.Info("🆔 Using persistent agent ID: %s", agentID)
 
 	// Create the CmdRunner instance
     cr := &CmdRunner{
