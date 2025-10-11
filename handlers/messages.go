@@ -148,6 +148,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 		BranchName:      finalBranchName,
 		ClaudeSessionID: claudeResult.SessionID,
 		PullRequestID:   prID,
+		LastMessage:     payload.Message,
 		UpdatedAt:       time.Now(),
 	})
 
@@ -281,6 +282,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 		BranchName:      finalBranchName,
 		ClaudeSessionID: claudeResult.SessionID,
 		PullRequestID:   prID,
+		LastMessage:     payload.Message,
 		UpdatedAt:       time.Now(),
 	})
 
