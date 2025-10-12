@@ -3,6 +3,7 @@ package handlers
 import (
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/zishang520/socket.io-client-go/socket"
 
 	"ccagent/core/log"
@@ -52,27 +53,30 @@ func (ms *MessageSender) Run(socketClient *socket.Socket) {
 }
 
 // sendWithRetry attempts to send a message with exponential backoff retry logic.
-// Retries up to 3 times with delays of 1s, 2s, 4s between attempts.
+// Uses the backoff library for consistent retry behavior across the codebase.
 func (ms *MessageSender) sendWithRetry(msg OutgoingMessage) {
-	maxRetries := 3
-	baseDelay := 1 * time.Second
+	// Configure exponential backoff for 3 retries
+	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff.InitialInterval = 1 * time.Second
+	expBackoff.MaxInterval = 4 * time.Second
+	expBackoff.MaxElapsedTime = 10 * time.Second // Total retry window
+	expBackoff.Multiplier = 2
 
-	for attempt := 1; attempt <= maxRetries; attempt++ {
+	attempt := 0
+	operation := func() error {
+		attempt++
 		err := ms.socketClient.Emit(msg.Event, msg.Data)
-		if err == nil {
-			log.Info("📤 MessageSender: Successfully sent message on event '%s' (attempt %d/%d)", msg.Event, attempt, maxRetries)
-			return
+		if err != nil {
+			log.Warn("⚠️ MessageSender: Failed to emit message on event '%s' (attempt %d): %v", msg.Event, attempt, err)
+			return err // Trigger retry
 		}
+		log.Info("📤 MessageSender: Successfully sent message on event '%s' (attempt %d)", msg.Event, attempt)
+		return nil // Success
+	}
 
-		if attempt < maxRetries {
-			// Calculate exponential backoff delay: 1s, 2s, 4s
-			delay := baseDelay * time.Duration(1<<(attempt-1))
-			log.Warn("⚠️ MessageSender: Failed to emit message on event '%s' (attempt %d/%d): %v. Retrying in %v...", msg.Event, attempt, maxRetries, err, delay)
-			time.Sleep(delay)
-		} else {
-			// Final attempt failed
-			log.Error("❌ MessageSender: Failed to emit message on event '%s' after %d attempts: %v. Message lost.", msg.Event, maxRetries, err)
-		}
+	err := backoff.Retry(operation, expBackoff)
+	if err != nil {
+		log.Error("❌ MessageSender: Failed to emit message on event '%s' after %d attempts: %v. Message lost.", msg.Event, attempt, err)
 	}
 }
 
