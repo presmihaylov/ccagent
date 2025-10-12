@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.11] - 2025-10-12
+
+### Features
+
+- Add persistent state with job restoration ([#20](https://github.com/presmihaylov/ccagent/pull/20))
+  - Implements state persistence across agent restarts
+  - Automatic job restoration on startup
+  - Enhanced recovery handling for interrupted tasks
+- Add startup logging for config and environment ([#19](https://github.com/presmihaylov/ccagent/pull/19))
+  - Improved visibility into agent configuration at startup
+  - Environment variable logging for debugging
+- Support custom release notes in build script
+  - Build script now accepts custom release notes from `/tmp/release_notes.md`
+
+### Documentation
+
+- Add Claude Control context to prompts ([#18](https://github.com/presmihaylov/ccagent/pull/18))
+  - Enhanced prompt templates with Claude Control-specific context
+
 ## [0.0.3] - 2025-08-22
 
 ### Bugfix
