@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/zishang520/socket.io-client-go/socket"
 
 	"ccagent/core/log"
@@ -42,16 +44,36 @@ func (ms *MessageSender) Run(socketClient *socket.Socket) {
 		// Block until connection is established
 		ms.connectionState.WaitForConnection()
 
-		// Send the message
-		if err := ms.socketClient.Emit(msg.Event, msg.Data); err != nil {
-			log.Error("❌ MessageSender: Failed to emit message on event '%s': %v", msg.Event, err)
-			// Continue processing - message is lost (no retry logic yet)
-		} else {
-			log.Info("📤 MessageSender: Successfully sent message on event '%s'", msg.Event)
-		}
+		// Send the message with retry logic (3 attempts with exponential backoff)
+		ms.sendWithRetry(msg)
 	}
 
 	log.Info("📤 MessageSender: Queue closed, exiting")
+}
+
+// sendWithRetry attempts to send a message with exponential backoff retry logic.
+// Retries up to 3 times with delays of 1s, 2s, 4s between attempts.
+func (ms *MessageSender) sendWithRetry(msg OutgoingMessage) {
+	maxRetries := 3
+	baseDelay := 1 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err := ms.socketClient.Emit(msg.Event, msg.Data)
+		if err == nil {
+			log.Info("📤 MessageSender: Successfully sent message on event '%s' (attempt %d/%d)", msg.Event, attempt, maxRetries)
+			return
+		}
+
+		if attempt < maxRetries {
+			// Calculate exponential backoff delay: 1s, 2s, 4s
+			delay := baseDelay * time.Duration(1<<(attempt-1))
+			log.Warn("⚠️ MessageSender: Failed to emit message on event '%s' (attempt %d/%d): %v. Retrying in %v...", msg.Event, attempt, maxRetries, err, delay)
+			time.Sleep(delay)
+		} else {
+			// Final attempt failed
+			log.Error("❌ MessageSender: Failed to emit message on event '%s' after %d attempts: %v. Message lost.", msg.Event, maxRetries, err)
+		}
+	}
 }
 
 // QueueMessage adds a message to the send queue.
