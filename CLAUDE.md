@@ -52,6 +52,23 @@ ccagent is a Go-based CLI application that serves as a bridge between AI coding 
 - **Test**: `make test` or `make test-verbose`
 - **Lint**: `make lint` or `make lint-fix`
 - **Clean**: `make clean` - Removes build artifacts
+- **Release**: `make release` - Creates production release with binaries (see Release Process below)
+
+## Release Process
+
+**IMPORTANT**: When asked to create a new release for ccagent, you MUST read and follow the detailed instructions in **[docs/release_ccagent.md](docs/release_ccagent.md)**.
+
+The release process includes:
+1. Cloning repository to temporary directory
+2. Analyzing changes since last release
+3. Bumping version (patch/minor/major)
+4. Updating CHANGELOG.md with categorized changes
+5. Committing and pushing version bump
+6. Creating formatted release notes (with emojis, following established format)
+7. Building binaries for all platforms
+8. Creating GitHub release with all binaries and checksums
+
+**Do not attempt to create a release without consulting the documentation first.**
 
 ## Environment Requirements
 
