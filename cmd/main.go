@@ -33,11 +33,12 @@ import (
 )
 
 type CmdRunner struct {
-    messageHandler *handlers.MessageHandler
-    gitUseCase     *usecases.GitUseCase
-    rotatingWriter *log.RotatingWriter
-    envManager     *env.EnvManager
-    agentID        string
+	messageHandler *handlers.MessageHandler
+	gitUseCase     *usecases.GitUseCase
+	appState       *models.AppState
+	rotatingWriter *log.RotatingWriter
+	envManager     *env.EnvManager
+	agentID        string
 }
 
 func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, error) {
@@ -73,20 +74,27 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	envManager.StartPeriodicRefresh(1 * time.Minute)
 
 	gitClient := clients.NewGitClient()
-	appState := models.NewAppState()
+
+	// Determine state file path (reuse homeDir from above)
+	statePath := filepath.Join(homeDir, ".config", "ccagent", "state.json")
+
+	// Restore app state from persisted data
+	appState, agentID, err := handlers.RestoreAppState(statePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore app state: %w", err)
+	}
+
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
 	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager)
 
-	agentID := core.NewID("ccaid")
-	log.Info("🆔 Using persistent agent ID: %s", agentID)
-
 	// Create the CmdRunner instance
-    cr := &CmdRunner{
-        messageHandler: messageHandler,
-        gitUseCase:     gitUseCase,
-        envManager:     envManager,
-        agentID:        agentID,
-    }
+	cr := &CmdRunner{
+		messageHandler: messageHandler,
+		gitUseCase:     gitUseCase,
+		appState:       appState,
+		envManager:     envManager,
+		agentID:        agentID,
+	}
 
 	// Register GitHub token update hook
 	envManager.RegisterReloadHook(gitUseCase.GithubTokenUpdateHook)
@@ -261,44 +269,44 @@ func main() {
 
 // startSocketIOClientWithRetry wraps startSocketIOClient with exponential backoff retry logic
 func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string) error {
-    // Configure exponential backoff with unlimited retries
-    expBackoff := backoff.NewExponentialBackOff()
-    expBackoff.InitialInterval = 2 * time.Second
-    expBackoff.MaxInterval = 30 * time.Second
-    expBackoff.MaxElapsedTime = 0 // No time limit
+	// Configure exponential backoff with unlimited retries
+	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff.InitialInterval = 2 * time.Second
+	expBackoff.MaxInterval = 30 * time.Second
+	expBackoff.MaxElapsedTime = 0 // No time limit
 
-    attempt := 0
-    operation := func() error {
-        attempt++
-        log.Info("🔄 Connection attempt %d", attempt)
+	attempt := 0
+	operation := func() error {
+		attempt++
+		log.Info("🔄 Connection attempt %d", attempt)
 
-        err := cr.startSocketIOClient(serverURLStr, apiKey)
-        if err != nil {
-            log.Error("❌ Connection attempt %d failed: %v", attempt, err)
-            return err
-        }
-        return nil
-    }
+		err := cr.startSocketIOClient(serverURLStr, apiKey)
+		if err != nil {
+			log.Error("❌ Connection attempt %d failed: %v", attempt, err)
+			return err
+		}
+		return nil
+	}
 
-    notify := func(err error, next time.Duration) {
-        log.Info("⏳ Retrying in %v...", next)
-    }
+	notify := func(err error, next time.Duration) {
+		log.Info("⏳ Retrying in %v...", next)
+	}
 
-    err := backoff.RetryNotify(operation, expBackoff, notify)
-    if err != nil {
-        return fmt.Errorf("failed to connect after %d attempts: %w", attempt, err)
-    }
+	err := backoff.RetryNotify(operation, expBackoff, notify)
+	if err != nil {
+		return fmt.Errorf("failed to connect after %d attempts: %w", attempt, err)
+	}
 
-    return nil
+	return nil
 }
 
 func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
-    log.Info("📋 Starting to connect to Socket.IO server at %s", serverURLStr)
+	log.Info("📋 Starting to connect to Socket.IO server at %s", serverURLStr)
 
-    // Set up global interrupt handling
-    interrupt := make(chan os.Signal, 1)
-    signal.Notify(interrupt, os.Interrupt)
-    defer signal.Stop(interrupt)
+	// Set up global interrupt handling
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+	defer signal.Stop(interrupt)
 
 	// Set up Socket.IO client options
 	opts := socket.DefaultOptions()
@@ -333,10 +341,10 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	instantWorkerPool := workerpool.New(5)
 	defer instantWorkerPool.StopWait()
 
-    // Track connection state for auth failure detection
-    connected := make(chan bool, 1)
-    connectionError := make(chan error, 1)
-    runtimeErrorChan := make(chan error, 1) // Errors after successful connection
+	// Track connection state for auth failure detection
+	connected := make(chan bool, 1)
+	connectionError := make(chan error, 1)
+	runtimeErrorChan := make(chan error, 1) // Errors after successful connection
 
 	// Connection event handlers
 	err = socketClient.On("connect", func(args ...any) {
@@ -393,6 +401,11 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		// Route messages to appropriate worker pool
 		switch msg.Type {
 		case models.MessageTypeStartConversation, models.MessageTypeUserMessage:
+			// Persist message to queue BEFORE submitting to worker pool for crash recovery
+			if err := cr.messageHandler.PersistQueuedMessage(msg); err != nil {
+				log.Error("❌ Failed to persist queued message: %v", err)
+			}
+
 			// Conversation messages need sequential processing
 			blockingWorkerPool.Submit(func() {
 				cr.messageHandler.HandleMessage(msg, socketClient)
@@ -424,10 +437,19 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		return fmt.Errorf("connection timeout - server may have rejected authentication")
 	}
 
-    // Connection appears stable if not immediately disconnected within 5s (legacy guard removed)
-    time.AfterFunc(5*time.Second, func() {
-        log.Info("✅ Connection appears stable, continuing normal operation")
-    })
+	// Recover in-progress jobs and queued messages after successful connection
+	handlers.RecoverJobs(
+		cr.appState,
+		cr.gitUseCase,
+		socketClient,
+		blockingWorkerPool,
+		cr.messageHandler,
+	)
+
+	// Connection appears stable if not immediately disconnected within 5s (legacy guard removed)
+	time.AfterFunc(5*time.Second, func() {
+		log.Info("✅ Connection appears stable, continuing normal operation")
+	})
 
 	// Start ping routine once connected
 	pingCtx, pingCancel := context.WithCancel(context.Background())
