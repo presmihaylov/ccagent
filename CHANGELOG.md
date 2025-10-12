@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.0] - 2025-10-12
+
+### Features
+
+- Add message queue for reliable reconnection ([#22](https://github.com/presmihaylov/ccagent/pull/22))
+  - Implements message queue to prevent message loss during reconnection
+  - Ensures reliable message delivery with automatic retry mechanism
+  - Dramatically improves agent stability and reliability during network interruptions
+
+### Documentation
+
+- Add comprehensive release process documentation
+  - Detailed release guide in docs/release_ccagent.md
+  - Step-by-step instructions for version bumping and changelog updates
+  - Release notes template with emoji formatting examples
+  - Troubleshooting section and complete workflow documentation
+
 ## [0.0.11] - 2025-10-12
 
 ### Features
