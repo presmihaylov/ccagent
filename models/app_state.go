@@ -47,6 +47,14 @@ type PersistedState struct {
 	QueuedMessages map[string]*QueuedMessage    `json:"queued_messages"` // Key: ProcessedMessageID
 }
 
+// LoadedState represents the result of loading persisted state from disk
+type LoadedState struct {
+	AgentID        string
+	Jobs           map[string]*JobData
+	QueuedMessages map[string]*QueuedMessage
+	Loaded         bool // Indicates whether state was successfully loaded from disk
+}
+
 // AppState manages the state of all active jobs
 type AppState struct {
 	agentID        string
@@ -231,24 +239,34 @@ func (a *AppState) persistStateLocked() error {
 }
 
 // LoadState loads persisted state from disk
-// Returns the agent ID, jobs, queued messages, and whether state was loaded successfully
-func LoadState(statePath string) (agentID string, jobs map[string]*JobData, queuedMessages map[string]*QueuedMessage, loaded bool, err error) {
+// Returns LoadedState containing the loaded data and a boolean indicating success, or an error
+func LoadState(statePath string) (*LoadedState, error) {
 	// Check if state file exists
 	if _, err := os.Stat(statePath); os.IsNotExist(err) {
-		return "", nil, nil, false, nil
+		return &LoadedState{
+			AgentID:        "",
+			Jobs:           nil,
+			QueuedMessages: nil,
+			Loaded:         false,
+		}, nil
 	}
 
 	// Read the state file
 	data, err := os.ReadFile(statePath)
 	if err != nil {
-		return "", nil, nil, false, fmt.Errorf("failed to read state file: %w", err)
+		return nil, fmt.Errorf("failed to read state file: %w", err)
 	}
 
 	// Unmarshal the state
 	var state PersistedState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return "", nil, nil, false, fmt.Errorf("failed to unmarshal state: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
 	}
 
-	return state.AgentID, state.Jobs, state.QueuedMessages, true, nil
+	return &LoadedState{
+		AgentID:        state.AgentID,
+		Jobs:           state.Jobs,
+		QueuedMessages: state.QueuedMessages,
+		Loaded:         true,
+	}, nil
 }

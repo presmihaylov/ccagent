@@ -664,3 +664,53 @@ func unmarshalPayload(payload any, target any) error {
 
 	return json.Unmarshal(payloadBytes, target)
 }
+
+// PersistQueuedMessage extracts payload from message and persists it to queue for crash recovery
+func (mh *MessageHandler) PersistQueuedMessage(msg models.BaseMessage) error {
+	// Extract payload based on message type and persist directly
+	if msg.Type == models.MessageTypeStartConversation {
+		var payload models.StartConversationPayload
+		if err := unmarshalPayload(msg.Payload, &payload); err != nil {
+			return fmt.Errorf("failed to unmarshal StartConversation payload: %w", err)
+		}
+
+		queuedMsg := models.QueuedMessage{
+			ProcessedMessageID: payload.ProcessedMessageID,
+			JobID:              payload.JobID,
+			MessageType:        msg.Type,
+			Message:            payload.Message,
+			MessageLink:        payload.MessageLink,
+			QueuedAt:           time.Now(),
+		}
+		if err := mh.appState.AddQueuedMessage(queuedMsg); err != nil {
+			return fmt.Errorf("failed to persist queued message %s: %w", payload.ProcessedMessageID, err)
+		}
+
+		log.Info("💾 Persisted queued message: %s", payload.ProcessedMessageID)
+		return nil
+	}
+
+	if msg.Type == models.MessageTypeUserMessage {
+		var payload models.UserMessagePayload
+		if err := unmarshalPayload(msg.Payload, &payload); err != nil {
+			return fmt.Errorf("failed to unmarshal UserMessage payload: %w", err)
+		}
+
+		queuedMsg := models.QueuedMessage{
+			ProcessedMessageID: payload.ProcessedMessageID,
+			JobID:              payload.JobID,
+			MessageType:        msg.Type,
+			Message:            payload.Message,
+			MessageLink:        payload.MessageLink,
+			QueuedAt:           time.Now(),
+		}
+		if err := mh.appState.AddQueuedMessage(queuedMsg); err != nil {
+			return fmt.Errorf("failed to persist queued message %s: %w", payload.ProcessedMessageID, err)
+		}
+
+		log.Info("💾 Persisted queued message: %s", payload.ProcessedMessageID)
+		return nil
+	}
+
+	return fmt.Errorf("unsupported message type: %s", msg.Type)
+}

@@ -78,45 +78,10 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	// Determine state file path (reuse homeDir from above)
 	statePath := filepath.Join(homeDir, ".config", "ccagent", "state.json")
 
-	// Try to load existing state
-	loadedAgentID, loadedJobs, loadedQueuedMessages, stateLoaded, loadErr := models.LoadState(statePath)
-	if loadErr != nil {
-		log.Warn("⚠️ Failed to load persisted state: %v (will start fresh)", loadErr)
-	}
-
-	// Determine agent ID (use loaded or generate new)
-	var agentID string
-	if stateLoaded && loadedAgentID != "" {
-		agentID = loadedAgentID
-		log.Info("🔄 Restored agent ID from persisted state: %s", agentID)
-	} else {
-		agentID = core.NewID("ccaid")
-		log.Info("🆔 Generated new agent ID: %s", agentID)
-	}
-
-	// Create app state with agent ID and state path
-	appState := models.NewAppState(agentID, statePath)
-
-	// Restore jobs if state was loaded
-	if stateLoaded && loadedJobs != nil {
-		for jobID, jobData := range loadedJobs {
-			if err := appState.UpdateJobData(jobID, *jobData); err != nil {
-				log.Warn("⚠️ Failed to restore job state for %s: %v", jobID, err)
-				continue
-			}
-			log.Info("📥 Restored job state: %s (branch: %s, session: %s)", jobID, jobData.BranchName, jobData.ClaudeSessionID)
-		}
-	}
-
-	// Restore queued messages if state was loaded
-	if stateLoaded && loadedQueuedMessages != nil {
-		for _, queuedMsg := range loadedQueuedMessages {
-			if err := appState.AddQueuedMessage(*queuedMsg); err != nil {
-				log.Warn("⚠️ Failed to restore queued message for %s: %v", queuedMsg.ProcessedMessageID, err)
-				continue
-			}
-			log.Info("📥 Restored queued message: %s (job: %s, type: %s)", queuedMsg.ProcessedMessageID, queuedMsg.JobID, queuedMsg.MessageType)
-		}
+	// Restore app state from persisted data
+	appState, agentID, err := restoreAppState(statePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore app state: %w", err)
 	}
 
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
@@ -137,6 +102,53 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 
 	log.Info("📋 Completed successfully - initialized CmdRunner with %s agent", agentType)
 	return cr, nil
+}
+
+// restoreAppState loads persisted state from disk and restores jobs and queued messages
+// Returns the initialized AppState and agent ID
+func restoreAppState(statePath string) (*models.AppState, string, error) {
+	// Try to load existing state
+	loadedState, loadErr := models.LoadState(statePath)
+	if loadErr != nil {
+		log.Warn("⚠️ Failed to load persisted state: %v (will start fresh)", loadErr)
+	}
+
+	// Determine agent ID (use loaded or generate new)
+	var agentID string
+	if loadedState.Loaded && loadedState.AgentID != "" {
+		agentID = loadedState.AgentID
+		log.Info("🔄 Restored agent ID from persisted state: %s", agentID)
+	} else {
+		agentID = core.NewID("ccaid")
+		log.Info("🆔 Generated new agent ID: %s", agentID)
+	}
+
+	// Create app state with agent ID and state path
+	appState := models.NewAppState(agentID, statePath)
+
+	// Restore jobs if state was loaded
+	if loadedState.Loaded && loadedState.Jobs != nil {
+		for jobID, jobData := range loadedState.Jobs {
+			if err := appState.UpdateJobData(jobID, *jobData); err != nil {
+				log.Warn("⚠️ Failed to restore job state for %s: %v", jobID, err)
+				continue
+			}
+			log.Info("📥 Restored job state: %s (branch: %s, session: %s)", jobID, jobData.BranchName, jobData.ClaudeSessionID)
+		}
+	}
+
+	// Restore queued messages if state was loaded
+	if loadedState.Loaded && loadedState.QueuedMessages != nil {
+		for _, queuedMsg := range loadedState.QueuedMessages {
+			if err := appState.AddQueuedMessage(*queuedMsg); err != nil {
+				log.Warn("⚠️ Failed to restore queued message for %s: %v", queuedMsg.ProcessedMessageID, err)
+				continue
+			}
+			log.Info("📥 Restored queued message: %s (job: %s, type: %s)", queuedMsg.ProcessedMessageID, queuedMsg.JobID, queuedMsg.MessageType)
+		}
+	}
+
+	return appState, agentID, nil
 }
 
 // createCLIAgent creates the appropriate CLI agent based on the agent type
@@ -437,43 +449,8 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		switch msg.Type {
 		case models.MessageTypeStartConversation, models.MessageTypeUserMessage:
 			// Persist message to queue BEFORE submitting to worker pool for crash recovery
-			var processedMessageID, jobID, message, messageLink string
-			if msg.Type == models.MessageTypeStartConversation {
-				var payload models.StartConversationPayload
-				if payloadBytes, marshalErr := json.Marshal(msg.Payload); marshalErr == nil {
-					if unmarshalErr := json.Unmarshal(payloadBytes, &payload); unmarshalErr == nil {
-						processedMessageID = payload.ProcessedMessageID
-						jobID = payload.JobID
-						message = payload.Message
-						messageLink = payload.MessageLink
-					}
-				}
-			} else {
-				var payload models.UserMessagePayload
-				if payloadBytes, marshalErr := json.Marshal(msg.Payload); marshalErr == nil {
-					if unmarshalErr := json.Unmarshal(payloadBytes, &payload); unmarshalErr == nil {
-						processedMessageID = payload.ProcessedMessageID
-						jobID = payload.JobID
-						message = payload.Message
-						messageLink = payload.MessageLink
-					}
-				}
-			}
-
-			if processedMessageID != "" {
-				queuedMsg := models.QueuedMessage{
-					ProcessedMessageID: processedMessageID,
-					JobID:              jobID,
-					MessageType:        msg.Type,
-					Message:            message,
-					MessageLink:        messageLink,
-					QueuedAt:           time.Now(),
-				}
-				if queueErr := cr.appState.AddQueuedMessage(queuedMsg); queueErr != nil {
-					log.Error("❌ Failed to persist queued message %s: %v", processedMessageID, queueErr)
-				} else {
-					log.Info("💾 Persisted queued message: %s", processedMessageID)
-				}
+			if err := cr.messageHandler.PersistQueuedMessage(msg); err != nil {
+				log.Error("❌ Failed to persist queued message: %v", err)
 			}
 
 			// Conversation messages need sequential processing
