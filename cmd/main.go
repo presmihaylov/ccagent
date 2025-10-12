@@ -79,7 +79,7 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	statePath := filepath.Join(homeDir, ".config", "ccagent", "state.json")
 
 	// Restore app state from persisted data
-	appState, agentID, err := restoreAppState(statePath)
+	appState, agentID, err := handlers.RestoreAppState(statePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to restore app state: %w", err)
 	}
@@ -102,53 +102,6 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 
 	log.Info("📋 Completed successfully - initialized CmdRunner with %s agent", agentType)
 	return cr, nil
-}
-
-// restoreAppState loads persisted state from disk and restores jobs and queued messages
-// Returns the initialized AppState and agent ID
-func restoreAppState(statePath string) (*models.AppState, string, error) {
-	// Try to load existing state
-	loadedState, loadErr := models.LoadState(statePath)
-	if loadErr != nil {
-		log.Warn("⚠️ Failed to load persisted state: %v (will start fresh)", loadErr)
-	}
-
-	// Determine agent ID (use loaded or generate new)
-	var agentID string
-	if loadedState.Loaded && loadedState.AgentID != "" {
-		agentID = loadedState.AgentID
-		log.Info("🔄 Restored agent ID from persisted state: %s", agentID)
-	} else {
-		agentID = core.NewID("ccaid")
-		log.Info("🆔 Generated new agent ID: %s", agentID)
-	}
-
-	// Create app state with agent ID and state path
-	appState := models.NewAppState(agentID, statePath)
-
-	// Restore jobs if state was loaded
-	if loadedState.Loaded && loadedState.Jobs != nil {
-		for jobID, jobData := range loadedState.Jobs {
-			if err := appState.UpdateJobData(jobID, *jobData); err != nil {
-				log.Warn("⚠️ Failed to restore job state for %s: %v", jobID, err)
-				continue
-			}
-			log.Info("📥 Restored job state: %s (branch: %s, session: %s)", jobID, jobData.BranchName, jobData.ClaudeSessionID)
-		}
-	}
-
-	// Restore queued messages if state was loaded
-	if loadedState.Loaded && loadedState.QueuedMessages != nil {
-		for _, queuedMsg := range loadedState.QueuedMessages {
-			if err := appState.AddQueuedMessage(*queuedMsg); err != nil {
-				log.Warn("⚠️ Failed to restore queued message for %s: %v", queuedMsg.ProcessedMessageID, err)
-				continue
-			}
-			log.Info("📥 Restored queued message: %s (job: %s, type: %s)", queuedMsg.ProcessedMessageID, queuedMsg.JobID, queuedMsg.MessageType)
-		}
-	}
-
-	return appState, agentID, nil
 }
 
 // createCLIAgent creates the appropriate CLI agent based on the agent type
