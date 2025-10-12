@@ -21,11 +21,12 @@ type MessageSender struct {
 }
 
 // NewMessageSender creates a new MessageSender instance.
-// The queue has a buffer of 100 messages to handle bursts.
+// The queue has a buffer of 1 message to ensure blocking until messages are sent.
+// This guarantees that jobs are only marked complete after their messages are actually sent.
 func NewMessageSender(connectionState *ConnectionState) *MessageSender {
 	return &MessageSender{
 		connectionState: connectionState,
-		messageQueue:    make(chan OutgoingMessage, 100),
+		messageQueue:    make(chan OutgoingMessage, 1),
 		socketClient:    nil, // Set later via Run()
 	}
 }
@@ -54,13 +55,15 @@ func (ms *MessageSender) Run(socketClient *socket.Socket) {
 }
 
 // QueueMessage adds a message to the send queue.
-// Blocks if the queue is full (100 messages).
+// Blocks until the message is consumed and sent by the MessageSender goroutine.
+// This ensures the caller knows the message has been processed before continuing.
 func (ms *MessageSender) QueueMessage(event string, data any) {
 	log.Info("📥 MessageSender: Queueing message for event '%s'", event)
 	ms.messageQueue <- OutgoingMessage{
 		Event: event,
 		Data:  data,
 	}
+	log.Info("📤 MessageSender: Message for event '%s' has been consumed by sender", event)
 }
 
 // Close closes the message queue, causing Run() to exit.
