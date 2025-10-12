@@ -103,6 +103,24 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	}
 	log.Info("🔄 Refreshed environment variables before starting conversation")
 
+	// Persist job state with message BEFORE calling Claude
+	// This enables crash recovery and future reprocessing
+	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
+		JobID:              payload.JobID,
+		BranchName:         branchName,
+		ClaudeSessionID:    "", // No session yet
+		PullRequestID:      "",
+		LastMessage:        payload.Message,
+		ProcessedMessageID: payload.ProcessedMessageID,
+		MessageLink:        payload.MessageLink,
+		Status:             models.JobStatusInProgress,
+		UpdatedAt:          time.Now(),
+	}); err != nil {
+		log.Error("❌ Failed to persist job state before Claude call: %v", err)
+		return fmt.Errorf("failed to persist job state before Claude call: %w", err)
+	}
+	log.Info("💾 Persisted job state with in_progress status before calling Claude")
+
 	// Get appropriate system prompt based on agent type
 	systemPrompt := GetClaudeSystemPrompt()
 	if mh.claudeService.AgentName() == "cursor" {
@@ -143,15 +161,6 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 		prID = commitResult.PullRequestID
 	}
 
-	mh.appState.UpdateJobData(payload.JobID, models.JobData{
-		JobID:           payload.JobID,
-		BranchName:      finalBranchName,
-		ClaudeSessionID: claudeResult.SessionID,
-		PullRequestID:   prID,
-		LastMessage:     payload.Message,
-		UpdatedAt:       time.Now(),
-	})
-
 	// Send assistant response back first
 	assistantPayload := models.AssistantMessagePayload{
 		JobID:              payload.JobID,
@@ -170,6 +179,23 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	}
 
 	log.Info("🤖 Sent assistant response (message ID: %s)", assistantMsg.ID)
+
+	// Persist final job state with "completed" status after successful message send
+	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
+		JobID:              payload.JobID,
+		BranchName:         finalBranchName,
+		ClaudeSessionID:    claudeResult.SessionID,
+		PullRequestID:      prID,
+		LastMessage:        payload.Message,
+		ProcessedMessageID: payload.ProcessedMessageID,
+		MessageLink:        payload.MessageLink,
+		Status:             models.JobStatusCompleted,
+		UpdatedAt:          time.Now(),
+	}); err != nil {
+		log.Error("❌ Failed to persist final job state: %v", err)
+		return fmt.Errorf("failed to persist final job state: %w", err)
+	}
+	log.Info("💾 Persisted final job state with completed status")
 
 	// Add delay to ensure git activity message comes after assistant message
 	time.Sleep(200 * time.Millisecond)
@@ -243,6 +269,24 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	}
 	log.Info("🔄 Refreshed environment variables before continuing conversation")
 
+	// Persist updated message BEFORE calling Claude
+	// This enables crash recovery and future reprocessing
+	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
+		JobID:              payload.JobID,
+		BranchName:         jobData.BranchName,
+		ClaudeSessionID:    jobData.ClaudeSessionID,
+		PullRequestID:      jobData.PullRequestID,
+		LastMessage:        payload.Message,
+		ProcessedMessageID: payload.ProcessedMessageID,
+		MessageLink:        payload.MessageLink,
+		Status:             models.JobStatusInProgress,
+		UpdatedAt:          time.Now(),
+	}); err != nil {
+		log.Error("❌ Failed to persist job state before Claude call: %v", err)
+		return fmt.Errorf("failed to persist job state before Claude call: %w", err)
+	}
+	log.Info("💾 Persisted job state with in_progress status before calling Claude")
+
 	claudeResult, err := mh.claudeService.ContinueConversation(sessionID, payload.Message)
 	if err != nil {
 		log.Info("❌ Error continuing Claude session: %v", err)
@@ -277,15 +321,6 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 		prID = commitResult.PullRequestID
 	}
 
-	mh.appState.UpdateJobData(payload.JobID, models.JobData{
-		JobID:           payload.JobID,
-		BranchName:      finalBranchName,
-		ClaudeSessionID: claudeResult.SessionID,
-		PullRequestID:   prID,
-		LastMessage:     payload.Message,
-		UpdatedAt:       time.Now(),
-	})
-
 	// Send assistant response back first
 	assistantPayload := models.AssistantMessagePayload{
 		JobID:              payload.JobID,
@@ -304,6 +339,23 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	}
 
 	log.Info("🤖 Sent assistant response (message ID: %s)", assistantMsg.ID)
+
+	// Persist final job state with "completed" status after successful message send
+	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
+		JobID:              payload.JobID,
+		BranchName:         finalBranchName,
+		ClaudeSessionID:    claudeResult.SessionID,
+		PullRequestID:      prID,
+		LastMessage:        payload.Message,
+		ProcessedMessageID: payload.ProcessedMessageID,
+		MessageLink:        payload.MessageLink,
+		Status:             models.JobStatusCompleted,
+		UpdatedAt:          time.Now(),
+	}); err != nil {
+		log.Error("❌ Failed to persist final job state: %v", err)
+		return fmt.Errorf("failed to persist final job state: %w", err)
+	}
+	log.Info("💾 Persisted final job state with completed status")
 
 	// Add delay to ensure git activity message comes after assistant message
 	time.Sleep(200 * time.Millisecond)
@@ -424,7 +476,10 @@ func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData,
 		}
 
 		// Remove job from app state since it's complete
-		mh.appState.RemoveJob(jobID)
+		if err := mh.appState.RemoveJob(jobID); err != nil {
+			log.Error("❌ Failed to remove job from app state: %v", err)
+			return fmt.Errorf("failed to remove job from app state: %w", err)
+		}
 		log.Info("🗑️ Removed completed job %s from app state", jobID)
 	}
 

@@ -9,14 +9,25 @@ import (
 	"time"
 )
 
+// JobStatus represents the current state of a job
+type JobStatus string
+
+const (
+	JobStatusInProgress JobStatus = "in_progress"
+	JobStatusCompleted  JobStatus = "completed"
+)
+
 // JobData tracks the state of a specific job/conversation
 type JobData struct {
-	JobID           string
-	BranchName      string
-	ClaudeSessionID string
-	PullRequestID   string // GitHub PR number (e.g., "123") - empty if no PR created yet
-	LastMessage     string // The last message sent to Claude for this job
-	UpdatedAt       time.Time
+	JobID              string
+	BranchName         string
+	ClaudeSessionID    string
+	PullRequestID      string    // GitHub PR number (e.g., "123") - empty if no PR created yet
+	LastMessage        string    // The last message sent to Claude for this job
+	ProcessedMessageID string    // ID of the chat platform message being processed
+	MessageLink        string    // Link to the original chat message
+	Status             JobStatus // Current status of the job: "in_progress" or "completed"
+	UpdatedAt          time.Time
 }
 
 // PersistedState represents the state that gets persisted to disk
@@ -50,16 +61,17 @@ func (a *AppState) GetAgentID() string {
 }
 
 // UpdateJobData updates or creates job data for a given JobID
-func (a *AppState) UpdateJobData(jobID string, data JobData) {
+func (a *AppState) UpdateJobData(jobID string, data JobData) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	a.jobs[jobID] = &data
 
 	// Persist state after updating
 	if err := a.persistStateLocked(); err != nil {
-		// Log error but don't fail the operation
-		fmt.Fprintf(os.Stderr, "Warning: failed to persist state: %v\n", err)
+		return fmt.Errorf("failed to persist state: %w", err)
 	}
+
+	return nil
 }
 
 // GetJobData retrieves job data for a given JobID
@@ -72,26 +84,30 @@ func (a *AppState) GetJobData(jobID string) (*JobData, bool) {
 	}
 	// Return a copy to avoid race conditions
 	return &JobData{
-		JobID:           data.JobID,
-		BranchName:      data.BranchName,
-		ClaudeSessionID: data.ClaudeSessionID,
-		PullRequestID:   data.PullRequestID,
-		LastMessage:     data.LastMessage,
-		UpdatedAt:       data.UpdatedAt,
+		JobID:              data.JobID,
+		BranchName:         data.BranchName,
+		ClaudeSessionID:    data.ClaudeSessionID,
+		PullRequestID:      data.PullRequestID,
+		LastMessage:        data.LastMessage,
+		ProcessedMessageID: data.ProcessedMessageID,
+		MessageLink:        data.MessageLink,
+		Status:             data.Status,
+		UpdatedAt:          data.UpdatedAt,
 	}, true
 }
 
 // RemoveJob removes job data for a given JobID
-func (a *AppState) RemoveJob(jobID string) {
+func (a *AppState) RemoveJob(jobID string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 	delete(a.jobs, jobID)
 
 	// Persist state after removing
 	if err := a.persistStateLocked(); err != nil {
-		// Log error but don't fail the operation
-		fmt.Fprintf(os.Stderr, "Warning: failed to persist state: %v\n", err)
+		return fmt.Errorf("failed to persist state: %w", err)
 	}
+
+	return nil
 }
 
 // GetAllJobs returns a copy of all job data
@@ -101,11 +117,14 @@ func (a *AppState) GetAllJobs() map[string]JobData {
 	result := make(map[string]JobData)
 	for jobID, data := range a.jobs {
 		result[jobID] = JobData{
-			JobID:           data.JobID,
-			BranchName:      data.BranchName,
-			ClaudeSessionID: data.ClaudeSessionID,
-			PullRequestID:   data.PullRequestID,
-			LastMessage:     data.LastMessage,
+			JobID:              data.JobID,
+			BranchName:         data.BranchName,
+			ClaudeSessionID:    data.ClaudeSessionID,
+			PullRequestID:      data.PullRequestID,
+			LastMessage:        data.LastMessage,
+			ProcessedMessageID: data.ProcessedMessageID,
+			MessageLink:        data.MessageLink,
+			Status:             data.Status,
 		}
 	}
 	return result

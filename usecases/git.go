@@ -882,3 +882,26 @@ func (g *GitUseCase) removeFooterFromDescription(description string) string {
 	// Clean up any trailing whitespace
 	return strings.TrimSpace(cleanDescription)
 }
+
+// BranchExists checks if a branch exists locally
+func (g *GitUseCase) BranchExists(branchName string) (bool, error) {
+	log.Info("📋 Checking if branch %s exists", branchName)
+
+	// Get all local branches
+	localBranches, err := g.gitClient.GetLocalBranches()
+	if err != nil {
+		log.Error("❌ Failed to get local branches: %v", err)
+		return false, fmt.Errorf("failed to get local branches: %w", err)
+	}
+
+	// Check if the branch is in the list
+	for _, branch := range localBranches {
+		if branch == branchName {
+			log.Info("✅ Branch %s exists", branchName)
+			return true, nil
+		}
+	}
+
+	log.Info("ℹ️ Branch %s does not exist", branchName)
+	return false, nil
+}

@@ -35,6 +35,7 @@ import (
 type CmdRunner struct {
     messageHandler *handlers.MessageHandler
     gitUseCase     *usecases.GitUseCase
+    appState       *models.AppState
     rotatingWriter *log.RotatingWriter
     envManager     *env.EnvManager
     agentID        string
@@ -99,7 +100,10 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	// Restore jobs if state was loaded
 	if stateLoaded && loadedJobs != nil {
 		for jobID, jobData := range loadedJobs {
-			appState.UpdateJobData(jobID, *jobData)
+			if err := appState.UpdateJobData(jobID, *jobData); err != nil {
+				log.Warn("⚠️ Failed to restore job state for %s: %v", jobID, err)
+				continue
+			}
 			log.Info("📥 Restored job state: %s (branch: %s, session: %s)", jobID, jobData.BranchName, jobData.ClaudeSessionID)
 		}
 	}
@@ -111,6 +115,7 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
     cr := &CmdRunner{
         messageHandler: messageHandler,
         gitUseCase:     gitUseCase,
+        appState:       appState,
         envManager:     envManager,
         agentID:        agentID,
     }
@@ -450,6 +455,15 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		socketClient.Disconnect()
 		return fmt.Errorf("connection timeout - server may have rejected authentication")
 	}
+
+	// Recover in-progress jobs after successful connection
+	handlers.RecoverInProgressJobs(
+		cr.appState,
+		cr.gitUseCase,
+		socketClient,
+		blockingWorkerPool,
+		cr.messageHandler,
+	)
 
     // Connection appears stable if not immediately disconnected within 5s (legacy guard removed)
     time.AfterFunc(5*time.Second, func() {
