@@ -668,7 +668,6 @@ func (g *GitClient) GetPRStateByID(prID string) (string, error) {
 	return strings.ToLower(state), nil
 }
 
-
 func (g *GitClient) GetLocalBranches() ([]string, error) {
 	log.Info("📋 Starting to get local branches")
 
@@ -851,11 +850,11 @@ func (g *GitClient) extractRemoteRepoDetails(remoteURL string) (*RemoteRepoDetai
 			}
 			pathPart = parts[1]
 		}
-		
+
 		// Remove leading slash and .git suffix
 		pathPart = strings.TrimPrefix(pathPart, "/")
 		pathPart = strings.TrimSuffix(pathPart, ".git")
-		
+
 		pathParts := strings.Split(pathPart, "/")
 		if len(pathParts) != 2 {
 			return nil, fmt.Errorf("invalid HTTPS URL path: %s", pathPart)
@@ -865,7 +864,7 @@ func (g *GitClient) extractRemoteRepoDetails(remoteURL string) (*RemoteRepoDetai
 			Repo:  pathParts[1],
 		}, nil
 	}
-	
+
 	// Not a GitHub repository
 	return nil, nil
 }
@@ -890,7 +889,7 @@ func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
 		log.Error("❌ Failed to parse remote URL: %v", err)
 		return fmt.Errorf("failed to parse remote URL: %w", err)
 	}
-	
+
 	if repoDetails == nil {
 		log.Info("⚠️ Not a GitHub repository, skipping token update: %s", currentURL)
 		return nil
@@ -898,7 +897,7 @@ func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
 
 	// Construct new URL with token
 	newURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", token, repoDetails.Owner, repoDetails.Repo)
-	
+
 	// Update the remote URL
 	cmd = exec.Command("git", "remote", "set-url", "origin", newURL)
 	output, err = cmd.CombinedOutput()

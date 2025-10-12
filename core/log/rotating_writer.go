@@ -14,19 +14,19 @@ type RotatingWriter struct {
 	logDir      string
 	maxFileSize int64
 	filePrefix  string
-	
-	mu           sync.Mutex
-	currentFile  *os.File
-	currentPath  string
-	currentSize  int64
-	stdout       io.Writer
+
+	mu          sync.Mutex
+	currentFile *os.File
+	currentPath string
+	currentSize int64
+	stdout      io.Writer
 }
 
 // RotatingWriterConfig holds configuration for the rotating writer
 type RotatingWriterConfig struct {
-	LogDir      string // Directory where log files will be created
-	MaxFileSize int64  // Maximum size per file in bytes (default: 10MB)
-	FilePrefix  string // Prefix for log file names (default: "app")
+	LogDir      string    // Directory where log files will be created
+	MaxFileSize int64     // Maximum size per file in bytes (default: 10MB)
+	FilePrefix  string    // Prefix for log file names (default: "app")
 	Stdout      io.Writer // Writer for stdout output (default: os.Stdout)
 }
 

@@ -33,12 +33,14 @@ import (
 )
 
 type CmdRunner struct {
-	messageHandler *handlers.MessageHandler
-	gitUseCase     *usecases.GitUseCase
-	appState       *models.AppState
-	rotatingWriter *log.RotatingWriter
-	envManager     *env.EnvManager
-	agentID        string
+	messageHandler  *handlers.MessageHandler
+	messageSender   *handlers.MessageSender
+	connectionState *handlers.ConnectionState
+	gitUseCase      *usecases.GitUseCase
+	appState        *models.AppState
+	rotatingWriter  *log.RotatingWriter
+	envManager      *env.EnvManager
+	agentID         string
 }
 
 func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, error) {
@@ -84,16 +86,22 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 		return nil, fmt.Errorf("failed to restore app state: %w", err)
 	}
 
+	// Initialize ConnectionState and MessageSender
+	connectionState := handlers.NewConnectionState()
+	messageSender := handlers.NewMessageSender(connectionState)
+
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
-	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager)
+	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender)
 
 	// Create the CmdRunner instance
 	cr := &CmdRunner{
-		messageHandler: messageHandler,
-		gitUseCase:     gitUseCase,
-		appState:       appState,
-		envManager:     envManager,
-		agentID:        agentID,
+		messageHandler:  messageHandler,
+		messageSender:   messageSender,
+		connectionState: connectionState,
+		gitUseCase:      gitUseCase,
+		appState:        appState,
+		envManager:      envManager,
+		agentID:         agentID,
 	}
 
 	// Register GitHub token update hook
@@ -332,6 +340,10 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	manager := socket.NewManager(serverURLStr, opts)
 	socketClient := manager.Socket("/", opts)
 
+	// Start MessageSender goroutine
+	go cr.messageSender.Run(socketClient)
+	log.Info("📤 Started MessageSender goroutine")
+
 	// Initialize dual worker pools
 	// Blocking worker pool: 1 worker for sequential conversation processing
 	blockingWorkerPool := workerpool.New(1)
@@ -349,6 +361,7 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	// Connection event handlers
 	err = socketClient.On("connect", func(args ...any) {
 		log.Info("✅ Connected to Socket.IO server, socket ID: %s", socketClient.Id())
+		cr.connectionState.SetConnected(true)
 		connected <- true
 	})
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up connect handler: %v", err))
@@ -361,6 +374,7 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 
 	err = socketClient.On("disconnect", func(args ...any) {
 		log.Info("🔌 Socket.IO disconnected: %v", args)
+		cr.connectionState.SetConnected(false)
 
 		// Send disconnect error to trigger reconnection
 		reason := "unknown"
@@ -408,17 +422,17 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 
 			// Conversation messages need sequential processing
 			blockingWorkerPool.Submit(func() {
-				cr.messageHandler.HandleMessage(msg, socketClient)
+				cr.messageHandler.HandleMessage(msg)
 			})
 		case models.MessageTypeCheckIdleJobs:
 			// PR status checks can run in parallel without blocking conversations
 			instantWorkerPool.Submit(func() {
-				cr.messageHandler.HandleMessage(msg, socketClient)
+				cr.messageHandler.HandleMessage(msg)
 			})
 		default:
 			// Fallback to blocking pool for any unhandled message types
 			blockingWorkerPool.Submit(func() {
-				cr.messageHandler.HandleMessage(msg, socketClient)
+				cr.messageHandler.HandleMessage(msg)
 			})
 		}
 	})
@@ -441,7 +455,6 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	handlers.RecoverJobs(
 		cr.appState,
 		cr.gitUseCase,
-		socketClient,
 		blockingWorkerPool,
 		cr.messageHandler,
 	)

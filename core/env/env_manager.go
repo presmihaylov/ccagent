@@ -27,7 +27,7 @@ func NewEnvManager() (*EnvManager, error) {
 	}
 
 	envPath := filepath.Join(configDir, ".env")
-	
+
 	em := &EnvManager{
 		envVars:  make(map[string]string),
 		envPath:  envPath,
@@ -47,13 +47,13 @@ func getConfigDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	configDir := filepath.Join(homeDir, ".config", "ccagent")
-	
+
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create config directory: %w", err)
 	}
-	
+
 	return configDir, nil
 }
 
@@ -112,19 +112,19 @@ func (em *EnvManager) Reload() error {
 	}
 
 	log.Info("Reloaded %d environment variables from %s", len(envMap), em.envPath)
-	
+
 	// Call all registered reload hooks
 	em.callHooks()
-	
+
 	return nil
 }
 
 func (em *EnvManager) StartPeriodicRefresh(interval time.Duration) {
 	em.ticker = time.NewTicker(interval)
-	
+
 	go func() {
 		log.Info("Started periodic environment variable refresh every %s", interval)
-		
+
 		for {
 			select {
 			case <-em.ticker.C:
@@ -143,14 +143,14 @@ func (em *EnvManager) Stop() {
 	if em.ticker != nil {
 		em.ticker.Stop()
 	}
-	
+
 	close(em.stopChan)
 }
 
 func (em *EnvManager) RegisterReloadHook(hook func()) {
 	em.mu.Lock()
 	defer em.mu.Unlock()
-	
+
 	em.hooks = append(em.hooks, hook)
 	log.Debug("Registered reload hook, total hooks: %d", len(em.hooks))
 }
@@ -163,7 +163,7 @@ func (em *EnvManager) callHooks() {
 					log.Error("Reload hook %d panicked: %v", idx, r)
 				}
 			}()
-			
+
 			log.Debug("Executing reload hook %d", idx)
 			h()
 		}(i, hook)
