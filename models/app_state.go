@@ -30,26 +30,39 @@ type JobData struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
+// QueuedMessage represents a message that has been queued for processing but not yet started
+type QueuedMessage struct {
+	ProcessedMessageID string    `json:"processed_message_id"` // Unique identifier per chat message
+	JobID              string    `json:"job_id"`               // Which conversation this belongs to
+	MessageType        string    `json:"message_type"`         // "start_conversation_v1" or "user_message_v1"
+	Message            string    `json:"message"`              // User's message text
+	MessageLink        string    `json:"message_link"`         // Link to original chat message
+	QueuedAt           time.Time `json:"queued_at"`            // When queued (for ordering)
+}
+
 // PersistedState represents the state that gets persisted to disk
 type PersistedState struct {
-	AgentID string              `json:"agent_id"`
-	Jobs    map[string]*JobData `json:"jobs"`
+	AgentID        string                       `json:"agent_id"`
+	Jobs           map[string]*JobData          `json:"jobs"`
+	QueuedMessages map[string]*QueuedMessage    `json:"queued_messages"` // Key: ProcessedMessageID
 }
 
 // AppState manages the state of all active jobs
 type AppState struct {
-	agentID   string
-	jobs      map[string]*JobData
-	statePath string
-	mutex     sync.RWMutex
+	agentID        string
+	jobs           map[string]*JobData
+	queuedMessages map[string]*QueuedMessage
+	statePath      string
+	mutex          sync.RWMutex
 }
 
 // NewAppState creates a new AppState instance
 func NewAppState(agentID string, statePath string) *AppState {
 	return &AppState{
-		agentID:   agentID,
-		jobs:      make(map[string]*JobData),
-		statePath: statePath,
+		agentID:        agentID,
+		jobs:           make(map[string]*JobData),
+		queuedMessages: make(map[string]*QueuedMessage),
+		statePath:      statePath,
 	}
 }
 
@@ -131,6 +144,52 @@ func (a *AppState) GetAllJobs() map[string]JobData {
 	return result
 }
 
+// AddQueuedMessage adds a queued message to the state and persists it
+func (a *AppState) AddQueuedMessage(msg QueuedMessage) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	a.queuedMessages[msg.ProcessedMessageID] = &msg
+
+	// Persist state after adding
+	if err := a.persistStateLocked(); err != nil {
+		return fmt.Errorf("failed to persist state: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveQueuedMessage removes a queued message from the state and persists
+func (a *AppState) RemoveQueuedMessage(processedMessageID string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	delete(a.queuedMessages, processedMessageID)
+
+	// Persist state after removing
+	if err := a.persistStateLocked(); err != nil {
+		return fmt.Errorf("failed to persist state: %w", err)
+	}
+
+	return nil
+}
+
+// GetAllQueuedMessages returns a copy of all queued messages
+func (a *AppState) GetAllQueuedMessages() []QueuedMessage {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+	result := make([]QueuedMessage, 0, len(a.queuedMessages))
+	for _, msg := range a.queuedMessages {
+		result = append(result, QueuedMessage{
+			ProcessedMessageID: msg.ProcessedMessageID,
+			JobID:              msg.JobID,
+			MessageType:        msg.MessageType,
+			Message:            msg.Message,
+			MessageLink:        msg.MessageLink,
+			QueuedAt:           msg.QueuedAt,
+		})
+	}
+	return result
+}
+
 // persistStateLocked persists the current state to disk
 // MUST be called with mutex already locked
 func (a *AppState) persistStateLocked() error {
@@ -140,8 +199,9 @@ func (a *AppState) persistStateLocked() error {
 
 	// Create the state object
 	state := PersistedState{
-		AgentID: a.agentID,
-		Jobs:    a.jobs,
+		AgentID:        a.agentID,
+		Jobs:           a.jobs,
+		QueuedMessages: a.queuedMessages,
 	}
 
 	// Marshal to JSON with pretty printing
@@ -171,24 +231,24 @@ func (a *AppState) persistStateLocked() error {
 }
 
 // LoadState loads persisted state from disk
-// Returns the agent ID and whether state was loaded successfully
-func LoadState(statePath string) (agentID string, jobs map[string]*JobData, loaded bool, err error) {
+// Returns the agent ID, jobs, queued messages, and whether state was loaded successfully
+func LoadState(statePath string) (agentID string, jobs map[string]*JobData, queuedMessages map[string]*QueuedMessage, loaded bool, err error) {
 	// Check if state file exists
 	if _, err := os.Stat(statePath); os.IsNotExist(err) {
-		return "", nil, false, nil
+		return "", nil, nil, false, nil
 	}
 
 	// Read the state file
 	data, err := os.ReadFile(statePath)
 	if err != nil {
-		return "", nil, false, fmt.Errorf("failed to read state file: %w", err)
+		return "", nil, nil, false, fmt.Errorf("failed to read state file: %w", err)
 	}
 
 	// Unmarshal the state
 	var state PersistedState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return "", nil, false, fmt.Errorf("failed to unmarshal state: %w", err)
+		return "", nil, nil, false, fmt.Errorf("failed to unmarshal state: %w", err)
 	}
 
-	return state.AgentID, state.Jobs, true, nil
+	return state.AgentID, state.Jobs, state.QueuedMessages, true, nil
 }

@@ -121,6 +121,12 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	}
 	log.Info("💾 Persisted job state with in_progress status before calling Claude")
 
+	// Remove from queued messages now that we're processing
+	if err := mh.appState.RemoveQueuedMessage(payload.ProcessedMessageID); err != nil {
+		log.Warn("⚠️ Failed to remove queued message %s: %v", payload.ProcessedMessageID, err)
+		// Don't fail - message will be deduplicated during recovery
+	}
+
 	// Get appropriate system prompt based on agent type
 	systemPrompt := GetClaudeSystemPrompt()
 	if mh.claudeService.AgentName() == "cursor" {
@@ -286,6 +292,12 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 		return fmt.Errorf("failed to persist job state before Claude call: %w", err)
 	}
 	log.Info("💾 Persisted job state with in_progress status before calling Claude")
+
+	// Remove from queued messages now that we're processing
+	if err := mh.appState.RemoveQueuedMessage(payload.ProcessedMessageID); err != nil {
+		log.Warn("⚠️ Failed to remove queued message %s: %v", payload.ProcessedMessageID, err)
+		// Don't fail - message will be deduplicated during recovery
+	}
 
 	claudeResult, err := mh.claudeService.ContinueConversation(sessionID, payload.Message)
 	if err != nil {

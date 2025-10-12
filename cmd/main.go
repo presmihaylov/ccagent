@@ -79,22 +79,9 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	statePath := filepath.Join(homeDir, ".config", "ccagent", "state.json")
 
 	// Try to load existing state
-	loadedAgentID, loadedJobs, stateLoaded, loadErr := models.LoadState(statePath)
+	loadedAgentID, loadedJobs, loadedQueuedMessages, stateLoaded, loadErr := models.LoadState(statePath)
 	if loadErr != nil {
 		log.Warn("⚠️ Failed to load persisted state: %v (will start fresh)", loadErr)
-	}
-
-	// Debug: pretty print loaded state
-	if stateLoaded {
-		fmt.Printf("DEBUG: State loaded successfully\n")
-		fmt.Printf("DEBUG: Agent ID: %s\n", loadedAgentID)
-		fmt.Printf("DEBUG: Jobs count: %d\n", len(loadedJobs))
-		for jobID, jobData := range loadedJobs {
-			jobJSON, _ := json.MarshalIndent(jobData, "  ", "  ")
-			fmt.Printf("DEBUG: Job %s:\n  %s\n", jobID, string(jobJSON))
-		}
-	} else {
-		fmt.Println("DEBUG: No state loaded")
 	}
 
 	// Determine agent ID (use loaded or generate new)
@@ -118,6 +105,17 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 				continue
 			}
 			log.Info("📥 Restored job state: %s (branch: %s, session: %s)", jobID, jobData.BranchName, jobData.ClaudeSessionID)
+		}
+	}
+
+	// Restore queued messages if state was loaded
+	if stateLoaded && loadedQueuedMessages != nil {
+		for _, queuedMsg := range loadedQueuedMessages {
+			if err := appState.AddQueuedMessage(*queuedMsg); err != nil {
+				log.Warn("⚠️ Failed to restore queued message for %s: %v", queuedMsg.ProcessedMessageID, err)
+				continue
+			}
+			log.Info("📥 Restored queued message: %s (job: %s, type: %s)", queuedMsg.ProcessedMessageID, queuedMsg.JobID, queuedMsg.MessageType)
 		}
 	}
 
@@ -438,6 +436,46 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		// Route messages to appropriate worker pool
 		switch msg.Type {
 		case models.MessageTypeStartConversation, models.MessageTypeUserMessage:
+			// Persist message to queue BEFORE submitting to worker pool for crash recovery
+			var processedMessageID, jobID, message, messageLink string
+			if msg.Type == models.MessageTypeStartConversation {
+				var payload models.StartConversationPayload
+				if payloadBytes, marshalErr := json.Marshal(msg.Payload); marshalErr == nil {
+					if unmarshalErr := json.Unmarshal(payloadBytes, &payload); unmarshalErr == nil {
+						processedMessageID = payload.ProcessedMessageID
+						jobID = payload.JobID
+						message = payload.Message
+						messageLink = payload.MessageLink
+					}
+				}
+			} else {
+				var payload models.UserMessagePayload
+				if payloadBytes, marshalErr := json.Marshal(msg.Payload); marshalErr == nil {
+					if unmarshalErr := json.Unmarshal(payloadBytes, &payload); unmarshalErr == nil {
+						processedMessageID = payload.ProcessedMessageID
+						jobID = payload.JobID
+						message = payload.Message
+						messageLink = payload.MessageLink
+					}
+				}
+			}
+
+			if processedMessageID != "" {
+				queuedMsg := models.QueuedMessage{
+					ProcessedMessageID: processedMessageID,
+					JobID:              jobID,
+					MessageType:        msg.Type,
+					Message:            message,
+					MessageLink:        messageLink,
+					QueuedAt:           time.Now(),
+				}
+				if queueErr := cr.appState.AddQueuedMessage(queuedMsg); queueErr != nil {
+					log.Error("❌ Failed to persist queued message %s: %v", processedMessageID, queueErr)
+				} else {
+					log.Info("💾 Persisted queued message: %s", processedMessageID)
+				}
+			}
+
 			// Conversation messages need sequential processing
 			blockingWorkerPool.Submit(func() {
 				cr.messageHandler.HandleMessage(msg, socketClient)
@@ -469,8 +507,8 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		return fmt.Errorf("connection timeout - server may have rejected authentication")
 	}
 
-	// Recover in-progress jobs after successful connection
-	handlers.RecoverInProgressJobs(
+	// Recover in-progress jobs and queued messages after successful connection
+	handlers.RecoverJobs(
 		cr.appState,
 		cr.gitUseCase,
 		socketClient,
