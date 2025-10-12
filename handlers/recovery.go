@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gammazero/workerpool"
@@ -40,6 +41,9 @@ func RecoverInProgressJobs(
 		}
 
 		// Check staleness - remove jobs older than 24h
+		fmt.Println("DEBUG_2", now)
+		fmt.Println("DEBUG_3", jobData.UpdatedAt)
+
 		jobAge := now.Sub(jobData.UpdatedAt)
 		if jobAge > 24*time.Hour {
 			log.Info("🗑️ Removing stale job %s (age: %v)", jobID, jobAge)

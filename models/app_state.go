@@ -19,15 +19,15 @@ const (
 
 // JobData tracks the state of a specific job/conversation
 type JobData struct {
-	JobID              string
-	BranchName         string
-	ClaudeSessionID    string
-	PullRequestID      string    // GitHub PR number (e.g., "123") - empty if no PR created yet
-	LastMessage        string    // The last message sent to Claude for this job
-	ProcessedMessageID string    // ID of the chat platform message being processed
-	MessageLink        string    // Link to the original chat message
-	Status             JobStatus // Current status of the job: "in_progress" or "completed"
-	UpdatedAt          time.Time
+	JobID              string    `json:"job_id"`
+	BranchName         string    `json:"branch_name"`
+	ClaudeSessionID    string    `json:"claude_session_id"`
+	PullRequestID      string    `json:"pull_request_id"` // GitHub PR number (e.g., "123") - empty if no PR created yet
+	LastMessage        string    `json:"last_message"`    // The last message sent to Claude for this job
+	ProcessedMessageID string    `json:"processed_message_id"` // ID of the chat platform message being processed
+	MessageLink        string    `json:"message_link"`    // Link to the original chat message
+	Status             JobStatus `json:"status"`          // Current status of the job: "in_progress" or "completed"
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 // PersistedState represents the state that gets persisted to disk
@@ -125,6 +125,7 @@ func (a *AppState) GetAllJobs() map[string]JobData {
 			ProcessedMessageID: data.ProcessedMessageID,
 			MessageLink:        data.MessageLink,
 			Status:             data.Status,
+			UpdatedAt:          data.UpdatedAt,
 		}
 	}
 	return result
