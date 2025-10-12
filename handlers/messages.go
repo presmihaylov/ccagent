@@ -74,6 +74,7 @@ func (mh *MessageHandler) HandleMessage(msg models.BaseMessage, socketClient *so
 }
 
 func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socketClient *socket.Socket) error {
+	startTime := time.Now()
 	log.Info("📋 Starting to handle start conversation message")
 	var payload models.StartConversationPayload
 	if err := unmarshalPayload(msg.Payload, &payload); err != nil {
@@ -133,8 +134,13 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 		systemPrompt = GetCursorSystemPrompt()
 	}
 
+	log.Info("⏱️ Calling Claude to start new conversation...")
+	claudeStartTime := time.Now()
 	claudeResult, err := mh.claudeService.StartNewConversationWithSystemPrompt(payload.Message, systemPrompt)
+	claudeElapsed := time.Since(claudeStartTime)
+
 	if err != nil {
+		log.Error("❌ Claude call failed after %v: %v", claudeElapsed, err)
 		log.Info("❌ Error starting Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
 			socketClient,
@@ -147,6 +153,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 		}
 		return fmt.Errorf("error starting Claude session: %w", err)
 	}
+	log.Info("✅ Claude call completed successfully in %v (session: %s)", claudeElapsed, claudeResult.SessionID)
 
 	// Auto-commit changes if needed
 	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
@@ -218,11 +225,13 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 		return fmt.Errorf("failed to validate PR description footer: %w", err)
 	}
 
-	log.Info("📋 Completed successfully - handled start conversation message")
+	elapsed := time.Since(startTime)
+	log.Info("📋 Completed successfully - handled start conversation message in %v", elapsed)
 	return nil
 }
 
 func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient *socket.Socket) error {
+	startTime := time.Now()
 	log.Info("📋 Starting to handle user message")
 	var payload models.UserMessagePayload
 	if err := unmarshalPayload(msg.Payload, &payload); err != nil {
@@ -275,6 +284,9 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	}
 	log.Info("🔄 Refreshed environment variables before continuing conversation")
 
+	log.Info("⏱️ Calling Claude to continue conversation (session: %s)...", sessionID)
+	claudeStartTime := time.Now()
+
 	// Persist updated message BEFORE calling Claude
 	// This enables crash recovery and future reprocessing
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
@@ -300,7 +312,10 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	}
 
 	claudeResult, err := mh.claudeService.ContinueConversation(sessionID, payload.Message)
+	claudeElapsed := time.Since(claudeStartTime)
+
 	if err != nil {
+		log.Error("❌ Claude call failed after %v: %v", claudeElapsed, err)
 		log.Info("❌ Error continuing Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
 			socketClient,
@@ -313,6 +328,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 		}
 		return fmt.Errorf("error continuing Claude session: %w", err)
 	}
+	log.Info("✅ Claude call completed successfully in %v (session: %s)", claudeElapsed, claudeResult.SessionID)
 
 	// Auto-commit changes if needed
 	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
@@ -384,11 +400,13 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 		return fmt.Errorf("failed to validate PR description footer: %w", err)
 	}
 
-	log.Info("📋 Completed successfully - handled user message")
+	elapsed := time.Since(startTime)
+	log.Info("📋 Completed successfully - handled user message in %v", elapsed)
 	return nil
 }
 
 func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage, socketClient *socket.Socket) error {
+	startTime := time.Now()
 	log.Info("📋 Starting to handle check idle jobs message")
 	var payload models.CheckIdleJobsPayload
 	if err := unmarshalPayload(msg.Payload, &payload); err != nil {
@@ -418,7 +436,8 @@ func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage, socketClie
 		}
 	}
 
-	log.Info("📋 Completed successfully - checked all jobs for idleness")
+	elapsed := time.Since(startTime)
+	log.Info("📋 Completed successfully - checked all jobs for idleness in %v", elapsed)
 	return nil
 }
 

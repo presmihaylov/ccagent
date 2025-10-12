@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"ccagent/core/log"
 )
 
 // JobStatus represents the current state of a job
@@ -119,15 +121,26 @@ func (a *AppState) GetJobData(jobID string) (*JobData, bool) {
 
 // RemoveJob removes job data for a given JobID
 func (a *AppState) RemoveJob(jobID string) error {
+	log.Info("📋 Removing job %s from app state", jobID)
+
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+
+	// Check if job exists before removing
+	if _, exists := a.jobs[jobID]; !exists {
+		log.Warn("⚠️ Job %s does not exist in app state", jobID)
+		return nil
+	}
+
 	delete(a.jobs, jobID)
 
 	// Persist state after removing
 	if err := a.persistStateLocked(); err != nil {
+		log.Error("❌ Failed to persist state after removing job %s: %v", jobID, err)
 		return fmt.Errorf("failed to persist state: %w", err)
 	}
 
+	log.Info("✅ Successfully removed job %s from app state", jobID)
 	return nil
 }
 
@@ -154,29 +167,50 @@ func (a *AppState) GetAllJobs() map[string]JobData {
 
 // AddQueuedMessage adds a queued message to the state and persists it
 func (a *AppState) AddQueuedMessage(msg QueuedMessage) error {
+	log.Info("📋 Adding queued message %s to app state (job: %s, type: %s)", msg.ProcessedMessageID, msg.JobID, msg.MessageType)
+
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+
+	// Check if message already exists
+	if _, exists := a.queuedMessages[msg.ProcessedMessageID]; exists {
+		log.Warn("⚠️ Queued message %s already exists, overwriting", msg.ProcessedMessageID)
+	}
+
 	a.queuedMessages[msg.ProcessedMessageID] = &msg
 
 	// Persist state after adding
 	if err := a.persistStateLocked(); err != nil {
+		log.Error("❌ Failed to persist state after adding queued message %s: %v", msg.ProcessedMessageID, err)
 		return fmt.Errorf("failed to persist state: %w", err)
 	}
 
+	log.Info("✅ Successfully added queued message %s (total queued: %d)", msg.ProcessedMessageID, len(a.queuedMessages))
 	return nil
 }
 
 // RemoveQueuedMessage removes a queued message from the state and persists
 func (a *AppState) RemoveQueuedMessage(processedMessageID string) error {
+	log.Info("📋 Removing queued message %s from app state", processedMessageID)
+
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
+
+	// Check if message exists before removing
+	if _, exists := a.queuedMessages[processedMessageID]; !exists {
+		log.Warn("⚠️ Queued message %s does not exist in app state", processedMessageID)
+		return nil
+	}
+
 	delete(a.queuedMessages, processedMessageID)
 
 	// Persist state after removing
 	if err := a.persistStateLocked(); err != nil {
+		log.Error("❌ Failed to persist state after removing queued message %s: %v", processedMessageID, err)
 		return fmt.Errorf("failed to persist state: %w", err)
 	}
 
+	log.Info("✅ Successfully removed queued message %s (remaining queued: %d)", processedMessageID, len(a.queuedMessages))
 	return nil
 }
 
@@ -205,6 +239,8 @@ func (a *AppState) persistStateLocked() error {
 		return fmt.Errorf("state path not configured")
 	}
 
+	log.Debug("💾 Persisting app state to disk (jobs: %d, queued: %d)", len(a.jobs), len(a.queuedMessages))
+
 	// Create the state object
 	state := PersistedState{
 		AgentID:        a.agentID,
@@ -215,34 +251,42 @@ func (a *AppState) persistStateLocked() error {
 	// Marshal to JSON with pretty printing
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
+		log.Error("❌ Failed to marshal state to JSON: %v", err)
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
 	// Ensure directory exists
 	dir := filepath.Dir(a.statePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Error("❌ Failed to create state directory %s: %v", dir, err)
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 
 	// Write to temporary file first
 	tempPath := a.statePath + ".tmp"
 	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+		log.Error("❌ Failed to write temp state file %s: %v", tempPath, err)
 		return fmt.Errorf("failed to write temp state file: %w", err)
 	}
 
 	// Atomic rename
 	if err := os.Rename(tempPath, a.statePath); err != nil {
+		log.Error("❌ Failed to rename state file from %s to %s: %v", tempPath, a.statePath, err)
 		return fmt.Errorf("failed to rename state file: %w", err)
 	}
 
+	log.Debug("✅ Successfully persisted app state to %s (%d bytes)", a.statePath, len(data))
 	return nil
 }
 
 // LoadState loads persisted state from disk
 // Returns LoadedState containing the loaded data and a boolean indicating success, or an error
 func LoadState(statePath string) (*LoadedState, error) {
+	log.Debug("📂 Attempting to load persisted state from %s", statePath)
+
 	// Check if state file exists
 	if _, err := os.Stat(statePath); os.IsNotExist(err) {
+		log.Info("ℹ️ No persisted state file found at %s - starting fresh", statePath)
 		return &LoadedState{
 			AgentID:        "",
 			Jobs:           nil,
@@ -254,14 +298,21 @@ func LoadState(statePath string) (*LoadedState, error) {
 	// Read the state file
 	data, err := os.ReadFile(statePath)
 	if err != nil {
+		log.Error("❌ Failed to read state file %s: %v", statePath, err)
 		return nil, fmt.Errorf("failed to read state file: %w", err)
 	}
+
+	log.Debug("📂 Read %d bytes from state file", len(data))
 
 	// Unmarshal the state
 	var state PersistedState
 	if err := json.Unmarshal(data, &state); err != nil {
+		log.Error("❌ Failed to unmarshal state from %s: %v", statePath, err)
 		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
 	}
+
+	log.Info("✅ Successfully loaded persisted state (agent: %s, jobs: %d, queued: %d)",
+		state.AgentID, len(state.Jobs), len(state.QueuedMessages))
 
 	return &LoadedState{
 		AgentID:        state.AgentID,

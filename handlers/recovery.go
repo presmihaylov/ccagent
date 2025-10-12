@@ -24,13 +24,16 @@ func RecoverJobs(
 	blockingWorkerPool *workerpool.WorkerPool,
 	messageHandler *MessageHandler,
 ) {
+	startTime := time.Now()
 	log.Info("🔄 Starting job and message recovery process")
 
 	allJobs := appState.GetAllJobs()
 	allQueuedMessages := appState.GetAllQueuedMessages()
 
+	log.Info("📊 Recovery scan found: %d jobs, %d queued messages", len(allJobs), len(allQueuedMessages))
+
 	if len(allJobs) == 0 && len(allQueuedMessages) == 0 {
-		log.Info("✅ No jobs or queued messages to recover")
+		log.Info("✅ No jobs or queued messages to recover (completed in %v)", time.Since(startTime))
 		return
 	}
 
@@ -41,6 +44,7 @@ func RecoverJobs(
 	now := time.Now()
 
 	// Phase 1: Recover in-progress jobs
+	log.Info("🔄 Phase 1: Recovering in-progress jobs")
 
 	for jobID, jobData := range allJobs {
 		// Only process jobs that were in_progress
@@ -115,8 +119,9 @@ func RecoverJobs(
 	}
 
 	// Phase 2: Recover queued messages
+	log.Info("🔄 Phase 2: Recovering queued messages")
 	if len(allQueuedMessages) > 0 {
-		log.Info("🔄 Recovering %d queued messages", len(allQueuedMessages))
+		log.Info("📨 Processing %d queued messages in FIFO order", len(allQueuedMessages))
 
 		// Sort queued messages by QueuedAt timestamp (FIFO order)
 		sort.Slice(allQueuedMessages, func(i, j int) bool {
@@ -189,11 +194,13 @@ func RecoverJobs(
 	// Summary
 	totalRecovered := recoveredJobsCount + recoveredQueuedCount
 	totalRemoved := removedJobsCount + removedQueuedCount
+	elapsed := time.Since(startTime)
+
 	if totalRecovered > 0 || totalRemoved > 0 {
-		log.Info("✅ Recovery complete: %d jobs recovered, %d jobs removed, %d queued recovered, %d queued removed",
-			recoveredJobsCount, removedJobsCount, recoveredQueuedCount, removedQueuedCount)
+		log.Info("✅ Recovery complete in %v: %d jobs recovered, %d jobs removed, %d queued recovered, %d queued removed",
+			elapsed, recoveredJobsCount, removedJobsCount, recoveredQueuedCount, removedQueuedCount)
 	} else {
-		log.Info("✅ No items to recover")
+		log.Info("✅ No items to recover (completed in %v)", elapsed)
 	}
 }
 

@@ -378,25 +378,26 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 
 	// Set up message handler for cc_message event
 	err = socketClient.On("cc_message", func(data ...any) {
+		receiveTime := time.Now()
 		if len(data) == 0 {
-			log.Info("❌ No data received for cc_message event")
+			log.Error("❌ No data received for cc_message event")
 			return
 		}
 
 		var msg models.BaseMessage
 		msgBytes, err := json.Marshal(data[0])
 		if err != nil {
-			log.Info("❌ Failed to marshal message data: %v", err)
+			log.Error("❌ Failed to marshal message data: %v", err)
 			return
 		}
 
 		err = json.Unmarshal(msgBytes, &msg)
 		if err != nil {
-			log.Info("❌ Failed to unmarshal message data: %v", err)
+			log.Error("❌ Failed to unmarshal message data: %v", err)
 			return
 		}
 
-		log.Info("📨 Received message type: %s", msg.Type)
+		log.Info("📨 Received message (id: %s, type: %s)", msg.ID, msg.Type)
 
 		// Route messages to appropriate worker pool
 		switch msg.Type {
@@ -407,18 +408,30 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 			}
 
 			// Conversation messages need sequential processing
+			log.Info("📬 Routing conversation message %s to blocking worker pool", msg.ID)
 			blockingWorkerPool.Submit(func() {
+				handlerStartTime := time.Now()
+				log.Debug("⚙️ Worker pool started processing message %s (queued for %v)", msg.ID, time.Since(receiveTime))
 				cr.messageHandler.HandleMessage(msg, socketClient)
+				log.Debug("⚙️ Worker pool completed processing message %s in %v", msg.ID, time.Since(handlerStartTime))
 			})
 		case models.MessageTypeCheckIdleJobs:
 			// PR status checks can run in parallel without blocking conversations
+			log.Info("📬 Routing idle job check message %s to instant worker pool", msg.ID)
 			instantWorkerPool.Submit(func() {
+				handlerStartTime := time.Now()
+				log.Debug("⚙️ Worker pool started processing idle check %s (queued for %v)", msg.ID, time.Since(receiveTime))
 				cr.messageHandler.HandleMessage(msg, socketClient)
+				log.Debug("⚙️ Worker pool completed processing idle check %s in %v", msg.ID, time.Since(handlerStartTime))
 			})
 		default:
 			// Fallback to blocking pool for any unhandled message types
+			log.Warn("⚠️ Unknown message type %s (id: %s), routing to blocking worker pool", msg.Type, msg.ID)
 			blockingWorkerPool.Submit(func() {
+				handlerStartTime := time.Now()
+				log.Debug("⚙️ Worker pool started processing unknown message %s (queued for %v)", msg.ID, time.Since(receiveTime))
 				cr.messageHandler.HandleMessage(msg, socketClient)
+				log.Debug("⚙️ Worker pool completed processing unknown message %s in %v", msg.ID, time.Since(handlerStartTime))
 			})
 		}
 	})
@@ -500,19 +513,20 @@ func (cr *CmdRunner) setupProgramLogging() (string, error) {
 }
 
 func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.Socket, runtimeErrorChan chan<- error) {
-	log.Info("📋 Starting ping routine")
+	log.Info("📋 Starting ping routine (interval: 2 minutes)")
 	go func() {
 		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
+		pingCount := 0
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info("📋 Ping routine stopped")
+				log.Info("📋 Ping routine stopped after %d successful pings", pingCount)
 				return
 			case <-ticker.C:
 				// Check if socket is still connected
 				if !socketClient.Connected() {
-					log.Error("❌ Socket disconnected, stopping ping routine")
+					log.Error("❌ Socket disconnected during ping check, stopping ping routine (sent %d pings)", pingCount)
 					select {
 					case runtimeErrorChan <- fmt.Errorf("socket disconnected during ping"):
 					default:
@@ -521,9 +535,11 @@ func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.
 					return
 				}
 
-				log.Info("💓 Sending ping to server")
+				pingCount++
+				log.Info("💓 Sending ping #%d to server", pingCount)
+				pingStartTime := time.Now()
 				if err := socketClient.Emit("ping"); err != nil {
-					log.Error("❌ Failed to send ping: %v", err)
+					log.Error("❌ Failed to send ping #%d: %v", pingCount, err)
 					select {
 					case runtimeErrorChan <- fmt.Errorf("failed to send ping: %w", err):
 					default:
@@ -531,6 +547,7 @@ func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.
 					}
 					return
 				}
+				log.Debug("✅ Ping #%d sent successfully (took %v)", pingCount, time.Since(pingStartTime))
 			}
 		}
 	}()
