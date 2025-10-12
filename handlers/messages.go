@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zishang520/socket.io-client-go/socket"
-
 	"ccagent/core"
 	"ccagent/core/env"
 	"ccagent/core/log"
@@ -22,6 +20,7 @@ type MessageHandler struct {
 	gitUseCase    *usecases.GitUseCase
 	appState      *models.AppState
 	envManager    *env.EnvManager
+	messageSender *MessageSender
 }
 
 func NewMessageHandler(
@@ -29,43 +28,45 @@ func NewMessageHandler(
 	gitUseCase *usecases.GitUseCase,
 	appState *models.AppState,
 	envManager *env.EnvManager,
+	messageSender *MessageSender,
 ) *MessageHandler {
 	return &MessageHandler{
 		claudeService: claudeService,
 		gitUseCase:    gitUseCase,
 		appState:      appState,
 		envManager:    envManager,
+		messageSender: messageSender,
 	}
 }
 
-func (mh *MessageHandler) HandleMessage(msg models.BaseMessage, socketClient *socket.Socket) {
+func (mh *MessageHandler) HandleMessage(msg models.BaseMessage) {
 	switch msg.Type {
 	case models.MessageTypeStartConversation:
-		if err := mh.handleStartConversation(msg, socketClient); err != nil {
+		if err := mh.handleStartConversation(msg); err != nil {
 			// Extract ProcessedMessageID and JobID from payload for error reporting
 			var payload models.StartConversationPayload
 			if unmarshalErr := unmarshalPayload(msg.Payload, &payload); unmarshalErr != nil {
 				log.Error("Failed to unmarshal StartConversationPayload for error reporting: %v", unmarshalErr)
 				return
 			}
-			if sendErr := mh.sendErrorMessage(socketClient, err, payload.ProcessedMessageID, payload.JobID); sendErr != nil {
+			if sendErr := mh.sendErrorMessage(err, payload.ProcessedMessageID, payload.JobID); sendErr != nil {
 				log.Error("Failed to send error message: %v", sendErr)
 			}
 		}
 	case models.MessageTypeUserMessage:
-		if err := mh.handleUserMessage(msg, socketClient); err != nil {
+		if err := mh.handleUserMessage(msg); err != nil {
 			// Extract ProcessedMessageID and JobID from payload for error reporting
 			var payload models.UserMessagePayload
 			if unmarshalErr := unmarshalPayload(msg.Payload, &payload); unmarshalErr != nil {
 				log.Error("Failed to unmarshal UserMessagePayload for error reporting: %v", unmarshalErr)
 				return
 			}
-			if sendErr := mh.sendErrorMessage(socketClient, err, payload.ProcessedMessageID, payload.JobID); sendErr != nil {
+			if sendErr := mh.sendErrorMessage(err, payload.ProcessedMessageID, payload.JobID); sendErr != nil {
 				log.Error("Failed to send error message: %v", sendErr)
 			}
 		}
 	case models.MessageTypeCheckIdleJobs:
-		if err := mh.handleCheckIdleJobs(msg, socketClient); err != nil {
+		if err := mh.handleCheckIdleJobs(msg); err != nil {
 			log.Info("❌ Error handling CheckIdleJobs message: %v", err)
 		}
 	default:
@@ -73,7 +74,7 @@ func (mh *MessageHandler) HandleMessage(msg models.BaseMessage, socketClient *so
 	}
 }
 
-func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socketClient *socket.Socket) error {
+func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error {
 	log.Info("📋 Starting to handle start conversation message")
 	var payload models.StartConversationPayload
 	if err := unmarshalPayload(msg.Payload, &payload); err != nil {
@@ -82,7 +83,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	}
 
 	// Send processing message notification that agent is starting to process
-	if err := mh.sendProcessingMessage(socketClient, payload.ProcessedMessageID, payload.JobID); err != nil {
+	if err := mh.sendProcessingMessage(payload.ProcessedMessageID, payload.JobID); err != nil {
 		log.Info("❌ Failed to send processing message notification: %v", err)
 		return fmt.Errorf("failed to send processing message notification: %w", err)
 	}
@@ -137,7 +138,6 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	if err != nil {
 		log.Info("❌ Error starting Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
-			socketClient,
 			fmt.Sprintf("ccagent encountered error: %v", err),
 			payload.ProcessedMessageID,
 			payload.JobID,
@@ -179,12 +179,8 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 		Type:    models.MessageTypeAssistantMessage,
 		Payload: assistantPayload,
 	}
-	if err := socketClient.Emit("cc_message", assistantMsg); err != nil {
-		log.Info("❌ Failed to send assistant response: %v", err)
-		return fmt.Errorf("failed to send assistant response: %w", err)
-	}
-
-	log.Info("🤖 Sent assistant response (message ID: %s)", assistantMsg.ID)
+	mh.messageSender.QueueMessage("cc_message", assistantMsg)
+	log.Info("🤖 Queued assistant response (message ID: %s)", assistantMsg.ID)
 
 	// Persist final job state with "completed" status after successful message send
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
@@ -207,7 +203,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	time.Sleep(200 * time.Millisecond)
 
 	// Send system message after assistant message for git activity
-	if err := mh.sendGitActivitySystemMessage(socketClient, commitResult, payload.ProcessedMessageID, payload.JobID); err != nil {
+	if err := mh.sendGitActivitySystemMessage(commitResult, payload.ProcessedMessageID, payload.JobID); err != nil {
 		log.Info("❌ Failed to send git activity system message: %v", err)
 		return fmt.Errorf("failed to send git activity system message: %w", err)
 	}
@@ -222,7 +218,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage, socket
 	return nil
 }
 
-func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient *socket.Socket) error {
+func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	log.Info("📋 Starting to handle user message")
 	var payload models.UserMessagePayload
 	if err := unmarshalPayload(msg.Payload, &payload); err != nil {
@@ -231,7 +227,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	}
 
 	// Send processing message notification that agent is starting to process
-	if err := mh.sendProcessingMessage(socketClient, payload.ProcessedMessageID, payload.JobID); err != nil {
+	if err := mh.sendProcessingMessage(payload.ProcessedMessageID, payload.JobID); err != nil {
 		log.Info("❌ Failed to send processing message notification: %v", err)
 		return fmt.Errorf("failed to send processing message notification: %w", err)
 	}
@@ -303,7 +299,6 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	if err != nil {
 		log.Info("❌ Error continuing Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
-			socketClient,
 			fmt.Sprintf("ccagent encountered error: %v", err),
 			payload.ProcessedMessageID,
 			payload.JobID,
@@ -345,12 +340,8 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 		Type:    models.MessageTypeAssistantMessage,
 		Payload: assistantPayload,
 	}
-	if err := socketClient.Emit("cc_message", assistantMsg); err != nil {
-		log.Info("❌ Failed to send assistant response: %v", err)
-		return fmt.Errorf("failed to send assistant response: %w", err)
-	}
-
-	log.Info("🤖 Sent assistant response (message ID: %s)", assistantMsg.ID)
+	mh.messageSender.QueueMessage("cc_message", assistantMsg)
+	log.Info("🤖 Queued assistant response (message ID: %s)", assistantMsg.ID)
 
 	// Persist final job state with "completed" status after successful message send
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
@@ -373,7 +364,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	time.Sleep(200 * time.Millisecond)
 
 	// Send system message after assistant message for git activity
-	if err := mh.sendGitActivitySystemMessage(socketClient, commitResult, payload.ProcessedMessageID, payload.JobID); err != nil {
+	if err := mh.sendGitActivitySystemMessage(commitResult, payload.ProcessedMessageID, payload.JobID); err != nil {
 		log.Info("❌ Failed to send git activity system message: %v", err)
 		return fmt.Errorf("failed to send git activity system message: %w", err)
 	}
@@ -388,7 +379,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage, socketClient
 	return nil
 }
 
-func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage, socketClient *socket.Socket) error {
+func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage) error {
 	log.Info("📋 Starting to handle check idle jobs message")
 	var payload models.CheckIdleJobsPayload
 	if err := unmarshalPayload(msg.Payload, &payload); err != nil {
@@ -411,7 +402,7 @@ func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage, socketClie
 	for jobID, jobData := range allJobData {
 		log.Info("🔍 Checking job %s on branch %s", jobID, jobData.BranchName)
 
-		if err := mh.checkJobIdleness(jobID, jobData, socketClient); err != nil {
+		if err := mh.checkJobIdleness(jobID, jobData); err != nil {
 			log.Info("❌ Failed to check idleness for job %s: %v", jobID, err)
 			// Continue checking other jobs even if one fails
 			continue
@@ -422,7 +413,7 @@ func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage, socketClie
 	return nil
 }
 
-func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData, socketClient *socket.Socket) error {
+func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData) error {
 	log.Info("📋 Starting to check idleness for job %s", jobID)
 
 	var prStatus string
@@ -482,7 +473,7 @@ func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData,
 	}
 
 	if shouldComplete {
-		if err := mh.sendJobCompleteMessage(socketClient, jobID, reason); err != nil {
+		if err := mh.sendJobCompleteMessage(jobID, reason); err != nil {
 			log.Error("❌ Failed to send job complete message for job %s: %v", jobID, err)
 			return fmt.Errorf("failed to send job complete message: %w", err)
 		}
@@ -499,7 +490,7 @@ func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData,
 	return nil
 }
 
-func (mh *MessageHandler) sendJobCompleteMessage(socketClient *socket.Socket, jobID, reason string) error {
+func (mh *MessageHandler) sendJobCompleteMessage(jobID, reason string) error {
 	log.Info("📋 Sending job complete message for job %s with reason: %s", jobID, reason)
 
 	payload := models.JobCompletePayload{
@@ -512,17 +503,13 @@ func (mh *MessageHandler) sendJobCompleteMessage(socketClient *socket.Socket, jo
 		Type:    models.MessageTypeJobComplete,
 		Payload: payload,
 	}
-	if err := socketClient.Emit("cc_message", jobMsg); err != nil {
-		log.Info("❌ Failed to send job complete message: %v", err)
-		return fmt.Errorf("failed to send job complete message: %w", err)
-	}
-
-	log.Info("📤 Sent job complete message for job: %s (message ID: %s)", jobID, jobMsg.ID)
+	mh.messageSender.QueueMessage("cc_message", jobMsg)
+	log.Info("📤 Queued job complete message for job: %s (message ID: %s)", jobID, jobMsg.ID)
 
 	return nil
 }
 
-func (mh *MessageHandler) sendSystemMessage(socketClient *socket.Socket, message, slackMessageID, jobID string) error {
+func (mh *MessageHandler) sendSystemMessage(message, slackMessageID, jobID string) error {
 	payload := models.SystemMessagePayload{
 		Message:            message,
 		ProcessedMessageID: slackMessageID,
@@ -534,24 +521,20 @@ func (mh *MessageHandler) sendSystemMessage(socketClient *socket.Socket, message
 		Type:    models.MessageTypeSystemMessage,
 		Payload: payload,
 	}
-	if err := socketClient.Emit("cc_message", sysMsg); err != nil {
-		log.Info("❌ Failed to send system message: %v", err)
-		return fmt.Errorf("failed to send system message: %w", err)
-	}
-
-	log.Info("⚙️ Sent system message: %s (message ID: %s)", message, sysMsg.ID)
+	mh.messageSender.QueueMessage("cc_message", sysMsg)
+	log.Info("⚙️ Queued system message: %s (message ID: %s)", message, sysMsg.ID)
 
 	return nil
 }
 
 // sendErrorMessage sends an error as a system message. The Claude service handles
 // all error processing internally, so we just need to format and send the error.
-func (mh *MessageHandler) sendErrorMessage(socketClient *socket.Socket, err error, slackMessageID, jobID string) error {
+func (mh *MessageHandler) sendErrorMessage(err error, slackMessageID, jobID string) error {
 	messageToSend := fmt.Sprintf("ccagent encountered error: %v", err)
-	return mh.sendSystemMessage(socketClient, messageToSend, slackMessageID, jobID)
+	return mh.sendSystemMessage(messageToSend, slackMessageID, jobID)
 }
 
-func (mh *MessageHandler) sendProcessingMessage(socketClient *socket.Socket, processedMessageID, jobID string) error {
+func (mh *MessageHandler) sendProcessingMessage(processedMessageID, jobID string) error {
 	processingMessageMsg := models.BaseMessage{
 		ID:   core.NewID("msg"),
 		Type: models.MessageTypeProcessingMessage,
@@ -561,12 +544,8 @@ func (mh *MessageHandler) sendProcessingMessage(socketClient *socket.Socket, pro
 		},
 	}
 
-	if err := socketClient.Emit("cc_message", processingMessageMsg); err != nil {
-		log.Info("❌ Failed to send processing message notification: %v", err)
-		return fmt.Errorf("failed to send processing message notification: %w", err)
-	}
-
-	log.Info("🔔 Sent processing message notification for message: %s", processedMessageID)
+	mh.messageSender.QueueMessage("cc_message", processingMessageMsg)
+	log.Info("🔔 Queued processing message notification for message: %s", processedMessageID)
 	return nil
 }
 
@@ -608,7 +587,6 @@ func stripAccessTokenFromURL(url string) string {
 }
 
 func (mh *MessageHandler) sendGitActivitySystemMessage(
-	socketClient *socket.Socket,
 	commitResult *usecases.AutoCommitResult,
 	slackMessageID string,
 	jobID string,
@@ -620,7 +598,7 @@ func (mh *MessageHandler) sendGitActivitySystemMessage(
 	if commitResult.JustCreatedPR && commitResult.PullRequestLink != "" {
 		// New PR created
 		message := fmt.Sprintf("Agent opened a [pull request](%s)", commitResult.PullRequestLink)
-		if err := mh.sendSystemMessage(socketClient, message, slackMessageID, jobID); err != nil {
+		if err := mh.sendSystemMessage(message, slackMessageID, jobID); err != nil {
 			log.Info("❌ Failed to send PR creation system message: %v", err)
 			return fmt.Errorf("failed to send PR creation system message: %w", err)
 		}
@@ -643,7 +621,7 @@ func (mh *MessageHandler) sendGitActivitySystemMessage(
 			}
 		}
 
-		if err := mh.sendSystemMessage(socketClient, message, slackMessageID, jobID); err != nil {
+		if err := mh.sendSystemMessage(message, slackMessageID, jobID); err != nil {
 			log.Info("❌ Failed to send commit system message: %v", err)
 			return fmt.Errorf("failed to send commit system message: %w", err)
 		}

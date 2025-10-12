@@ -47,7 +47,7 @@ func TestEnvManager_Basic(t *testing.T) {
 	// Test Get for non-existent var (should fall back to os.Getenv)
 	os.Setenv("OS_VAR", "os_value")
 	defer os.Unsetenv("OS_VAR")
-	
+
 	if got := em.Get("OS_VAR"); got != "os_value" {
 		t.Errorf("Expected 'os_value', got '%s'", got)
 	}
@@ -184,7 +184,7 @@ func TestEnvManager_MissingFile(t *testing.T) {
 	// Should fall back to system env vars
 	os.Setenv("FALLBACK_VAR", "fallback_value")
 	defer os.Unsetenv("FALLBACK_VAR")
-	
+
 	if got := em.Get("FALLBACK_VAR"); got != "fallback_value" {
 		t.Errorf("Expected 'fallback_value', got '%s'", got)
 	}

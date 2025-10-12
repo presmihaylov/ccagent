@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/gammazero/workerpool"
-	"github.com/zishang520/socket.io-client-go/socket"
 
 	"ccagent/core"
 	"ccagent/core/log"
@@ -20,7 +19,6 @@ import (
 func RecoverJobs(
 	appState *models.AppState,
 	gitUseCase *usecases.GitUseCase,
-	socketClient *socket.Socket,
 	blockingWorkerPool *workerpool.WorkerPool,
 	messageHandler *MessageHandler,
 ) {
@@ -108,7 +106,7 @@ func RecoverJobs(
 
 		// Submit to blocking worker pool for processing
 		blockingWorkerPool.Submit(func() {
-			messageHandler.HandleMessage(msg, socketClient)
+			messageHandler.HandleMessage(msg)
 		})
 
 		recoveredJobsCount++
@@ -179,7 +177,7 @@ func RecoverJobs(
 
 			// Submit to blocking worker pool for processing
 			blockingWorkerPool.Submit(func() {
-				messageHandler.HandleMessage(msg, socketClient)
+				messageHandler.HandleMessage(msg)
 			})
 
 			recoveredQueuedCount++

@@ -22,11 +22,11 @@ type JobData struct {
 	JobID              string    `json:"job_id"`
 	BranchName         string    `json:"branch_name"`
 	ClaudeSessionID    string    `json:"claude_session_id"`
-	PullRequestID      string    `json:"pull_request_id"` // GitHub PR number (e.g., "123") - empty if no PR created yet
-	LastMessage        string    `json:"last_message"`    // The last message sent to Claude for this job
+	PullRequestID      string    `json:"pull_request_id"`      // GitHub PR number (e.g., "123") - empty if no PR created yet
+	LastMessage        string    `json:"last_message"`         // The last message sent to Claude for this job
 	ProcessedMessageID string    `json:"processed_message_id"` // ID of the chat platform message being processed
-	MessageLink        string    `json:"message_link"`    // Link to the original chat message
-	Status             JobStatus `json:"status"`          // Current status of the job: "in_progress" or "completed"
+	MessageLink        string    `json:"message_link"`         // Link to the original chat message
+	Status             JobStatus `json:"status"`               // Current status of the job: "in_progress" or "completed"
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
@@ -42,9 +42,9 @@ type QueuedMessage struct {
 
 // PersistedState represents the state that gets persisted to disk
 type PersistedState struct {
-	AgentID        string                       `json:"agent_id"`
-	Jobs           map[string]*JobData          `json:"jobs"`
-	QueuedMessages map[string]*QueuedMessage    `json:"queued_messages"` // Key: ProcessedMessageID
+	AgentID        string                    `json:"agent_id"`
+	Jobs           map[string]*JobData       `json:"jobs"`
+	QueuedMessages map[string]*QueuedMessage `json:"queued_messages"` // Key: ProcessedMessageID
 }
 
 // LoadedState represents the result of loading persisted state from disk
