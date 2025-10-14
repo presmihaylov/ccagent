@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.13] - 2025-10-14
+
+### Improvements
+
+- Extend job inactivity timeout to 24 hours ([#23](https://github.com/presmihaylov/ccagent/pull/23))
+  - Jobs now remain active for 24 hours instead of 1 hour
+  - Prevents premature job termination for long-running tasks
+  - Improves reliability for extended coding sessions
+- Prevent reconnect blocking by persisting worker pools ([#24](https://github.com/presmihaylov/ccagent/pull/24))
+  - Worker pools now persist across socket reconnections
+  - Eliminates blocking during reconnection events
+  - Ensures continuous operation without interruption
+
 ## [0.0.12] - 2025-10-12
 
 ### Features
