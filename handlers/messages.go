@@ -439,37 +439,33 @@ func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData)
 	var reason string
 	var shouldComplete bool
 
-	switch prStatus {
-	case "merged":
-		reason = "Job complete - Pull request was merged"
+	// First check if job has been inactive for 24 hours (regardless of PR status)
+	inactivityThreshold := 24 * time.Hour
+	if time.Since(jobData.UpdatedAt) > inactivityThreshold {
+		log.Info("⏰ Job %s has been inactive for more than 24 hours - marking as complete", jobID)
+		reason = "Job complete - Thread is inactive"
 		shouldComplete = true
-		log.Info("✅ Job %s PR was merged - marking as complete", jobID)
-	case "closed":
-		reason = "Job complete - Pull request was closed"
-		shouldComplete = true
-		log.Info("✅ Job %s PR was closed - marking as complete", jobID)
-	case "open":
-		log.Info("ℹ️ Job %s has open PR - not marking as complete", jobID)
-		shouldComplete = false
-	case "no_pr":
-		log.Info("ℹ️ Job %s has no PR - checking timeout", jobID)
-		jobData, exists := mh.appState.GetJobData(jobID)
-		if !exists {
-			log.Info("❌ Job %s not found in app state - cannot check idleness", jobID)
-			return fmt.Errorf("job %s not found in app state", jobID)
-		}
-
-		if jobData.UpdatedAt.Add(1 * time.Hour).After(time.Now()) {
-			log.Info("ℹ️ Job %s has no PR but is still active - not marking as complete", jobID)
-			shouldComplete = false
-		} else {
-			log.Info("⏰ Job %s has no PR and is idle - marking as complete", jobID)
-			reason = "Job complete - Thread is inactive"
+	} else {
+		// Job is still within active window, check PR status
+		switch prStatus {
+		case "merged":
+			reason = "Job complete - Pull request was merged"
 			shouldComplete = true
+			log.Info("✅ Job %s PR was merged - marking as complete", jobID)
+		case "closed":
+			reason = "Job complete - Pull request was closed"
+			shouldComplete = true
+			log.Info("✅ Job %s PR was closed - marking as complete", jobID)
+		case "open":
+			log.Info("ℹ️ Job %s has open PR - not marking as complete", jobID)
+			shouldComplete = false
+		case "no_pr":
+			log.Info("ℹ️ Job %s has no PR - not marking as complete (still within 24-hour activity window)", jobID)
+			shouldComplete = false
+		default:
+			log.Info("ℹ️ Job %s PR status unclear (%s) - keeping active", jobID, prStatus)
+			shouldComplete = false
 		}
-	default:
-		log.Info("ℹ️ Job %s PR status unclear (%s) - keeping active", jobID, prStatus)
-		shouldComplete = false
 	}
 
 	if shouldComplete {
