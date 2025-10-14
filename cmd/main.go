@@ -41,6 +41,10 @@ type CmdRunner struct {
 	rotatingWriter  *log.RotatingWriter
 	envManager      *env.EnvManager
 	agentID         string
+
+	// Persistent worker pools reused across reconnects
+	blockingWorkerPool *workerpool.WorkerPool
+	instantWorkerPool  *workerpool.WorkerPool
 }
 
 func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, error) {
@@ -103,6 +107,10 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 		envManager:      envManager,
 		agentID:         agentID,
 	}
+
+	// Initialize dual worker pools that persist for the app lifetime
+	cr.blockingWorkerPool = workerpool.New(1) // sequential conversation processing
+	cr.instantWorkerPool = workerpool.New(5)  // parallel PR status checks
 
 	// Register GitHub token update hook
 	envManager.RegisterReloadHook(gitUseCase.GithubTokenUpdateHook)
@@ -265,6 +273,14 @@ func main() {
 				cmdRunner.rotatingWriter.GetCurrentLogPath(),
 			)
 		}
+
+		// Stop persistent worker pools on shutdown
+		if cmdRunner.blockingWorkerPool != nil {
+			cmdRunner.blockingWorkerPool.StopWait()
+		}
+		if cmdRunner.instantWorkerPool != nil {
+			cmdRunner.instantWorkerPool.StopWait()
+		}
 	}()
 
 	// Start Socket.IO client with backoff retry
@@ -344,14 +360,9 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	go cr.messageSender.Run(socketClient)
 	log.Info("📤 Started MessageSender goroutine")
 
-	// Initialize dual worker pools
-	// Blocking worker pool: 1 worker for sequential conversation processing
-	blockingWorkerPool := workerpool.New(1)
-	defer blockingWorkerPool.StopWait()
-
-	// Instant worker pool: 5 workers for parallel PR status checking
-	instantWorkerPool := workerpool.New(5)
-	defer instantWorkerPool.StopWait()
+	// Use persistent worker pools across reconnects
+	blockingWorkerPool := cr.blockingWorkerPool
+	instantWorkerPool := cr.instantWorkerPool
 
 	// Track connection state for auth failure detection
 	connected := make(chan bool, 1)
