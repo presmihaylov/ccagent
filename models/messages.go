@@ -18,11 +18,17 @@ type BaseMessage struct {
 	Payload any    `json:"payload,omitempty"`
 }
 
+type Attachment struct {
+	Content        string `json:"content"`          // base64-encoded content
+	AttachmentType string `json:"attachment_type"`  // "image" or "other"
+}
+
 type StartConversationPayload struct {
-	JobID              string `json:"job_id"`
-	Message            string `json:"message"`
-	ProcessedMessageID string `json:"processed_message_id"`
-	MessageLink        string `json:"message_link"`
+	JobID              string       `json:"job_id"`
+	Message            string       `json:"message"`
+	ProcessedMessageID string       `json:"processed_message_id"`
+	MessageLink        string       `json:"message_link"`
+	Attachments        []Attachment `json:"attachments,omitempty"`
 }
 
 type StartConversationResponsePayload struct {
@@ -31,10 +37,11 @@ type StartConversationResponsePayload struct {
 }
 
 type UserMessagePayload struct {
-	JobID              string `json:"job_id"`
-	Message            string `json:"message"`
-	ProcessedMessageID string `json:"processed_message_id"`
-	MessageLink        string `json:"message_link"`
+	JobID              string       `json:"job_id"`
+	Message            string       `json:"message"`
+	ProcessedMessageID string       `json:"processed_message_id"`
+	MessageLink        string       `json:"message_link"`
+	Attachments        []Attachment `json:"attachments,omitempty"`
 }
 
 type AssistantMessagePayload struct {
