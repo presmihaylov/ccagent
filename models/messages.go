@@ -65,16 +65,7 @@ type JobCompletePayload struct {
 	Reason string `json:"reason"`
 }
 
-// AttachmentType represents the type of attachment
-type AttachmentType string
-
-const (
-	AttachmentTypeImage AttachmentType = "image"
-	AttachmentTypeOther AttachmentType = "other"
-)
-
 // Attachment represents a file attachment in a message
 type Attachment struct {
-	Content        string         `json:"content"`         // Base64-encoded content
-	AttachmentType AttachmentType `json:"attachment_type"` // "image" or "other"
+	Content string `json:"content"` // Base64-encoded content
 }

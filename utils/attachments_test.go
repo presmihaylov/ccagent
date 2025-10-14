@@ -180,8 +180,7 @@ func TestDecodeAndStoreAttachment_ValidPNG(t *testing.T) {
 	base64Content := base64.StdEncoding.EncodeToString(pngHeader)
 
 	attachment := models.Attachment{
-		Content:        base64Content,
-		AttachmentType: models.AttachmentTypeImage,
+		Content: base64Content,
 	}
 
 	sessionID := "test_session_png"
@@ -224,8 +223,7 @@ func TestDecodeAndStoreAttachment_ValidJPEG(t *testing.T) {
 	base64Content := base64.StdEncoding.EncodeToString(jpegHeader)
 
 	attachment := models.Attachment{
-		Content:        base64Content,
-		AttachmentType: models.AttachmentTypeImage,
+		Content: base64Content,
 	}
 
 	sessionID := "test_session_jpeg"
@@ -248,8 +246,7 @@ func TestDecodeAndStoreAttachment_ValidPDF(t *testing.T) {
 	base64Content := base64.StdEncoding.EncodeToString(pdfHeader)
 
 	attachment := models.Attachment{
-		Content:        base64Content,
-		AttachmentType: models.AttachmentTypeOther,
+		Content: base64Content,
 	}
 
 	sessionID := "test_session_pdf"
@@ -269,8 +266,7 @@ func TestDecodeAndStoreAttachment_ValidPDF(t *testing.T) {
 
 func TestDecodeAndStoreAttachment_InvalidBase64(t *testing.T) {
 	attachment := models.Attachment{
-		Content:        "not-valid-base64!!!",
-		AttachmentType: models.AttachmentTypeOther,
+		Content: "not-valid-base64!!!",
 	}
 
 	sessionID := "test_session_invalid"
@@ -290,8 +286,7 @@ func TestDecodeAndStoreAttachment_InvalidBase64(t *testing.T) {
 
 func TestDecodeAndStoreAttachment_EmptyContent(t *testing.T) {
 	attachment := models.Attachment{
-		Content:        "",
-		AttachmentType: models.AttachmentTypeOther,
+		Content: "",
 	}
 
 	sessionID := "test_session_empty"
@@ -314,8 +309,7 @@ func TestDecodeAndStoreAttachment_EmptyDecodedContent(t *testing.T) {
 	emptyBase64 := base64.StdEncoding.EncodeToString([]byte{})
 
 	attachment := models.Attachment{
-		Content:        emptyBase64,
-		AttachmentType: models.AttachmentTypeOther,
+		Content: emptyBase64,
 	}
 
 	sessionID := "test_session_decoded_empty"
@@ -337,8 +331,8 @@ func TestDecodeAndStoreAttachment_MultipleAttachments(t *testing.T) {
 	jpegBase64 := base64.StdEncoding.EncodeToString(jpegHeader)
 
 	attachments := []models.Attachment{
-		{Content: pngBase64, AttachmentType: models.AttachmentTypeImage},
-		{Content: jpegBase64, AttachmentType: models.AttachmentTypeImage},
+		{Content: pngBase64},
+		{Content: jpegBase64},
 	}
 
 	sessionID := "test_session_multiple"
