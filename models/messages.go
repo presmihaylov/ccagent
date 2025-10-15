@@ -19,11 +19,11 @@ type BaseMessage struct {
 }
 
 type StartConversationPayload struct {
-	JobID              string       `json:"job_id"`
-	Message            string       `json:"message"`
-	ProcessedMessageID string       `json:"processed_message_id"`
-	MessageLink        string       `json:"message_link"`
-	Attachments        []Attachment `json:"attachments,omitempty"`
+	JobID              string   `json:"job_id"`
+	Message            string   `json:"message"`
+	ProcessedMessageID string   `json:"processed_message_id"`
+	MessageLink        string   `json:"message_link"`
+	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
 }
 
 type StartConversationResponsePayload struct {
@@ -32,11 +32,11 @@ type StartConversationResponsePayload struct {
 }
 
 type UserMessagePayload struct {
-	JobID              string       `json:"job_id"`
-	Message            string       `json:"message"`
-	ProcessedMessageID string       `json:"processed_message_id"`
-	MessageLink        string       `json:"message_link"`
-	Attachments        []Attachment `json:"attachments,omitempty"`
+	JobID              string   `json:"job_id"`
+	Message            string   `json:"message"`
+	ProcessedMessageID string   `json:"processed_message_id"`
+	MessageLink        string   `json:"message_link"`
+	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
 }
 
 type AssistantMessagePayload struct {
@@ -63,9 +63,4 @@ type CheckIdleJobsPayload struct {
 type JobCompletePayload struct {
 	JobID  string `json:"job_id"`
 	Reason string `json:"reason"`
-}
-
-// Attachment represents a file attachment in a message
-type Attachment struct {
-	Content string `json:"content"` // Base64-encoded content
 }

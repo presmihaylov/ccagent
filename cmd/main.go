@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -33,14 +34,15 @@ import (
 )
 
 type CmdRunner struct {
-	messageHandler  *handlers.MessageHandler
-	messageSender   *handlers.MessageSender
-	connectionState *handlers.ConnectionState
-	gitUseCase      *usecases.GitUseCase
-	appState        *models.AppState
-	rotatingWriter  *log.RotatingWriter
-	envManager      *env.EnvManager
-	agentID         string
+	messageHandler     *handlers.MessageHandler
+	messageSender      *handlers.MessageSender
+	connectionState    *handlers.ConnectionState
+	gitUseCase         *usecases.GitUseCase
+	appState           *models.AppState
+	rotatingWriter     *log.RotatingWriter
+	envManager         *env.EnvManager
+	agentID            string
+	attachmentsClient  *clients.AttachmentsClient
 
 	// Persistent worker pools reused across reconnects
 	blockingWorkerPool *workerpool.WorkerPool
@@ -95,17 +97,23 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	messageSender := handlers.NewMessageSender(connectionState)
 
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
-	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender)
+
+	// Create attachments client (will be configured with API key later in main)
+	// Using empty values for now - will be set when we have API key from env
+	attachmentsClient := clients.NewAttachmentsClient("", "")
+
+	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender, attachmentsClient)
 
 	// Create the CmdRunner instance
 	cr := &CmdRunner{
-		messageHandler:  messageHandler,
-		messageSender:   messageSender,
-		connectionState: connectionState,
-		gitUseCase:      gitUseCase,
-		appState:        appState,
-		envManager:      envManager,
-		agentID:         agentID,
+		messageHandler:    messageHandler,
+		messageSender:     messageSender,
+		connectionState:   connectionState,
+		gitUseCase:        gitUseCase,
+		appState:          appState,
+		envManager:        envManager,
+		agentID:           agentID,
+		attachmentsClient: attachmentsClient,
 	}
 
 	// Initialize dual worker pools that persist for the app lifetime
@@ -251,6 +259,15 @@ func main() {
 	}
 	log.Info("🌐 WebSocket URL: %s", wsURL)
 	log.Info("🔑 Agent ID: %s", cmdRunner.agentID)
+
+	// Configure attachments client with API key and base URL
+	// Extract base URL from WebSocket URL (remove /socketio/ suffix)
+	apiBaseURL := wsURL
+	if strings.HasSuffix(apiBaseURL, "/socketio/") {
+		apiBaseURL = strings.TrimSuffix(apiBaseURL, "/socketio/")
+	}
+	cmdRunner.attachmentsClient = clients.NewAttachmentsClient(ccagentAPIKey, apiBaseURL)
+	log.Info("🔗 Configured attachments API client with base URL: %s", apiBaseURL)
 
 	// Set up deferred cleanup
 	defer func() {

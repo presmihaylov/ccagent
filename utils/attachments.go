@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"ccagent/models"
+	"ccagent/clients"
 )
 
 // DetermineFileExtensionFromMagicBytes inspects the first few bytes of content
@@ -151,23 +151,29 @@ func GetAttachmentsDir(sessionID string) (string, error) {
 	return dir, nil
 }
 
-// DecodeAndStoreAttachment decodes a base64 attachment and stores it as a binary file
+// FetchAndStoreAttachment fetches an attachment from the API and stores it as a binary file
 // Returns the absolute path to the stored file
-func DecodeAndStoreAttachment(attachment models.Attachment, sessionID string, index int) (string, error) {
+func FetchAndStoreAttachment(client *clients.AttachmentsClient, attachmentID string, sessionID string, index int) (string, error) {
+	// Fetch attachment from API
+	attachmentResp, err := client.FetchAttachment(attachmentID)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch attachment %s: %w", attachmentID, err)
+	}
+
 	// Validate content is not empty
-	if attachment.Content == "" {
-		return "", fmt.Errorf("attachment content is empty")
+	if attachmentResp.Content == "" {
+		return "", fmt.Errorf("attachment content is empty for ID %s", attachmentID)
 	}
 
 	// Decode base64 content
-	content, err := base64.StdEncoding.DecodeString(attachment.Content)
+	content, err := base64.StdEncoding.DecodeString(attachmentResp.Content)
 	if err != nil {
-		return "", fmt.Errorf("invalid base64 content in attachment: %w", err)
+		return "", fmt.Errorf("invalid base64 content in attachment %s: %w", attachmentID, err)
 	}
 
 	// Check decoded content is not empty
 	if len(content) == 0 {
-		return "", fmt.Errorf("decoded attachment content is empty")
+		return "", fmt.Errorf("decoded attachment content is empty for ID %s", attachmentID)
 	}
 
 	// Determine file extension from magic bytes

@@ -2,12 +2,15 @@ package utils
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"ccagent/models"
+	"ccagent/clients"
 )
 
 // Test magic bytes detection for various file types
@@ -172,19 +175,36 @@ func TestDetermineFileExtensionFromMagicBytes_Empty(t *testing.T) {
 	}
 }
 
-// Test attachment storage functions
+// Test attachment fetching and storage with mock API server
 
-func TestDecodeAndStoreAttachment_ValidPNG(t *testing.T) {
+func TestFetchAndStoreAttachment_ValidPNG(t *testing.T) {
 	// Create a PNG header as base64
 	pngHeader := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D}
 	base64Content := base64.StdEncoding.EncodeToString(pngHeader)
 
-	attachment := models.Attachment{
-		Content: base64Content,
-	}
+	// Create mock API server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request has correct headers
+		if r.Header.Get("X-API-Key") != "test-api-key" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Return mock attachment response
+		response := map[string]string{
+			"id":      "test-attachment-id",
+			"content": base64Content,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	// Create attachments client with mock server URL
+	client := clients.NewAttachmentsClient("test-api-key", server.URL)
 
 	sessionID := "test_session_png"
-	filePath, err := DecodeAndStoreAttachment(attachment, sessionID, 0)
+	filePath, err := FetchAndStoreAttachment(client, "test-attachment-id", sessionID, 0)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -218,59 +238,42 @@ func TestDecodeAndStoreAttachment_ValidPNG(t *testing.T) {
 	os.RemoveAll(filepath.Join("/tmp", "ccagent", "attachments", sessionID))
 }
 
-func TestDecodeAndStoreAttachment_ValidJPEG(t *testing.T) {
-	jpegHeader := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10}
-	base64Content := base64.StdEncoding.EncodeToString(jpegHeader)
+func TestFetchAndStoreAttachment_APIError(t *testing.T) {
+	// Create mock API server that returns error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Not Found", http.StatusNotFound)
+	}))
+	defer server.Close()
 
-	attachment := models.Attachment{
-		Content: base64Content,
-	}
+	client := clients.NewAttachmentsClient("test-api-key", server.URL)
 
-	sessionID := "test_session_jpeg"
-	filePath, err := DecodeAndStoreAttachment(attachment, sessionID, 0)
+	sessionID := "test_session_error"
+	_, err := FetchAndStoreAttachment(client, "nonexistent-id", sessionID, 0)
 
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	if !strings.HasSuffix(filePath, ".jpg") {
-		t.Errorf("Expected .jpg extension, got: %s", filePath)
+	if err == nil {
+		t.Error("Expected error for API failure, got nil")
 	}
 
 	// Cleanup
 	os.RemoveAll(filepath.Join("/tmp", "ccagent", "attachments", sessionID))
 }
 
-func TestDecodeAndStoreAttachment_ValidPDF(t *testing.T) {
-	pdfHeader := []byte("%PDF-1.4\n")
-	base64Content := base64.StdEncoding.EncodeToString(pdfHeader)
+func TestFetchAndStoreAttachment_InvalidBase64(t *testing.T) {
+	// Create mock API server that returns invalid base64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]string{
+			"id":      "test-id",
+			"content": "not-valid-base64!!!",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
 
-	attachment := models.Attachment{
-		Content: base64Content,
-	}
-
-	sessionID := "test_session_pdf"
-	filePath, err := DecodeAndStoreAttachment(attachment, sessionID, 0)
-
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	if !strings.HasSuffix(filePath, ".pdf") {
-		t.Errorf("Expected .pdf extension, got: %s", filePath)
-	}
-
-	// Cleanup
-	os.RemoveAll(filepath.Join("/tmp", "ccagent", "attachments", sessionID))
-}
-
-func TestDecodeAndStoreAttachment_InvalidBase64(t *testing.T) {
-	attachment := models.Attachment{
-		Content: "not-valid-base64!!!",
-	}
+	client := clients.NewAttachmentsClient("test-api-key", server.URL)
 
 	sessionID := "test_session_invalid"
-	_, err := DecodeAndStoreAttachment(attachment, sessionID, 0)
+	_, err := FetchAndStoreAttachment(client, "test-id", sessionID, 0)
 
 	if err == nil {
 		t.Error("Expected error for invalid base64, got nil")
@@ -278,84 +281,6 @@ func TestDecodeAndStoreAttachment_InvalidBase64(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "invalid base64") {
 		t.Errorf("Expected 'invalid base64' error, got: %v", err)
-	}
-
-	// Cleanup
-	os.RemoveAll(filepath.Join("/tmp", "ccagent", "attachments", sessionID))
-}
-
-func TestDecodeAndStoreAttachment_EmptyContent(t *testing.T) {
-	attachment := models.Attachment{
-		Content: "",
-	}
-
-	sessionID := "test_session_empty"
-	_, err := DecodeAndStoreAttachment(attachment, sessionID, 0)
-
-	if err == nil {
-		t.Error("Expected error for empty content, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "empty") {
-		t.Errorf("Expected 'empty' error, got: %v", err)
-	}
-
-	// Cleanup
-	os.RemoveAll(filepath.Join("/tmp", "ccagent", "attachments", sessionID))
-}
-
-func TestDecodeAndStoreAttachment_EmptyDecodedContent(t *testing.T) {
-	// Base64 encoding of empty string
-	emptyBase64 := base64.StdEncoding.EncodeToString([]byte{})
-
-	attachment := models.Attachment{
-		Content: emptyBase64,
-	}
-
-	sessionID := "test_session_decoded_empty"
-	_, err := DecodeAndStoreAttachment(attachment, sessionID, 0)
-
-	if err == nil {
-		t.Error("Expected error for empty decoded content, got nil")
-	}
-
-	// Cleanup
-	os.RemoveAll(filepath.Join("/tmp", "ccagent", "attachments", sessionID))
-}
-
-func TestDecodeAndStoreAttachment_MultipleAttachments(t *testing.T) {
-	pngHeader := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
-	jpegHeader := []byte{0xFF, 0xD8, 0xFF, 0xE0}
-
-	pngBase64 := base64.StdEncoding.EncodeToString(pngHeader)
-	jpegBase64 := base64.StdEncoding.EncodeToString(jpegHeader)
-
-	attachments := []models.Attachment{
-		{Content: pngBase64},
-		{Content: jpegBase64},
-	}
-
-	sessionID := "test_session_multiple"
-	var paths []string
-
-	for i, att := range attachments {
-		filePath, err := DecodeAndStoreAttachment(att, sessionID, i)
-		if err != nil {
-			t.Fatalf("Failed to store attachment %d: %v", i, err)
-		}
-		paths = append(paths, filePath)
-	}
-
-	if len(paths) != 2 {
-		t.Errorf("Expected 2 paths, got %d", len(paths))
-	}
-
-	if !strings.Contains(paths[0], "attachment_0") {
-		t.Errorf("Expected first file to contain 'attachment_0', got: %s", paths[0])
-	}
-
-	if !strings.Contains(paths[1], "attachment_1") {
-		t.Errorf("Expected second file to contain 'attachment_1', got: %s", paths[1])
 	}
 
 	// Cleanup

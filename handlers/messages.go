@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"ccagent/clients"
 	"ccagent/core"
 	"ccagent/core/env"
 	"ccagent/core/log"
@@ -16,11 +17,12 @@ import (
 )
 
 type MessageHandler struct {
-	claudeService services.CLIAgent
-	gitUseCase    *usecases.GitUseCase
-	appState      *models.AppState
-	envManager    *env.EnvManager
-	messageSender *MessageSender
+	claudeService      services.CLIAgent
+	gitUseCase         *usecases.GitUseCase
+	appState           *models.AppState
+	envManager         *env.EnvManager
+	messageSender      *MessageSender
+	attachmentsClient  *clients.AttachmentsClient
 }
 
 func NewMessageHandler(
@@ -29,30 +31,32 @@ func NewMessageHandler(
 	appState *models.AppState,
 	envManager *env.EnvManager,
 	messageSender *MessageSender,
+	attachmentsClient *clients.AttachmentsClient,
 ) *MessageHandler {
 	return &MessageHandler{
-		claudeService: claudeService,
-		gitUseCase:    gitUseCase,
-		appState:      appState,
-		envManager:    envManager,
-		messageSender: messageSender,
+		claudeService:     claudeService,
+		gitUseCase:        gitUseCase,
+		appState:          appState,
+		envManager:        envManager,
+		messageSender:     messageSender,
+		attachmentsClient: attachmentsClient,
 	}
 }
 
-// processAttachmentsForPrompt processes attachments and returns file paths and formatted text
+// processAttachmentsForPrompt fetches attachments from API and returns file paths and formatted text
 func (mh *MessageHandler) processAttachmentsForPrompt(
-	attachments []models.Attachment,
+	attachmentIDs []string,
 	sessionID string,
 ) (filePaths []string, appendText string, err error) {
-	if len(attachments) == 0 {
+	if len(attachmentIDs) == 0 {
 		return nil, "", nil
 	}
 
 	var paths []string
-	for i, att := range attachments {
-		filePath, err := utils.DecodeAndStoreAttachment(att, sessionID, i)
+	for i, attachmentID := range attachmentIDs {
+		filePath, err := utils.FetchAndStoreAttachment(mh.attachmentsClient, attachmentID, sessionID, i)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to process attachment %d: %w", i, err)
+			return nil, "", fmt.Errorf("failed to fetch and store attachment %s: %w", attachmentID, err)
 		}
 		paths = append(paths, filePath)
 	}
@@ -160,12 +164,12 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 
 	// Process attachments if present
 	finalPrompt := payload.Message
-	if len(payload.Attachments) > 0 {
+	if len(payload.AttachmentIDs) > 0 {
 		// Use job ID format (same as continue conversation) for consistent attachment storage
 		attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
 
 		attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
-			payload.Attachments,
+			payload.AttachmentIDs,
 			attachmentSessionID,
 		)
 		if err != nil {
@@ -343,12 +347,12 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 
 	// Process attachments if present
 	finalPrompt := payload.Message
-	if len(payload.Attachments) > 0 {
+	if len(payload.AttachmentIDs) > 0 {
 		// Use job ID format (same as start conversation) for consistent attachment storage
 		attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
 
 		attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
-			payload.Attachments,
+			payload.AttachmentIDs,
 			attachmentSessionID,
 		)
 		if err != nil {
