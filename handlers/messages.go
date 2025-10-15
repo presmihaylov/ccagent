@@ -161,13 +161,12 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	// Process attachments if present
 	finalPrompt := payload.Message
 	if len(payload.Attachments) > 0 {
-		// Use job ID as temporary session ID for attachment storage
-		// (actual Claude session ID not available yet)
-		tempSessionID := fmt.Sprintf("job_%s", payload.JobID)
+		// Use job ID format (same as continue conversation) for consistent attachment storage
+		attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
 
 		attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
 			payload.Attachments,
-			tempSessionID,
+			attachmentSessionID,
 		)
 		if err != nil {
 			log.Error("❌ Failed to process attachments: %v", err)
