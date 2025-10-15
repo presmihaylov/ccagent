@@ -116,6 +116,15 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	envManager.RegisterReloadHook(gitUseCase.GithubTokenUpdateHook)
 	log.Info("📎 Registered GitHub token update hook")
 
+	// Recover in-progress jobs and queued messages on program startup (NOT on Socket.io reconnect)
+	// This enables crash recovery - we only want to recover jobs once when the program starts
+	handlers.RecoverJobs(
+		appState,
+		gitUseCase,
+		cr.blockingWorkerPool,
+		messageHandler,
+	)
+
 	log.Info("📋 Completed successfully - initialized CmdRunner with %s agent", agentType)
 	return cr, nil
 }
@@ -461,14 +470,6 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		socketClient.Disconnect()
 		return fmt.Errorf("connection timeout - server may have rejected authentication")
 	}
-
-	// Recover in-progress jobs and queued messages after successful connection
-	handlers.RecoverJobs(
-		cr.appState,
-		cr.gitUseCase,
-		blockingWorkerPool,
-		cr.messageHandler,
-	)
 
 	// Connection appears stable if not immediately disconnected within 5s (legacy guard removed)
 	time.AfterFunc(5*time.Second, func() {
