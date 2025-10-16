@@ -162,26 +162,24 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		systemPrompt = GetCursorSystemPrompt()
 	}
 
-	// Process attachments if present
-	finalPrompt := payload.Message
-	if len(payload.AttachmentIDs) > 0 {
-		// Use job ID format (same as continue conversation) for consistent attachment storage
-		attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
+	// Process attachments and build final prompt
+	attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
+	attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
+		payload.AttachmentIDs,
+		attachmentSessionID,
+	)
+	if err != nil {
+		log.Error("❌ Failed to process attachments: %v", err)
+		return fmt.Errorf("failed to process attachments: %w", err)
+	}
 
-		attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
-			payload.AttachmentIDs,
-			attachmentSessionID,
-		)
-		if err != nil {
-			log.Error("❌ Failed to process attachments: %v", err)
-			return fmt.Errorf("failed to process attachments: %w", err)
-		}
-
+	if len(attachmentPaths) > 0 {
 		log.Info("✅ Processed %d attachments: %v", len(attachmentPaths), attachmentPaths)
+	}
 
-		if attachmentText != "" {
-			finalPrompt = payload.Message + "\n" + attachmentText
-		}
+	finalPrompt := payload.Message
+	if attachmentText != "" {
+		finalPrompt = payload.Message + "\n" + attachmentText
 	}
 
 	claudeResult, err := mh.claudeService.StartNewConversationWithSystemPrompt(finalPrompt, systemPrompt)
@@ -345,26 +343,24 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		// Don't fail - message will be deduplicated during recovery
 	}
 
-	// Process attachments if present
-	finalPrompt := payload.Message
-	if len(payload.AttachmentIDs) > 0 {
-		// Use job ID format (same as start conversation) for consistent attachment storage
-		attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
+	// Process attachments and build final prompt
+	attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
+	attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
+		payload.AttachmentIDs,
+		attachmentSessionID,
+	)
+	if err != nil {
+		log.Error("❌ Failed to process attachments: %v", err)
+		return fmt.Errorf("failed to process attachments: %w", err)
+	}
 
-		attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
-			payload.AttachmentIDs,
-			attachmentSessionID,
-		)
-		if err != nil {
-			log.Error("❌ Failed to process attachments: %v", err)
-			return fmt.Errorf("failed to process attachments: %w", err)
-		}
-
+	if len(attachmentPaths) > 0 {
 		log.Info("✅ Processed %d attachments: %v", len(attachmentPaths), attachmentPaths)
+	}
 
-		if attachmentText != "" {
-			finalPrompt = payload.Message + "\n" + attachmentText
-		}
+	finalPrompt := payload.Message
+	if attachmentText != "" {
+		finalPrompt = payload.Message + "\n" + attachmentText
 	}
 
 	claudeResult, err := mh.claudeService.ContinueConversation(sessionID, finalPrompt)
