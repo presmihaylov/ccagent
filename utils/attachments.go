@@ -161,12 +161,12 @@ func FetchAndStoreAttachment(client *clients.AgentsApiClient, attachmentID strin
 	}
 
 	// Validate content is not empty
-	if attachmentResp.Content == "" {
-		return "", fmt.Errorf("attachment content is empty for ID %s", attachmentID)
+	if attachmentResp.Data == "" {
+		return "", fmt.Errorf("attachment data is empty for ID %s", attachmentID)
 	}
 
 	// Decode base64 content
-	content, err := base64.StdEncoding.DecodeString(attachmentResp.Content)
+	content, err := base64.StdEncoding.DecodeString(attachmentResp.Data)
 	if err != nil {
 		return "", fmt.Errorf("invalid base64 content in attachment %s: %w", attachmentID, err)
 	}

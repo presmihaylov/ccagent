@@ -193,8 +193,8 @@ func TestFetchAndStoreAttachment_ValidPNG(t *testing.T) {
 
 		// Return mock attachment response
 		response := map[string]string{
-			"id":      "test-attachment-id",
-			"content": base64Content,
+			"id":   "test-attachment-id",
+			"data": base64Content,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
@@ -263,8 +263,8 @@ func TestFetchAndStoreAttachment_InvalidBase64(t *testing.T) {
 	// Create mock API server that returns invalid base64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{
-			"id":      "test-id",
-			"content": "not-valid-base64!!!",
+			"id":   "test-id",
+			"data": "not-valid-base64!!!",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)

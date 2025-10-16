@@ -43,6 +43,8 @@ type CmdRunner struct {
 	envManager         *env.EnvManager
 	agentID            string
 	agentsApiClient    *clients.AgentsApiClient
+	wsURL              string
+	ccagentAPIKey      string
 
 	// Persistent worker pools reused across reconnects
 	blockingWorkerPool *workerpool.WorkerPool
@@ -81,6 +83,22 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	// Start periodic refresh every 1 minute
 	envManager.StartPeriodicRefresh(1 * time.Minute)
 
+	// Get API key and WS URL for agents API client
+	ccagentAPIKey := envManager.Get("CCAGENT_API_KEY")
+	if ccagentAPIKey == "" {
+		return nil, fmt.Errorf("CCAGENT_API_KEY environment variable is required but not set")
+	}
+
+	wsURL := envManager.Get("CCAGENT_WS_API_URL")
+	if wsURL == "" {
+		wsURL = "https://claudecontrol.onrender.com/socketio/"
+	}
+
+	// Extract base URL for API client (remove /socketio/ suffix)
+	apiBaseURL := strings.TrimSuffix(wsURL, "/socketio/")
+	agentsApiClient := clients.NewAgentsApiClient(ccagentAPIKey, apiBaseURL)
+	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
+
 	gitClient := clients.NewGitClient()
 
 	// Determine state file path (reuse homeDir from above)
@@ -98,10 +116,6 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
 
-	// Create agents API client (will be configured with API key later in main)
-	// Using empty values for now - will be set when we have API key from env
-	agentsApiClient := clients.NewAgentsApiClient("", "")
-
 	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender, agentsApiClient)
 
 	// Create the CmdRunner instance
@@ -114,6 +128,8 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 		envManager:       envManager,
 		agentID:          agentID,
 		agentsApiClient:  agentsApiClient,
+		wsURL:            wsURL,
+		ccagentAPIKey:    ccagentAPIKey,
 	}
 
 	// Initialize dual worker pools that persist for the app lifetime
@@ -223,13 +239,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Validate CCAGENT_API_KEY environment variable using envManager
-	ccagentAPIKey := cmdRunner.envManager.Get("CCAGENT_API_KEY")
-	if ccagentAPIKey == "" {
-		fmt.Fprintf(os.Stderr, "Error: CCAGENT_API_KEY environment variable is required but not set\n")
-		os.Exit(1)
-	}
-
 	// Setup program-wide logging from start
 	logPath, err := cmdRunner.setupProgramLogging()
 	if err != nil {
@@ -252,19 +261,8 @@ func main() {
 		// Don't exit - this is not critical for agent operation
 	}
 
-	// Get WebSocket URL from environment variable with default fallback using envManager
-	wsURL := cmdRunner.envManager.Get("CCAGENT_WS_API_URL")
-	if wsURL == "" {
-		wsURL = "https://claudecontrol.onrender.com/socketio/"
-	}
-	log.Info("🌐 WebSocket URL: %s", wsURL)
+	log.Info("🌐 WebSocket URL: %s", cmdRunner.wsURL)
 	log.Info("🔑 Agent ID: %s", cmdRunner.agentID)
-
-	// Configure agents API client with API key and base URL
-	// Extract base URL from WebSocket URL (remove /socketio/ suffix)
-	apiBaseURL := strings.TrimSuffix(wsURL, "/socketio/")
-	cmdRunner.agentsApiClient = clients.NewAgentsApiClient(ccagentAPIKey, apiBaseURL)
-	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
 
 	// Set up deferred cleanup
 	defer func() {
@@ -298,7 +296,7 @@ func main() {
 	}()
 
 	// Start Socket.IO client with backoff retry
-	err = cmdRunner.startSocketIOClientWithRetry(wsURL, ccagentAPIKey)
+	err = cmdRunner.startSocketIOClientWithRetry(cmdRunner.wsURL, cmdRunner.ccagentAPIKey)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting WebSocket client after retries: %v\n", err)
 		os.Exit(1)

@@ -10,8 +10,8 @@ import (
 
 // AttachmentResponse represents the API response for fetching an attachment
 type AttachmentResponse struct {
-	ID      string `json:"id"`
-	Content string `json:"content"` // Base64-encoded content
+	ID   string `json:"id"`
+	Data string `json:"data"` // Base64-encoded content
 }
 
 // AgentsApiClient handles API requests to the Claude Control agents API
