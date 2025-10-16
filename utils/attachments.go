@@ -153,7 +153,7 @@ func GetAttachmentsDir(sessionID string) (string, error) {
 
 // FetchAndStoreAttachment fetches an attachment from the API and stores it as a binary file
 // Returns the absolute path to the stored file
-func FetchAndStoreAttachment(client *clients.AttachmentsClient, attachmentID string, sessionID string, index int) (string, error) {
+func FetchAndStoreAttachment(client *clients.AgentsApiClient, attachmentID string, sessionID string, index int) (string, error) {
 	// Fetch attachment from API
 	attachmentResp, err := client.FetchAttachment(attachmentID)
 	if err != nil {

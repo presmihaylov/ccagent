@@ -184,8 +184,9 @@ func TestFetchAndStoreAttachment_ValidPNG(t *testing.T) {
 
 	// Create mock API server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request has correct headers
-		if r.Header.Get("X-API-Key") != "test-api-key" {
+		// Verify request has correct headers (Bearer token)
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "Bearer test-api-key" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -200,8 +201,8 @@ func TestFetchAndStoreAttachment_ValidPNG(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create attachments client with mock server URL
-	client := clients.NewAttachmentsClient("test-api-key", server.URL)
+	// Create agents API client with mock server URL
+	client := clients.NewAgentsApiClient("test-api-key", server.URL)
 
 	sessionID := "test_session_png"
 	filePath, err := FetchAndStoreAttachment(client, "test-attachment-id", sessionID, 0)
@@ -245,7 +246,7 @@ func TestFetchAndStoreAttachment_APIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := clients.NewAttachmentsClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL)
 
 	sessionID := "test_session_error"
 	_, err := FetchAndStoreAttachment(client, "nonexistent-id", sessionID, 0)
@@ -270,7 +271,7 @@ func TestFetchAndStoreAttachment_InvalidBase64(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := clients.NewAttachmentsClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL)
 
 	sessionID := "test_session_invalid"
 	_, err := FetchAndStoreAttachment(client, "test-id", sessionID, 0)

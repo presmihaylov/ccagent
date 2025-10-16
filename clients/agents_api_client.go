@@ -14,16 +14,16 @@ type AttachmentResponse struct {
 	Content string `json:"content"` // Base64-encoded content
 }
 
-// AttachmentsClient handles API requests to fetch attachments
-type AttachmentsClient struct {
+// AgentsApiClient handles API requests to the Claude Control agents API
+type AgentsApiClient struct {
 	apiKey  string
 	baseURL string
 	client  *http.Client
 }
 
-// NewAttachmentsClient creates a new attachments API client
-func NewAttachmentsClient(apiKey, baseURL string) *AttachmentsClient {
-	return &AttachmentsClient{
+// NewAgentsApiClient creates a new agents API client
+func NewAgentsApiClient(apiKey, baseURL string) *AgentsApiClient {
+	return &AgentsApiClient{
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		client: &http.Client{
@@ -33,7 +33,7 @@ func NewAttachmentsClient(apiKey, baseURL string) *AttachmentsClient {
 }
 
 // FetchAttachment fetches an attachment by ID from the Claude Control API
-func (c *AttachmentsClient) FetchAttachment(attachmentID string) (*AttachmentResponse, error) {
+func (c *AgentsApiClient) FetchAttachment(attachmentID string) (*AttachmentResponse, error) {
 	url := fmt.Sprintf("%s/api/agents/attachments/%s", c.baseURL, attachmentID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -41,8 +41,8 @@ func (c *AttachmentsClient) FetchAttachment(attachmentID string) (*AttachmentRes
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add API key authentication header
-	req.Header.Set("X-API-Key", c.apiKey)
+	// Add Bearer token authentication header
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.client.Do(req)

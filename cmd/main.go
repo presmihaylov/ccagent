@@ -42,7 +42,7 @@ type CmdRunner struct {
 	rotatingWriter     *log.RotatingWriter
 	envManager         *env.EnvManager
 	agentID            string
-	attachmentsClient  *clients.AttachmentsClient
+	agentsApiClient    *clients.AgentsApiClient
 
 	// Persistent worker pools reused across reconnects
 	blockingWorkerPool *workerpool.WorkerPool
@@ -98,22 +98,22 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
 
-	// Create attachments client (will be configured with API key later in main)
+	// Create agents API client (will be configured with API key later in main)
 	// Using empty values for now - will be set when we have API key from env
-	attachmentsClient := clients.NewAttachmentsClient("", "")
+	agentsApiClient := clients.NewAgentsApiClient("", "")
 
-	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender, attachmentsClient)
+	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender, agentsApiClient)
 
 	// Create the CmdRunner instance
 	cr := &CmdRunner{
-		messageHandler:    messageHandler,
-		messageSender:     messageSender,
-		connectionState:   connectionState,
-		gitUseCase:        gitUseCase,
-		appState:          appState,
-		envManager:        envManager,
-		agentID:           agentID,
-		attachmentsClient: attachmentsClient,
+		messageHandler:   messageHandler,
+		messageSender:    messageSender,
+		connectionState:  connectionState,
+		gitUseCase:       gitUseCase,
+		appState:         appState,
+		envManager:       envManager,
+		agentID:          agentID,
+		agentsApiClient:  agentsApiClient,
 	}
 
 	// Initialize dual worker pools that persist for the app lifetime
@@ -260,14 +260,14 @@ func main() {
 	log.Info("🌐 WebSocket URL: %s", wsURL)
 	log.Info("🔑 Agent ID: %s", cmdRunner.agentID)
 
-	// Configure attachments client with API key and base URL
+	// Configure agents API client with API key and base URL
 	// Extract base URL from WebSocket URL (remove /socketio/ suffix)
 	apiBaseURL := wsURL
 	if strings.HasSuffix(apiBaseURL, "/socketio/") {
 		apiBaseURL = strings.TrimSuffix(apiBaseURL, "/socketio/")
 	}
-	cmdRunner.attachmentsClient = clients.NewAttachmentsClient(ccagentAPIKey, apiBaseURL)
-	log.Info("🔗 Configured attachments API client with base URL: %s", apiBaseURL)
+	cmdRunner.agentsApiClient = clients.NewAgentsApiClient(ccagentAPIKey, apiBaseURL)
+	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
 
 	// Set up deferred cleanup
 	defer func() {

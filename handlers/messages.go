@@ -17,12 +17,12 @@ import (
 )
 
 type MessageHandler struct {
-	claudeService      services.CLIAgent
-	gitUseCase         *usecases.GitUseCase
-	appState           *models.AppState
-	envManager         *env.EnvManager
-	messageSender      *MessageSender
-	attachmentsClient  *clients.AttachmentsClient
+	claudeService   services.CLIAgent
+	gitUseCase      *usecases.GitUseCase
+	appState        *models.AppState
+	envManager      *env.EnvManager
+	messageSender   *MessageSender
+	agentsApiClient *clients.AgentsApiClient
 }
 
 func NewMessageHandler(
@@ -31,15 +31,15 @@ func NewMessageHandler(
 	appState *models.AppState,
 	envManager *env.EnvManager,
 	messageSender *MessageSender,
-	attachmentsClient *clients.AttachmentsClient,
+	agentsApiClient *clients.AgentsApiClient,
 ) *MessageHandler {
 	return &MessageHandler{
-		claudeService:     claudeService,
-		gitUseCase:        gitUseCase,
-		appState:          appState,
-		envManager:        envManager,
-		messageSender:     messageSender,
-		attachmentsClient: attachmentsClient,
+		claudeService:   claudeService,
+		gitUseCase:      gitUseCase,
+		appState:        appState,
+		envManager:      envManager,
+		messageSender:   messageSender,
+		agentsApiClient: agentsApiClient,
 	}
 }
 
@@ -54,7 +54,7 @@ func (mh *MessageHandler) processAttachmentsForPrompt(
 
 	var paths []string
 	for i, attachmentID := range attachmentIDs {
-		filePath, err := utils.FetchAndStoreAttachment(mh.attachmentsClient, attachmentID, sessionID, i)
+		filePath, err := utils.FetchAndStoreAttachment(mh.agentsApiClient, attachmentID, sessionID, i)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to fetch and store attachment %s: %w", attachmentID, err)
 		}
