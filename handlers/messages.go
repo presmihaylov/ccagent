@@ -164,8 +164,15 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 
 	// Process attachments and build final prompt
 	attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
+
+	// Extract attachment IDs from MessageAttachment array
+	var attachmentIDs []string
+	for _, att := range payload.Attachments {
+		attachmentIDs = append(attachmentIDs, att.AttachmentID)
+	}
+
 	attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
-		payload.AttachmentIDs,
+		attachmentIDs,
 		attachmentSessionID,
 	)
 	if err != nil {
@@ -345,8 +352,15 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 
 	// Process attachments and build final prompt
 	attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
+
+	// Extract attachment IDs from MessageAttachment array
+	var attachmentIDs []string
+	for _, att := range payload.Attachments {
+		attachmentIDs = append(attachmentIDs, att.AttachmentID)
+	}
+
 	attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
-		payload.AttachmentIDs,
+		attachmentIDs,
 		attachmentSessionID,
 	)
 	if err != nil {

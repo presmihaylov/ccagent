@@ -18,12 +18,17 @@ type BaseMessage struct {
 	Payload any    `json:"payload,omitempty"`
 }
 
+// MessageAttachment represents an attachment in a message
+type MessageAttachment struct {
+	AttachmentID string `json:"attachment_id"` // ID of attachment stored in database
+}
+
 type StartConversationPayload struct {
-	JobID              string   `json:"job_id"`
-	Message            string   `json:"message"`
-	ProcessedMessageID string   `json:"processed_message_id"`
-	MessageLink        string   `json:"message_link"`
-	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
+	JobID              string              `json:"job_id"`
+	Message            string              `json:"message"`
+	ProcessedMessageID string              `json:"processed_message_id"`
+	MessageLink        string              `json:"message_link"`
+	Attachments        []MessageAttachment `json:"attachments,omitempty"`
 }
 
 type StartConversationResponsePayload struct {
@@ -32,11 +37,11 @@ type StartConversationResponsePayload struct {
 }
 
 type UserMessagePayload struct {
-	JobID              string   `json:"job_id"`
-	Message            string   `json:"message"`
-	ProcessedMessageID string   `json:"processed_message_id"`
-	MessageLink        string   `json:"message_link"`
-	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
+	JobID              string              `json:"job_id"`
+	Message            string              `json:"message"`
+	ProcessedMessageID string              `json:"processed_message_id"`
+	MessageLink        string              `json:"message_link"`
+	Attachments        []MessageAttachment `json:"attachments,omitempty"`
 }
 
 type AssistantMessagePayload struct {
