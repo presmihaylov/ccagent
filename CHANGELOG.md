@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.14] - 2025-10-16
+
+### Features
+
+- Add attachment support with magic bytes ([#26](https://github.com/presmihaylov/ccagent/pull/26))
+  - Implements automatic file type detection using magic bytes
+  - Supports attachments in agent communication
+  - Enhances file handling capabilities
+
+### Bugfix
+
+- Prevent job recovery on socket reconnect ([#27](https://github.com/presmihaylov/ccagent/pull/27))
+  - Fixes duplicate job recovery attempts during reconnection
+  - Ensures clean reconnection without state conflicts
+  - Improves stability during network interruptions
+
 ## [0.0.13] - 2025-10-14
 
 ### Improvements
