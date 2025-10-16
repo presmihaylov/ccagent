@@ -55,11 +55,11 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
 	// Create log directory for agent service
-	homeDir, err := os.UserHomeDir()
+	configDir, err := env.GetConfigDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
+		return nil, fmt.Errorf("failed to get config directory: %w", err)
 	}
-	logDir := filepath.Join(homeDir, ".config", "ccagent", "logs")
+	logDir := filepath.Join(configDir, "logs")
 
 	// Create the appropriate CLI agent service
 	cliAgent, err := createCLIAgent(agentType, permissionMode, cursorModel, logDir)
@@ -101,8 +101,8 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 
 	gitClient := clients.NewGitClient()
 
-	// Determine state file path (reuse homeDir from above)
-	statePath := filepath.Join(homeDir, ".config", "ccagent", "state.json")
+	// Determine state file path
+	statePath := filepath.Join(configDir, "state.json")
 
 	// Restore app state from persisted data
 	appState, agentID, err := handlers.RestoreAppState(statePath)
@@ -507,14 +507,14 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 }
 
 func (cr *CmdRunner) setupProgramLogging() (string, error) {
-	// Get user's home directory
-	homeDir, err := os.UserHomeDir()
+	// Get config directory
+	configDir, err := env.GetConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
+		return "", fmt.Errorf("failed to get config directory: %w", err)
 	}
 
-	// Create ~/.config/ccagent/logs directory
-	logsDir := filepath.Join(homeDir, ".config", "ccagent", "logs")
+	// Create logs directory
+	logsDir := filepath.Join(configDir, "logs")
 
 	// Set up rotating writer with 10MB file size limit
 	rotatingWriter, err := log.NewRotatingWriter(log.RotatingWriterConfig{

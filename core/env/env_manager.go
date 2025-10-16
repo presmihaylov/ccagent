@@ -21,7 +21,7 @@ type EnvManager struct {
 }
 
 func NewEnvManager() (*EnvManager, error) {
-	configDir, err := getConfigDir()
+	configDir, err := GetConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config directory: %w", err)
 	}
@@ -42,7 +42,28 @@ func NewEnvManager() (*EnvManager, error) {
 	return em, nil
 }
 
-func getConfigDir() (string, error) {
+// GetConfigDir returns the config directory path, either from CCAGENT_CONFIG_DIR
+// environment variable or the default ~/.config/ccagent
+func GetConfigDir() (string, error) {
+	// Check if CCAGENT_CONFIG_DIR is set
+	if configDir := os.Getenv("CCAGENT_CONFIG_DIR"); configDir != "" {
+		// Expand ~ if present
+		if len(configDir) >= 2 && configDir[:2] == "~/" {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("failed to get home directory: %w", err)
+			}
+			configDir = filepath.Join(homeDir, configDir[2:])
+		}
+
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			return "", fmt.Errorf("failed to create config directory: %w", err)
+		}
+
+		return configDir, nil
+	}
+
+	// Default to ~/.config/ccagent
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
