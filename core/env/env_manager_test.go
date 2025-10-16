@@ -189,3 +189,100 @@ func TestEnvManager_MissingFile(t *testing.T) {
 		t.Errorf("Expected 'fallback_value', got '%s'", got)
 	}
 }
+
+func TestGetConfigDir_Default(t *testing.T) {
+	// Ensure CCAGENT_CONFIG_DIR is not set
+	originalValue := os.Getenv("CCAGENT_CONFIG_DIR")
+	os.Unsetenv("CCAGENT_CONFIG_DIR")
+	defer func() {
+		if originalValue != "" {
+			os.Setenv("CCAGENT_CONFIG_DIR", originalValue)
+		}
+	}()
+
+	configDir, err := GetConfigDir()
+	if err != nil {
+		t.Fatalf("GetConfigDir failed: %v", err)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("Failed to get home directory: %v", err)
+	}
+
+	expectedDir := filepath.Join(homeDir, ".config", "ccagent")
+	if configDir != expectedDir {
+		t.Errorf("Expected config dir '%s', got '%s'", expectedDir, configDir)
+	}
+
+	// Verify directory was created
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		t.Errorf("Config directory was not created: %s", configDir)
+	}
+}
+
+func TestGetConfigDir_CustomAbsolute(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "ccagent-config-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Set custom config directory
+	customDir := filepath.Join(tempDir, "custom-config")
+	originalValue := os.Getenv("CCAGENT_CONFIG_DIR")
+	os.Setenv("CCAGENT_CONFIG_DIR", customDir)
+	defer func() {
+		if originalValue != "" {
+			os.Setenv("CCAGENT_CONFIG_DIR", originalValue)
+		} else {
+			os.Unsetenv("CCAGENT_CONFIG_DIR")
+		}
+	}()
+
+	configDir, err := GetConfigDir()
+	if err != nil {
+		t.Fatalf("GetConfigDir failed: %v", err)
+	}
+
+	if configDir != customDir {
+		t.Errorf("Expected config dir '%s', got '%s'", customDir, configDir)
+	}
+
+	// Verify directory was created
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		t.Errorf("Config directory was not created: %s", configDir)
+	}
+}
+
+func TestGetConfigDir_CustomTilde(t *testing.T) {
+	// Set custom config directory with tilde
+	originalValue := os.Getenv("CCAGENT_CONFIG_DIR")
+	os.Setenv("CCAGENT_CONFIG_DIR", "~/.ccagent-custom")
+	defer func() {
+		if originalValue != "" {
+			os.Setenv("CCAGENT_CONFIG_DIR", originalValue)
+		} else {
+			os.Unsetenv("CCAGENT_CONFIG_DIR")
+		}
+	}()
+
+	configDir, err := GetConfigDir()
+	if err != nil {
+		t.Fatalf("GetConfigDir failed: %v", err)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("Failed to get home directory: %v", err)
+	}
+
+	expectedDir := filepath.Join(homeDir, ".ccagent-custom")
+	if configDir != expectedDir {
+		t.Errorf("Expected config dir '%s', got '%s'", expectedDir, configDir)
+	}
+
+	// Clean up created directory
+	os.RemoveAll(configDir)
+}
