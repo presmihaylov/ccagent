@@ -197,7 +197,7 @@ func TestFetchAndStoreAttachment_ValidPNG(t *testing.T) {
 			"content": base64Content,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -267,7 +267,7 @@ func TestFetchAndStoreAttachment_InvalidBase64(t *testing.T) {
 			"content": "not-valid-base64!!!",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
