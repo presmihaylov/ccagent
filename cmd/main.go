@@ -262,10 +262,7 @@ func main() {
 
 	// Configure agents API client with API key and base URL
 	// Extract base URL from WebSocket URL (remove /socketio/ suffix)
-	apiBaseURL := wsURL
-	if strings.HasSuffix(apiBaseURL, "/socketio/") {
-		apiBaseURL = strings.TrimSuffix(apiBaseURL, "/socketio/")
-	}
+	apiBaseURL := strings.TrimSuffix(wsURL, "/socketio/")
 	cmdRunner.agentsApiClient = clients.NewAgentsApiClient(ccagentAPIKey, apiBaseURL)
 	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
 
