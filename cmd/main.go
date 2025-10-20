@@ -317,7 +317,7 @@ func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string) e
 	// Configure exponential backoff with unlimited retries
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 2 * time.Second
-	expBackoff.MaxInterval = 30 * time.Second
+	expBackoff.MaxInterval = 10 * time.Second
 	expBackoff.MaxElapsedTime = 0 // No time limit
 
 	attempt := 0
