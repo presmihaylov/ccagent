@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.0.15] - 2025-10-23
+
+### Features
+
+- Add CCAGENT_CONFIG_DIR environment variable ([#28](https://github.com/presmihaylov/ccagent/pull/28))
+  - Allows custom configuration directory path
+  - Improves deployment flexibility
+  - Enables better multi-instance management
+
+### Bugfixes
+
+- Fix parsing of claude responses with large images
+  - Resolves issues with handling large image attachments
+  - Improves response parsing stability
+  - Enhances reliability for image-heavy workflows
+- Reduce Socket.IO reconnect max backoff to 10s ([#29](https://github.com/presmihaylov/ccagent/pull/29))
+  - Faster reconnection during network issues
+  - Reduces downtime during connectivity problems
+  - Improves overall agent responsiveness
+
 ## [0.0.14] - 2025-10-16
 
 ### Features
