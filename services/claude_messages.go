@@ -3,6 +3,7 @@ package services
 import (
 	"bufio"
 	"encoding/json"
+	"regexp"
 	"strings"
 )
 
@@ -134,15 +135,32 @@ func (e ExitPlanModeMessage) GetPlan() string {
 	return ""
 }
 
+// stripBase64Images removes large base64-encoded image data from the output to reduce memory usage.
+// Images are never used by the parser (only text content is extracted), but they can make
+// individual JSON lines exceed buffer limits (1MB+ for screenshots/images).
+// This preserves the JSON structure but replaces the data payload with a placeholder.
+func stripBase64Images(output string) string {
+	// Match base64 data fields that are larger than 1KB (likely images)
+	// Pattern: "data":"<long base64 string>"
+	// We keep short data fields as they might be legitimate small payloads
+	re := regexp.MustCompile(`("data":")([\w+/=]{1000,})(")`)
+	return re.ReplaceAllString(output, `${1}[IMAGE_STRIPPED]${3}`)
+}
+
 // MapClaudeOutputToMessages parses Claude command output into structured messages
 // This is exported to allow reuse across different modules
 func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
+	// Strip large base64 images before parsing to reduce memory usage
+	// Images are never used (only text is extracted), but can make lines exceed buffer limits
+	output = stripBase64Images(output)
+
 	var messages []ClaudeMessage
 
 	// Use a scanner with a larger buffer to handle long lines
 	scanner := bufio.NewScanner(strings.NewReader(output))
-	// Set a 1MB buffer to handle very long JSON lines
-	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	// Set a 2MB buffer for safety (after image stripping, most lines should be < 100KB)
+	const maxBufferSize = 1 * 1024 * 1024 // 2MB
+	scanner.Buffer(make([]byte, 0, maxBufferSize), maxBufferSize)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

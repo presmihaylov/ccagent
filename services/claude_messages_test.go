@@ -2,6 +2,8 @@ package services
 
 import (
 	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -389,4 +391,125 @@ func TestRealWorldExample(t *testing.T) {
 			t.Errorf("Message %d: expected session_id '%s', got '%s'", i, expectedSessionID, msg.GetSessionID())
 		}
 	}
+}
+
+func TestProductionLogFileParsing(t *testing.T) {
+	// Read the production log file that failed to parse
+	logFilePath := "fixtures/claude-session-with-image.log"
+
+	content, err := os.ReadFile(logFilePath)
+	if err != nil {
+		t.Skipf("Production log file not found at %s: %v", logFilePath, err)
+		return
+	}
+
+	// Try to parse the log file
+	messages, err := MapClaudeOutputToMessages(string(content))
+	if err != nil {
+		t.Fatalf("Failed to parse production log file: %v", err)
+	}
+
+	t.Logf("Successfully parsed %d messages from production log", len(messages))
+
+	// Report on message types found
+	typeCounts := make(map[string]int)
+	for _, msg := range messages {
+		typeCounts[msg.GetType()]++
+	}
+
+	t.Logf("Message type breakdown:")
+	for msgType, count := range typeCounts {
+		t.Logf("  %s: %d", msgType, count)
+	}
+
+	// Check that we have at least one of each expected type
+	expectedTypes := []string{"system", "assistant", "user"}
+	for _, expectedType := range expectedTypes {
+		if typeCounts[expectedType] == 0 {
+			t.Errorf("Expected to find at least one '%s' message, but found none", expectedType)
+		}
+	}
+}
+
+func TestStripBase64Images(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "strips large base64 image data",
+			input:    `{"type":"image","source":{"type":"base64","data":"` + strings.Repeat("iVBORw0KGgo", 100) + `=="}}`,
+			expected: `{"type":"image","source":{"type":"base64","data":"[IMAGE_STRIPPED]"}}`,
+		},
+		{
+			name:     "preserves short data fields",
+			input:    `{"type":"data","data":"short"}`,
+			expected: `{"type":"data","data":"short"}`,
+		},
+		{
+			name: "strips multiple images in one line",
+			input: `{"content":[{"type":"image","source":{"data":"` + strings.Repeat("A", 1500) + `"}},{"type":"image","source":{"data":"` + strings.Repeat("B", 2000) + `"}}]}`,
+			expected: `{"content":[{"type":"image","source":{"data":"[IMAGE_STRIPPED]"}},{"type":"image","source":{"data":"[IMAGE_STRIPPED]"}}]}`,
+		},
+		{
+			name:     "handles JSON with no images",
+			input:    `{"type":"text","content":"Hello world"}`,
+			expected: `{"type":"text","content":"Hello world"}`,
+		},
+		{
+			name:     "handles empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripBase64Images(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected:\n%s\n\nGot:\n%s", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestProductionLogParsingWithImageStripping(t *testing.T) {
+	// This test verifies that the production log with large images can be parsed
+	// after image stripping, without needing a huge buffer
+	logFilePath := "fixtures/claude-session-with-image.log"
+
+	content, err := os.ReadFile(logFilePath)
+	if err != nil {
+		t.Skipf("Production log file not found at %s: %v", logFilePath, err)
+		return
+	}
+
+	// First verify that the log contains large base64 data
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "iVBORw0KGgo") {
+		t.Skip("Production log doesn't contain expected image data")
+	}
+
+	// Strip images and verify the output is much smaller
+	stripped := stripBase64Images(contentStr)
+	reductionPercent := 100 * (1.0 - float64(len(stripped))/float64(len(content)))
+	t.Logf("Image stripping reduced size by %.1f%% (%d -> %d bytes)",
+		reductionPercent, len(content), len(stripped))
+
+	if len(stripped) >= len(content) {
+		t.Error("Expected stripped content to be smaller than original")
+	}
+
+	// Verify stripped content can still be parsed successfully
+	messages, err := MapClaudeOutputToMessages(contentStr)
+	if err != nil {
+		t.Fatalf("Failed to parse log after image stripping: %v", err)
+	}
+
+	if len(messages) == 0 {
+		t.Error("Expected to parse some messages")
+	}
+
+	t.Logf("Successfully parsed %d messages after image stripping", len(messages))
 }
