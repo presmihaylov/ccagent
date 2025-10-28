@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.0.16] - 2025-10-28
+
+### Features
+
+- Add thread context support for conversations ([#30](https://github.com/presmihaylov/ccagent/pull/30))
+  - Implements thread context tracking for multi-turn conversations
+  - Improves conversation continuity and context management
+  - Enhances agent's ability to maintain conversation state
+  - Enables better handling of complex, multi-message interactions
+
 ## [v0.0.15] - 2025-10-23
 
 ### Features
