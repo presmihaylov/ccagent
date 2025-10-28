@@ -23,12 +23,19 @@ type MessageAttachment struct {
 	AttachmentID string `json:"attachment_id"` // ID of attachment stored in database
 }
 
+// PreviousMessage represents a message from the thread history
+type PreviousMessage struct {
+	Message     string              `json:"message"`
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
+}
+
 type StartConversationPayload struct {
 	JobID              string              `json:"job_id"`
 	Message            string              `json:"message"`
 	ProcessedMessageID string              `json:"processed_message_id"`
 	MessageLink        string              `json:"message_link"`
 	Attachments        []MessageAttachment `json:"attachments,omitempty"`
+	PreviousMessages   []PreviousMessage   `json:"previous_messages,omitempty"`
 }
 
 type StartConversationResponsePayload struct {

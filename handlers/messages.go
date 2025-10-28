@@ -67,6 +67,104 @@ func (mh *MessageHandler) processAttachmentsForPrompt(
 	return paths, attachmentText, nil
 }
 
+// formatThreadContext creates a preamble for the prompt that includes previous messages from the thread
+func (mh *MessageHandler) formatThreadContext(
+	previousMessages []models.PreviousMessage,
+	currentMessage string,
+	currentAttachments []models.MessageAttachment,
+	sessionID string,
+) (fullPrompt string, allAttachmentPaths []string, err error) {
+	if len(previousMessages) == 0 {
+		// No thread context, just process current message attachments
+		var attachmentText string
+		var attachmentIDs []string
+		for _, att := range currentAttachments {
+			attachmentIDs = append(attachmentIDs, att.AttachmentID)
+		}
+
+		allAttachmentPaths, attachmentText, err = mh.processAttachmentsForPrompt(attachmentIDs, sessionID)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to process current message attachments: %w", err)
+		}
+
+		if attachmentText != "" {
+			fullPrompt = currentMessage + "\n" + attachmentText
+		} else {
+			fullPrompt = currentMessage
+		}
+		return fullPrompt, allAttachmentPaths, nil
+	}
+
+	// Build thread context with previous messages
+	var builder strings.Builder
+	builder.WriteString("THREAD CONTEXT: You are being asked to respond in the context of an ongoing conversation thread. ")
+	builder.WriteString("Below are the previous messages in this thread for context, followed by the latest message you should respond to.\n\n")
+
+	// Add previous messages
+	builder.WriteString("Previous messages in thread:\n")
+	builder.WriteString("---\n")
+
+	attachmentIndex := 0
+	for i, prevMsg := range previousMessages {
+		builder.WriteString(fmt.Sprintf("Message %d:\n", i+1))
+		builder.WriteString(prevMsg.Message)
+		builder.WriteString("\n")
+
+		// Process attachments for previous messages
+		if len(prevMsg.Attachments) > 0 {
+			var prevAttachmentIDs []string
+			for _, att := range prevMsg.Attachments {
+				prevAttachmentIDs = append(prevAttachmentIDs, att.AttachmentID)
+			}
+
+			prevPaths, prevAttachmentText, err := mh.processAttachmentsForPrompt(prevAttachmentIDs, sessionID)
+			if err != nil {
+				return "", nil, fmt.Errorf("failed to process attachments for previous message %d: %w", i+1, err)
+			}
+
+			if prevAttachmentText != "" {
+				builder.WriteString(prevAttachmentText)
+			}
+
+			allAttachmentPaths = append(allAttachmentPaths, prevPaths...)
+			attachmentIndex += len(prevPaths)
+		}
+
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString("---\n\n")
+
+	// Add current message
+	builder.WriteString("LATEST MESSAGE (respond to this):\n")
+	builder.WriteString(currentMessage)
+	builder.WriteString("\n")
+
+	// Process current message attachments
+	if len(currentAttachments) > 0 {
+		var currentAttachmentIDs []string
+		for _, att := range currentAttachments {
+			currentAttachmentIDs = append(currentAttachmentIDs, att.AttachmentID)
+		}
+
+		currentPaths, currentAttachmentText, err := mh.processAttachmentsForPrompt(currentAttachmentIDs, sessionID)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to process current message attachments: %w", err)
+		}
+
+		if currentAttachmentText != "" {
+			builder.WriteString(currentAttachmentText)
+		}
+
+		allAttachmentPaths = append(allAttachmentPaths, currentPaths...)
+	}
+
+	builder.WriteString("\n")
+	builder.WriteString("Please respond to the LATEST MESSAGE above, using the previous messages as context only if they are relevant to your response.")
+
+	return builder.String(), allAttachmentPaths, nil
+}
+
 func (mh *MessageHandler) HandleMessage(msg models.BaseMessage) {
 	switch msg.Type {
 	case models.MessageTypeStartConversation:
@@ -162,31 +260,26 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		systemPrompt = GetCursorSystemPrompt()
 	}
 
-	// Process attachments and build final prompt
+	// Process thread context (previous messages) and attachments
 	attachmentSessionID := fmt.Sprintf("job_%s", payload.JobID)
 
-	// Extract attachment IDs from MessageAttachment array
-	var attachmentIDs []string
-	for _, att := range payload.Attachments {
-		attachmentIDs = append(attachmentIDs, att.AttachmentID)
-	}
-
-	attachmentPaths, attachmentText, err := mh.processAttachmentsForPrompt(
-		attachmentIDs,
+	finalPrompt, attachmentPaths, err := mh.formatThreadContext(
+		payload.PreviousMessages,
+		payload.Message,
+		payload.Attachments,
 		attachmentSessionID,
 	)
 	if err != nil {
-		log.Error("❌ Failed to process attachments: %v", err)
-		return fmt.Errorf("failed to process attachments: %w", err)
+		log.Error("❌ Failed to format thread context: %v", err)
+		return fmt.Errorf("failed to format thread context: %w", err)
 	}
 
 	if len(attachmentPaths) > 0 {
 		log.Info("✅ Processed %d attachments: %v", len(attachmentPaths), attachmentPaths)
 	}
 
-	finalPrompt := payload.Message
-	if attachmentText != "" {
-		finalPrompt = payload.Message + "\n" + attachmentText
+	if len(payload.PreviousMessages) > 0 {
+		log.Info("📝 Formatted thread context with %d previous messages", len(payload.PreviousMessages))
 	}
 
 	claudeResult, err := mh.claudeService.StartNewConversationWithSystemPrompt(finalPrompt, systemPrompt)
