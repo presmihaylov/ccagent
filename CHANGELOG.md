@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.0.17] - 2025-10-29
+
+### Features
+
+- Add token management with auto-refresh ([#31](https://github.com/presmihaylov/ccagent/pull/31))
+  - Implements automatic OAuth token refreshing
+  - Improves authentication reliability
+  - Reduces manual token management overhead
+  - Enhances long-running agent stability
+
 ## [v0.0.16] - 2025-10-28
 
 ### Features
