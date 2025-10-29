@@ -1,3 +1,13 @@
+## [v0.0.19] - 2025-10-29
+
+### Bugfixes
+
+- Always sync token to environment manager ([#34](https://github.com/presmihaylov/ccagent/pull/34))
+  - Ensures OAuth tokens are always synchronized to the environment manager
+  - Fixes token sync inconsistencies that could cause authentication failures
+  - Improves reliability of token management across agent lifecycle
+  - Enhances stability for long-running agent instances
+
 ## [v0.0.18] - 2025-10-29
 
 ### Features
