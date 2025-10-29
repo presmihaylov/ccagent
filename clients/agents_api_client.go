@@ -14,6 +14,13 @@ type AttachmentResponse struct {
 	Data string `json:"data"` // Base64-encoded content
 }
 
+// TokenResponse represents the API response for token operations
+type TokenResponse struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+	EnvKey    string    `json:"env_key"`
+}
+
 // AgentsApiClient handles API requests to the Claude Control agents API
 type AgentsApiClient struct {
 	apiKey  string
@@ -64,4 +71,72 @@ func (c *AgentsApiClient) FetchAttachment(attachmentID string) (*AttachmentRespo
 	}
 
 	return &attachmentResp, nil
+}
+
+// FetchToken retrieves the current Anthropic token for the authenticated organization
+func (c *AgentsApiClient) FetchToken() (*TokenResponse, error) {
+	url := fmt.Sprintf("%s/api/agents/token", c.baseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add Bearer token authentication header
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for successful response
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Parse response
+	var tokenResp TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &tokenResp, nil
+}
+
+// RefreshToken refreshes an OAuth token and gets a new access token
+func (c *AgentsApiClient) RefreshToken() (*TokenResponse, error) {
+	url := fmt.Sprintf("%s/api/agents/token/refresh", c.baseURL)
+
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add Bearer token authentication header
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for successful response
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Parse response
+	var tokenResp TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &tokenResp, nil
 }

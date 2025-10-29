@@ -51,6 +51,26 @@ type CmdRunner struct {
 	instantWorkerPool  *workerpool.WorkerPool
 }
 
+// fetchAndSetToken fetches the token from API and sets it as environment variable
+func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient) error {
+	log.Info("🔑 Fetching Anthropic token from API...")
+
+	tokenResp, err := agentsApiClient.FetchToken()
+	if err != nil {
+		return fmt.Errorf("failed to fetch token: %w", err)
+	}
+
+	// Set the token as environment variable
+	if err := os.Setenv(tokenResp.EnvKey, tokenResp.Token); err != nil {
+		return fmt.Errorf("failed to set environment variable %s: %w", tokenResp.EnvKey, err)
+	}
+
+	log.Info("✅ Successfully fetched and set token (env key: %s, expires: %s)",
+		tokenResp.EnvKey, tokenResp.ExpiresAt.Format(time.RFC3339))
+
+	return nil
+}
+
 func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
@@ -98,6 +118,11 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	apiBaseURL := strings.TrimSuffix(wsURL, "/socketio/")
 	agentsApiClient := clients.NewAgentsApiClient(ccagentAPIKey, apiBaseURL)
 	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
+
+	// Fetch and set Anthropic token BEFORE initializing anything else
+	if err := fetchAndSetToken(agentsApiClient); err != nil {
+		return nil, fmt.Errorf("failed to fetch and set token: %w", err)
+	}
 
 	gitClient := clients.NewGitClient()
 
@@ -493,6 +518,11 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	defer pingCancel()
 	cr.startPingRoutine(pingCtx, socketClient, runtimeErrorChan)
 
+	// Start token monitoring routine
+	tokenCtx, tokenCancel := context.WithCancel(context.Background())
+	defer tokenCancel()
+	cr.startTokenMonitoringRoutine(tokenCtx, blockingWorkerPool)
+
 	// Wait for interrupt signal or runtime error
 	select {
 	case <-interrupt:
@@ -568,6 +598,33 @@ func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.
 					}
 					return
 				}
+			}
+		}
+	}()
+}
+
+func (cr *CmdRunner) startTokenMonitoringRoutine(ctx context.Context, blockingWorkerPool *workerpool.WorkerPool) {
+	log.Info("🔑 Starting token monitoring routine (checks every 10 minutes)")
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("🔑 Token monitoring routine stopped")
+				return
+			case <-ticker.C:
+				log.Info("🔍 Checking token expiration...")
+				// Schedule token refresh check on blocking queue
+				// This ensures it runs sequentially with other conversation messages
+				blockingWorkerPool.Submit(func() {
+					refreshMsg := models.BaseMessage{
+						ID:      core.NewID("msg"),
+						Type:    models.MessageTypeRefreshToken,
+						Payload: models.RefreshTokenPayload{},
+					}
+					cr.messageHandler.HandleMessage(refreshMsg)
+				})
 			}
 		}
 	}()

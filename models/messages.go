@@ -10,6 +10,7 @@ const (
 	MessageTypeProcessingMessage         = "processing_message_v1"
 	MessageTypeCheckIdleJobs             = "check_idle_jobs_v1"
 	MessageTypeJobComplete               = "job_complete_v1"
+	MessageTypeRefreshToken              = "refresh_token_internal_v1"
 )
 
 type BaseMessage struct {
@@ -75,4 +76,8 @@ type CheckIdleJobsPayload struct {
 type JobCompletePayload struct {
 	JobID  string `json:"job_id"`
 	Reason string `json:"reason"`
+}
+
+type RefreshTokenPayload struct {
+	// Empty payload - just triggers token refresh
 }
