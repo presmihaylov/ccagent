@@ -272,3 +272,9 @@ func (c *CursorService) handleCursorClientError(err error, operation string) err
 func (c *CursorService) AgentName() string {
 	return "cursor"
 }
+
+// FetchAndRefreshAgentTokens is a no-op for Cursor since it doesn't require token management
+func (c *CursorService) FetchAndRefreshAgentTokens() error {
+	// Cursor doesn't require token management, so this is a no-op
+	return nil
+}

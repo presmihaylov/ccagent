@@ -18,7 +18,7 @@ func TestNewClaudeService(t *testing.T) {
 	mockClient := &services.MockClaudeClient{}
 	logDir := "/tmp/test-logs"
 
-	service := NewClaudeService(mockClient, logDir)
+	service := NewClaudeService(mockClient, logDir, nil, nil)
 
 	if service.claudeClient != mockClient {
 		t.Error("Expected claude client to be set correctly")
@@ -92,7 +92,7 @@ func TestClaudeService_StartNewConversation(t *testing.T) {
 				},
 			}
 
-			service := NewClaudeService(mockClient, tmpDir)
+			service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 			// Execute
 			result, err := service.StartNewConversation(tt.prompt)
@@ -173,7 +173,7 @@ func TestClaudeService_StartNewConversationWithSystemPrompt(t *testing.T) {
 				},
 			}
 
-			service := NewClaudeService(mockClient, tmpDir)
+			service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 			// Execute
 			result, err := service.StartNewConversationWithSystemPrompt(tt.prompt, tt.systemPrompt)
@@ -254,7 +254,7 @@ func TestClaudeService_ContinueConversation(t *testing.T) {
 				},
 			}
 
-			service := NewClaudeService(mockClient, tmpDir)
+			service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 			// Execute
 			result, err := service.ContinueConversation(tt.sessionID, tt.prompt)
@@ -290,7 +290,7 @@ func TestClaudeService_writeClaudeSessionLog(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	service := NewClaudeService(mockClient, tmpDir)
+	service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 	rawOutput := "Test Claude session output"
 	logPath, err := service.writeClaudeSessionLog(rawOutput)
@@ -326,7 +326,7 @@ func TestClaudeService_CleanupOldLogs(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	service := NewClaudeService(mockClient, tmpDir)
+	service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 	// Create some test log files with different ages
 	now := time.Now()
@@ -386,7 +386,7 @@ func TestClaudeService_CleanupOldLogs_InvalidMaxAge(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	service := NewClaudeService(mockClient, tmpDir)
+	service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 	// Test invalid maxAgeDays values
 	invalidValues := []int{0, -1, -10}
@@ -400,7 +400,7 @@ func TestClaudeService_CleanupOldLogs_InvalidMaxAge(t *testing.T) {
 
 func TestClaudeService_CleanupOldLogs_NonExistentDirectory(t *testing.T) {
 	mockClient := &services.MockClaudeClient{}
-	service := NewClaudeService(mockClient, "/non/existent/directory")
+	service := NewClaudeService(mockClient, "/non/existent/directory", nil, nil)
 
 	// Should not return error for non-existent directory (it's a no-op)
 	err := service.CleanupOldLogs(7)
@@ -411,7 +411,7 @@ func TestClaudeService_CleanupOldLogs_NonExistentDirectory(t *testing.T) {
 
 func TestClaudeService_extractSessionID(t *testing.T) {
 	mockClient := &services.MockClaudeClient{}
-	service := NewClaudeService(mockClient, "/tmp")
+	service := NewClaudeService(mockClient, "/tmp", nil, nil)
 
 	tests := []struct {
 		name     string
@@ -456,7 +456,7 @@ func TestClaudeService_extractSessionID(t *testing.T) {
 
 func TestClaudeService_extractClaudeResult(t *testing.T) {
 	mockClient := &services.MockClaudeClient{}
-	service := NewClaudeService(mockClient, "/tmp")
+	service := NewClaudeService(mockClient, "/tmp", nil, nil)
 
 	tests := []struct {
 		name        string
@@ -542,7 +542,7 @@ func TestClaudeService_handleClaudeClientError(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	service := NewClaudeService(mockClient, tmpDir)
+	service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 	tests := []struct {
 		name            string
@@ -622,7 +622,7 @@ func TestClaudeService_ParseErrorHandling(t *testing.T) {
 		},
 	}
 
-	service := NewClaudeService(mockClient, tmpDir)
+	service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 	result, err := service.StartNewConversation("test")
 
@@ -664,7 +664,7 @@ func TestClaudeService_ActualParseError(t *testing.T) {
 		},
 	}
 
-	service := NewClaudeService(mockClient, tmpDir)
+	service := NewClaudeService(mockClient, tmpDir, nil, nil)
 
 	result, err := service.StartNewConversation("test")
 
@@ -693,7 +693,7 @@ func TestClaudeService_WriteErrorLogHandling(t *testing.T) {
 		},
 	}
 
-	service := NewClaudeService(mockClient, nonExistentDir)
+	service := NewClaudeService(mockClient, nonExistentDir, nil, nil)
 
 	// This should still work despite log write error
 	result, err := service.StartNewConversation("test")
