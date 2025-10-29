@@ -367,30 +367,40 @@ func (c *ClaudeService) FetchAndRefreshAgentTokens() error {
 
 	log.Info("🔍 Token expires in %v (expires at: %s)", expiresIn, tokenResp.ExpiresAt.Format(time.RFC3339))
 
+	var finalToken, finalEnvKey string
+	var finalExpiresAt time.Time
+
 	if expiresIn > oneHour {
 		log.Info("✅ Token does not need refresh yet (expires in %v)", expiresIn)
-		return nil
-	}
+		// Use existing token but still set it in environment (might have been updated elsewhere)
+		finalToken = tokenResp.Token
+		finalEnvKey = tokenResp.EnvKey
+		finalExpiresAt = tokenResp.ExpiresAt
+	} else {
+		log.Info("🔄 Token expires within 1 hour, refreshing...")
 
-	log.Info("🔄 Token expires within 1 hour, refreshing...")
-
-	// Refresh the token
-	newTokenResp, err := c.agentsApiClient.RefreshToken()
-	if err != nil {
-		log.Error("❌ Failed to refresh token: %v", err)
-		return fmt.Errorf("failed to refresh token: %w", err)
-	}
-
-	// Update environment variable with new token if envManager is configured
-	if c.envManager != nil {
-		if err := c.envManager.Set(newTokenResp.EnvKey, newTokenResp.Token); err != nil {
-			log.Error("❌ Failed to update environment variable %s: %v", newTokenResp.EnvKey, err)
-			return fmt.Errorf("failed to update environment variable %s: %w", newTokenResp.EnvKey, err)
+		// Refresh the token
+		newTokenResp, err := c.agentsApiClient.RefreshToken()
+		if err != nil {
+			log.Error("❌ Failed to refresh token: %v", err)
+			return fmt.Errorf("failed to refresh token: %w", err)
 		}
+
+		finalToken = newTokenResp.Token
+		finalEnvKey = newTokenResp.EnvKey
+		finalExpiresAt = newTokenResp.ExpiresAt
 	}
 
-	log.Info("✅ Successfully refreshed token (env key: %s, new expiration: %s)",
-		newTokenResp.EnvKey, newTokenResp.ExpiresAt.Format(time.RFC3339))
+	// Always update environment variable with token (whether refreshed or not)
+	// This ensures the environment is in sync even if token was updated independently
+	if c.envManager != nil {
+		if err := c.envManager.Set(finalEnvKey, finalToken); err != nil {
+			log.Error("❌ Failed to update environment variable %s: %v", finalEnvKey, err)
+			return fmt.Errorf("failed to update environment variable %s: %w", finalEnvKey, err)
+		}
+		log.Info("✅ Successfully set token in environment (env key: %s, expiration: %s)",
+			finalEnvKey, finalExpiresAt.Format(time.RFC3339))
+	}
 
 	return nil
 }
