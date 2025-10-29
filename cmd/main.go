@@ -52,7 +52,7 @@ type CmdRunner struct {
 }
 
 // fetchAndSetToken fetches the token from API and sets it as environment variable
-func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient) error {
+func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.EnvManager) error {
 	log.Info("🔑 Fetching Anthropic token from API...")
 
 	tokenResp, err := agentsApiClient.FetchToken()
@@ -60,8 +60,8 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient) error {
 		return fmt.Errorf("failed to fetch token: %w", err)
 	}
 
-	// Set the token as environment variable
-	if err := os.Setenv(tokenResp.EnvKey, tokenResp.Token); err != nil {
+	// Set the token as environment variable using EnvManager
+	if err := envManager.Set(tokenResp.EnvKey, tokenResp.Token); err != nil {
 		return fmt.Errorf("failed to set environment variable %s: %w", tokenResp.EnvKey, err)
 	}
 
@@ -120,7 +120,7 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
 
 	// Fetch and set Anthropic token BEFORE initializing anything else
-	if err := fetchAndSetToken(agentsApiClient); err != nil {
+	if err := fetchAndSetToken(agentsApiClient, envManager); err != nil {
 		return nil, fmt.Errorf("failed to fetch and set token: %w", err)
 	}
 
