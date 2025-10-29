@@ -234,10 +234,10 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	}
 	log.Info("🔄 Refreshed environment variables before starting conversation")
 
-	// Fetch and refresh Anthropic token before starting conversation
-	if err := mh.claudeService.FetchAndRefreshAnthropicToken(); err != nil {
-		log.Error("❌ Failed to fetch and refresh Anthropic token: %v", err)
-		return fmt.Errorf("failed to fetch and refresh Anthropic token: %w", err)
+	// Fetch and refresh agent tokens before starting conversation
+	if err := mh.claudeService.FetchAndRefreshAgentTokens(); err != nil {
+		log.Error("❌ Failed to fetch and refresh agent tokens: %v", err)
+		return fmt.Errorf("failed to fetch and refresh agent tokens: %w", err)
 	}
 
 	// Persist job state with message BEFORE calling Claude
@@ -429,10 +429,10 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	}
 	log.Info("🔄 Refreshed environment variables before continuing conversation")
 
-	// Fetch and refresh Anthropic token before continuing conversation
-	if err := mh.claudeService.FetchAndRefreshAnthropicToken(); err != nil {
-		log.Error("❌ Failed to fetch and refresh Anthropic token: %v", err)
-		return fmt.Errorf("failed to fetch and refresh Anthropic token: %w", err)
+	// Fetch and refresh agent tokens before continuing conversation
+	if err := mh.claudeService.FetchAndRefreshAgentTokens(); err != nil {
+		log.Error("❌ Failed to fetch and refresh agent tokens: %v", err)
+		return fmt.Errorf("failed to fetch and refresh agent tokens: %w", err)
 	}
 
 	// Persist updated message BEFORE calling Claude

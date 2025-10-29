@@ -27,7 +27,7 @@ type CLIAgent interface {
 	// (e.g., "claude" or "cursor") so callers can adapt behavior per agent
 	AgentName() string
 
-	// FetchAndRefreshAnthropicToken fetches and refreshes the Anthropic token if needed
+	// FetchAndRefreshAgentTokens fetches and refreshes agent tokens if needed
 	// This should be called before starting or continuing conversations
-	FetchAndRefreshAnthropicToken() error
+	FetchAndRefreshAgentTokens() error
 }

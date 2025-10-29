@@ -273,8 +273,8 @@ func (c *CursorService) AgentName() string {
 	return "cursor"
 }
 
-// FetchAndRefreshAnthropicToken is a no-op for Cursor since it doesn't use Anthropic tokens
-func (c *CursorService) FetchAndRefreshAnthropicToken() error {
-	// Cursor doesn't use Anthropic tokens, so this is a no-op
+// FetchAndRefreshAgentTokens is a no-op for Cursor since it doesn't require token management
+func (c *CursorService) FetchAndRefreshAgentTokens() error {
+	// Cursor doesn't require token management, so this is a no-op
 	return nil
 }

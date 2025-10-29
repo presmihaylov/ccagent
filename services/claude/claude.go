@@ -342,9 +342,9 @@ func (c *ClaudeService) AgentName() string {
 	return "claude"
 }
 
-// FetchAndRefreshAnthropicToken fetches the current token and refreshes it if needed
+// FetchAndRefreshAgentTokens fetches the current token and refreshes it if needed
 // This should be called before starting or continuing conversations
-func (c *ClaudeService) FetchAndRefreshAnthropicToken() error {
+func (c *ClaudeService) FetchAndRefreshAgentTokens() error {
 	// Skip if no API client configured (for backward compatibility)
 	if c.agentsApiClient == nil {
 		log.Debug("No agents API client configured, skipping token refresh")
