@@ -339,6 +339,11 @@ func main() {
 
 // startSocketIOClientWithRetry wraps startSocketIOClient with exponential backoff retry logic
 func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string) error {
+	// Start token monitoring routine independently (runs for app lifetime)
+	tokenCtx, tokenCancel := context.WithCancel(context.Background())
+	defer tokenCancel()
+	cr.startTokenMonitoringRoutine(tokenCtx, cr.blockingWorkerPool)
+
 	// Configure exponential backoff with unlimited retries
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 2 * time.Second
@@ -517,11 +522,6 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	pingCtx, pingCancel := context.WithCancel(context.Background())
 	defer pingCancel()
 	cr.startPingRoutine(pingCtx, socketClient, runtimeErrorChan)
-
-	// Start token monitoring routine
-	tokenCtx, tokenCancel := context.WithCancel(context.Background())
-	defer tokenCancel()
-	cr.startTokenMonitoringRoutine(tokenCtx, blockingWorkerPool)
 
 	// Wait for interrupt signal or runtime error
 	select {
