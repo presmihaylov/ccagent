@@ -112,6 +112,21 @@ func (em *EnvManager) Get(key string) string {
 	return os.Getenv(key)
 }
 
+func (em *EnvManager) Set(key, value string) error {
+	em.mu.Lock()
+	defer em.mu.Unlock()
+
+	// Update in-memory map
+	em.envVars[key] = value
+
+	// Update process environment
+	if err := os.Setenv(key, value); err != nil {
+		return fmt.Errorf("failed to set environment variable: %w", err)
+	}
+
+	return nil
+}
+
 func (em *EnvManager) Reload() error {
 	em.mu.Lock()
 	defer em.mu.Unlock()

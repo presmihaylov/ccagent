@@ -195,6 +195,10 @@ func (mh *MessageHandler) HandleMessage(msg models.BaseMessage) {
 		if err := mh.handleCheckIdleJobs(msg); err != nil {
 			log.Info("❌ Error handling CheckIdleJobs message: %v", err)
 		}
+	case models.MessageTypeRefreshToken:
+		if err := mh.handleRefreshToken(msg); err != nil {
+			log.Error("❌ Error handling RefreshToken message: %v", err)
+		}
 	default:
 		log.Info("⚠️ Unhandled message type: %s", msg.Type)
 	}
@@ -585,6 +589,49 @@ func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage) error {
 	}
 
 	log.Info("📋 Completed successfully - checked all jobs for idleness")
+	return nil
+}
+
+func (mh *MessageHandler) handleRefreshToken(msg models.BaseMessage) error {
+	log.Info("🔄 Starting to handle token refresh")
+
+	// Fetch current token to check expiration
+	tokenResp, err := mh.agentsApiClient.FetchToken()
+	if err != nil {
+		log.Error("❌ Failed to fetch current token: %v", err)
+		return fmt.Errorf("failed to fetch current token: %w", err)
+	}
+
+	// Check if token expires within 1 hour
+	now := time.Now()
+	expiresIn := tokenResp.ExpiresAt.Sub(now)
+	oneHour := 1 * time.Hour
+
+	log.Info("🔍 Token expires in %v (expires at: %s)", expiresIn, tokenResp.ExpiresAt.Format(time.RFC3339))
+
+	if expiresIn > oneHour {
+		log.Info("✅ Token does not need refresh yet (expires in %v)", expiresIn)
+		return nil
+	}
+
+	log.Info("🔄 Token expires within 1 hour, refreshing...")
+
+	// Refresh the token
+	newTokenResp, err := mh.agentsApiClient.RefreshToken()
+	if err != nil {
+		log.Error("❌ Failed to refresh token: %v", err)
+		return fmt.Errorf("failed to refresh token: %w", err)
+	}
+
+	// Update environment variable with new token
+	if err := mh.envManager.Set(newTokenResp.EnvKey, newTokenResp.Token); err != nil {
+		log.Error("❌ Failed to update environment variable %s: %v", newTokenResp.EnvKey, err)
+		return fmt.Errorf("failed to update environment variable %s: %w", newTokenResp.EnvKey, err)
+	}
+
+	log.Info("✅ Successfully refreshed token (env key: %s, new expiration: %s)",
+		newTokenResp.EnvKey, newTokenResp.ExpiresAt.Format(time.RFC3339))
+
 	return nil
 }
 
