@@ -1,6 +1,12 @@
-# Changelog
+## [v0.0.18] - 2025-10-29
 
-All notable changes to this project will be documented in this file.
+### Improvements
+
+- Decouple token monitoring from socketio retry ([#32](https://github.com/presmihaylov/ccagent/pull/32))
+  - Separates token refresh logic from WebSocket connection management
+  - Improves system reliability and error handling
+  - Reduces coupling between authentication and communication layers
+  - Enhances maintainability of token monitoring logic
 
 ## [v0.0.17] - 2025-10-29
 
