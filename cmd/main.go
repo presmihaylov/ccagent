@@ -298,6 +298,11 @@ func main() {
 	log.Info("🌐 WebSocket URL: %s", cmdRunner.wsURL)
 	log.Info("🔑 Agent ID: %s", cmdRunner.agentID)
 
+	// Start token monitoring routine independently (runs for app lifetime)
+	tokenCtx, tokenCancel := context.WithCancel(context.Background())
+	defer tokenCancel()
+	cmdRunner.startTokenMonitoringRoutine(tokenCtx, cmdRunner.blockingWorkerPool)
+
 	// Set up deferred cleanup
 	defer func() {
 		// Stop environment manager periodic refresh
@@ -517,11 +522,6 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	pingCtx, pingCancel := context.WithCancel(context.Background())
 	defer pingCancel()
 	cr.startPingRoutine(pingCtx, socketClient, runtimeErrorChan)
-
-	// Start token monitoring routine
-	tokenCtx, tokenCancel := context.WithCancel(context.Background())
-	defer tokenCancel()
-	cr.startTokenMonitoringRoutine(tokenCtx, blockingWorkerPool)
 
 	// Wait for interrupt signal or runtime error
 	select {
