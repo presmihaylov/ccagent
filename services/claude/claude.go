@@ -15,14 +15,28 @@ import (
 )
 
 type ClaudeService struct {
-	claudeClient clients.ClaudeClient
-	logDir       string
+	claudeClient    clients.ClaudeClient
+	logDir          string
+	agentsApiClient *clients.AgentsApiClient
+	envManager      EnvManager
 }
 
-func NewClaudeService(claudeClient clients.ClaudeClient, logDir string) *ClaudeService {
+// EnvManager defines the interface for environment variable management
+type EnvManager interface {
+	Set(key, value string) error
+}
+
+func NewClaudeService(
+	claudeClient clients.ClaudeClient,
+	logDir string,
+	agentsApiClient *clients.AgentsApiClient,
+	envManager EnvManager,
+) *ClaudeService {
 	return &ClaudeService{
-		claudeClient: claudeClient,
-		logDir:       logDir,
+		claudeClient:    claudeClient,
+		logDir:          logDir,
+		agentsApiClient: agentsApiClient,
+		envManager:      envManager,
 	}
 }
 
@@ -326,4 +340,57 @@ func (c *ClaudeService) handleClaudeClientError(err error, operation string) err
 // AgentName identifies this service implementation
 func (c *ClaudeService) AgentName() string {
 	return "claude"
+}
+
+// FetchAndRefreshAnthropicToken fetches the current token and refreshes it if needed
+// This should be called before starting or continuing conversations
+func (c *ClaudeService) FetchAndRefreshAnthropicToken() error {
+	// Skip if no API client configured (for backward compatibility)
+	if c.agentsApiClient == nil {
+		log.Debug("No agents API client configured, skipping token refresh")
+		return nil
+	}
+
+	log.Info("🔄 Fetching Anthropic token before Claude operation")
+
+	// Fetch current token to check expiration
+	tokenResp, err := c.agentsApiClient.FetchToken()
+	if err != nil {
+		log.Error("❌ Failed to fetch current token: %v", err)
+		return fmt.Errorf("failed to fetch current token: %w", err)
+	}
+
+	// Check if token expires within 1 hour
+	now := time.Now()
+	expiresIn := tokenResp.ExpiresAt.Sub(now)
+	oneHour := 1 * time.Hour
+
+	log.Info("🔍 Token expires in %v (expires at: %s)", expiresIn, tokenResp.ExpiresAt.Format(time.RFC3339))
+
+	if expiresIn > oneHour {
+		log.Info("✅ Token does not need refresh yet (expires in %v)", expiresIn)
+		return nil
+	}
+
+	log.Info("🔄 Token expires within 1 hour, refreshing...")
+
+	// Refresh the token
+	newTokenResp, err := c.agentsApiClient.RefreshToken()
+	if err != nil {
+		log.Error("❌ Failed to refresh token: %v", err)
+		return fmt.Errorf("failed to refresh token: %w", err)
+	}
+
+	// Update environment variable with new token if envManager is configured
+	if c.envManager != nil {
+		if err := c.envManager.Set(newTokenResp.EnvKey, newTokenResp.Token); err != nil {
+			log.Error("❌ Failed to update environment variable %s: %v", newTokenResp.EnvKey, err)
+			return fmt.Errorf("failed to update environment variable %s: %w", newTokenResp.EnvKey, err)
+		}
+	}
+
+	log.Info("✅ Successfully refreshed token (env key: %s, new expiration: %s)",
+		newTokenResp.EnvKey, newTokenResp.ExpiresAt.Format(time.RFC3339))
+
+	return nil
 }

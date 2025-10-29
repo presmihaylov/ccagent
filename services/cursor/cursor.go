@@ -272,3 +272,9 @@ func (c *CursorService) handleCursorClientError(err error, operation string) err
 func (c *CursorService) AgentName() string {
 	return "cursor"
 }
+
+// FetchAndRefreshAnthropicToken is a no-op for Cursor since it doesn't use Anthropic tokens
+func (c *CursorService) FetchAndRefreshAnthropicToken() error {
+	// Cursor doesn't use Anthropic tokens, so this is a no-op
+	return nil
+}

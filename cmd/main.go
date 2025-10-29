@@ -81,20 +81,7 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	}
 	logDir := filepath.Join(configDir, "logs")
 
-	// Create the appropriate CLI agent service
-	cliAgent, err := createCLIAgent(agentType, permissionMode, cursorModel, logDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CLI agent: %w", err)
-	}
-
-	// Cleanup old session logs (older than 7 days)
-	err = cliAgent.CleanupOldLogs(7)
-	if err != nil {
-		log.Error("Warning: Failed to cleanup old session logs: %v", err)
-		// Don't exit - this is not critical for agent operation
-	}
-
-	// Initialize environment manager
+	// Initialize environment manager first
 	envManager, err := env.NewEnvManager()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create environment manager: %w", err)
@@ -122,6 +109,19 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 	// Fetch and set Anthropic token BEFORE initializing anything else
 	if err := fetchAndSetToken(agentsApiClient, envManager); err != nil {
 		return nil, fmt.Errorf("failed to fetch and set token: %w", err)
+	}
+
+	// Create the appropriate CLI agent service (now with all dependencies available)
+	cliAgent, err := createCLIAgent(agentType, permissionMode, cursorModel, logDir, agentsApiClient, envManager)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CLI agent: %w", err)
+	}
+
+	// Cleanup old session logs (older than 7 days)
+	err = cliAgent.CleanupOldLogs(7)
+	if err != nil {
+		log.Error("Warning: Failed to cleanup old session logs: %v", err)
+		// Don't exit - this is not critical for agent operation
 	}
 
 	gitClient := clients.NewGitClient()
@@ -179,11 +179,15 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 }
 
 // createCLIAgent creates the appropriate CLI agent based on the agent type
-func createCLIAgent(agentType, permissionMode, cursorModel, logDir string) (services.CLIAgent, error) {
+func createCLIAgent(
+	agentType, permissionMode, cursorModel, logDir string,
+	agentsApiClient *clients.AgentsApiClient,
+	envManager *env.EnvManager,
+) (services.CLIAgent, error) {
 	switch agentType {
 	case "claude":
 		claudeClient := claudeclient.NewClaudeClient(permissionMode)
-		return claudeservice.NewClaudeService(claudeClient, logDir), nil
+		return claudeservice.NewClaudeService(claudeClient, logDir, agentsApiClient, envManager), nil
 	case "cursor":
 		cursorClient := cursorclient.NewCursorClient()
 		return cursorservice.NewCursorService(cursorClient, logDir, cursorModel), nil
