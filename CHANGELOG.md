@@ -1,5 +1,13 @@
 ## [v0.0.18] - 2025-10-29
 
+### Features
+
+- Refresh tokens before conversations ([#33](https://github.com/presmihaylov/ccagent/pull/33))
+  - Ensures OAuth tokens are refreshed before starting new conversations
+  - Prevents mid-conversation authentication failures
+  - Improves reliability for long-running agents
+  - Enhances user experience with seamless authentication
+
 ### Improvements
 
 - Decouple token monitoring from socketio retry ([#32](https://github.com/presmihaylov/ccagent/pull/32))
