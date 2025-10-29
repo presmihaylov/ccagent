@@ -393,14 +393,12 @@ func (c *ClaudeService) FetchAndRefreshAgentTokens() error {
 
 	// Always update environment variable with token (whether refreshed or not)
 	// This ensures the environment is in sync even if token was updated independently
-	if c.envManager != nil {
-		if err := c.envManager.Set(finalEnvKey, finalToken); err != nil {
-			log.Error("❌ Failed to update environment variable %s: %v", finalEnvKey, err)
-			return fmt.Errorf("failed to update environment variable %s: %w", finalEnvKey, err)
-		}
-		log.Info("✅ Successfully set token in environment (env key: %s, expiration: %s)",
-			finalEnvKey, finalExpiresAt.Format(time.RFC3339))
+	if err := c.envManager.Set(finalEnvKey, finalToken); err != nil {
+		log.Error("❌ Failed to update environment variable %s: %v", finalEnvKey, err)
+		return fmt.Errorf("failed to update environment variable %s: %w", finalEnvKey, err)
 	}
+	log.Info("✅ Successfully set token in environment (env key: %s, expiration: %s)",
+		finalEnvKey, finalExpiresAt.Format(time.RFC3339))
 
 	return nil
 }
