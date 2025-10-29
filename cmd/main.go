@@ -298,6 +298,11 @@ func main() {
 	log.Info("🌐 WebSocket URL: %s", cmdRunner.wsURL)
 	log.Info("🔑 Agent ID: %s", cmdRunner.agentID)
 
+	// Start token monitoring routine independently (runs for app lifetime)
+	tokenCtx, tokenCancel := context.WithCancel(context.Background())
+	defer tokenCancel()
+	cmdRunner.startTokenMonitoringRoutine(tokenCtx, cmdRunner.blockingWorkerPool)
+
 	// Set up deferred cleanup
 	defer func() {
 		// Stop environment manager periodic refresh
@@ -339,11 +344,6 @@ func main() {
 
 // startSocketIOClientWithRetry wraps startSocketIOClient with exponential backoff retry logic
 func (cr *CmdRunner) startSocketIOClientWithRetry(serverURLStr, apiKey string) error {
-	// Start token monitoring routine independently (runs for app lifetime)
-	tokenCtx, tokenCancel := context.WithCancel(context.Background())
-	defer tokenCancel()
-	cr.startTokenMonitoringRoutine(tokenCtx, cr.blockingWorkerPool)
-
 	// Configure exponential backoff with unlimited retries
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 2 * time.Second
