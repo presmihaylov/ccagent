@@ -12,6 +12,13 @@ type CursorOptions struct {
 	Model        string
 }
 
+// CodexOptions contains optional parameters for Codex CLI interactions
+type CodexOptions struct {
+	Model     string // GPT-5 or other model
+	Sandbox   string // "workspace-write", "danger-full-access", "read-only"
+	WebSearch bool   // Enable --search flag
+}
+
 // ClaudeClient defines the interface for Claude CLI interactions
 type ClaudeClient interface {
 	StartNewSession(prompt string, options *ClaudeOptions) (string, error)
@@ -22,4 +29,10 @@ type ClaudeClient interface {
 type CursorClient interface {
 	StartNewSession(prompt string, options *CursorOptions) (string, error)
 	ContinueSession(sessionID, prompt string, options *CursorOptions) (string, error)
+}
+
+// CodexClient defines the interface for Codex CLI interactions
+type CodexClient interface {
+	StartNewSession(prompt string, options *CodexOptions) (string, error)
+	ContinueSession(threadID, prompt string, options *CodexOptions) (string, error)
 }
