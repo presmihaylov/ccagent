@@ -96,7 +96,7 @@ ccagent [OPTIONS]
 
 Options:
   --agent=[claude|cursor]              AI assistant to use (default: claude)
-  --claude-bypass-permissions          Use bypassPermissions for Claude (sandbox only)
+  --bypass-permissions                 Use bypassPermissions for Claude (sandbox only)
   --cursor-model=[gpt-5|sonnet-4|sonnet-4-thinking]  Model for Cursor agent
   -v, --version                        Show version information
   -h, --help                           Show help message
@@ -110,7 +110,7 @@ Options:
 ccagent --agent claude
 
 # Bypass permissions (Recommended in a secure sandbox environment only)
-ccagent --agent claude --claude-bypass-permissions
+ccagent --agent claude --bypass-permissions
 ```
 
 #### Cursor Agent
@@ -163,7 +163,7 @@ ccagent operates in different permission modes depending on the AI assistant and
 - **Best Practice**: Use this mode when running ccagent on your local development machine
 
 ### Bypass Permissions Mode
-- **Claude Code with `--claude-bypass-permissions`**: Allows unrestricted system access
+- **Claude Code with `--bypass-permissions`**: Allows unrestricted system access
 - **Cursor Agent**: **Always runs in bypass mode by default**
 
 When running in bypass permissions mode, **anyone with access to your Slack workspace or Discord server can execute arbitrary commands on your system with your user privileges**. It's recommended that you use this mode only if you're running the agent in a secure environment like a docker container or a remote, isolated server.
@@ -179,4 +179,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
-
