@@ -1,3 +1,19 @@
+## [v0.0.20] - 2025-11-08
+
+### Features
+
+- Add support for codex ([#37](https://github.com/presmihaylov/ccagent/pull/37))
+  - Integrates codex functionality for enhanced code analysis
+  - Expands agent capabilities with advanced code understanding
+  - Improves code-related task performance
+
+### Improvements
+
+- Add skill-creator from anthropics/skills
+  - Includes skill-creator skill for creating custom skills
+  - Enables users to extend agent capabilities
+  - Provides guided workflow for skill development
+
 ## [v0.0.19] - 2025-10-29
 
 ### Bugfixes
