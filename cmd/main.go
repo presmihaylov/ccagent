@@ -20,6 +20,7 @@ import (
 
 	"ccagent/clients"
 	claudeclient "ccagent/clients/claude"
+	codexclient "ccagent/clients/codex"
 	cursorclient "ccagent/clients/cursor"
 	"ccagent/core"
 	"ccagent/core/env"
@@ -28,6 +29,7 @@ import (
 	"ccagent/models"
 	"ccagent/services"
 	claudeservice "ccagent/services/claude"
+	codexservice "ccagent/services/codex"
 	cursorservice "ccagent/services/cursor"
 	"ccagent/usecases"
 	"ccagent/utils"
@@ -71,7 +73,7 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.
 	return nil
 }
 
-func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, error) {
+func NewCmdRunner(agentType, permissionMode, cursorModel, codexModel string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
 	// Create log directory for agent service
@@ -111,8 +113,14 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 		return nil, fmt.Errorf("failed to fetch and set token: %w", err)
 	}
 
+	// Get current working directory for Codex client
+	workDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
 	// Create the appropriate CLI agent service (now with all dependencies available)
-	cliAgent, err := createCLIAgent(agentType, permissionMode, cursorModel, logDir, agentsApiClient, envManager)
+	cliAgent, err := createCLIAgent(agentType, permissionMode, cursorModel, codexModel, logDir, workDir, agentsApiClient, envManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CLI agent: %w", err)
 	}
@@ -180,7 +188,7 @@ func NewCmdRunner(agentType, permissionMode, cursorModel string) (*CmdRunner, er
 
 // createCLIAgent creates the appropriate CLI agent based on the agent type
 func createCLIAgent(
-	agentType, permissionMode, cursorModel, logDir string,
+	agentType, permissionMode, cursorModel, codexModel, logDir, workDir string,
 	agentsApiClient *clients.AgentsApiClient,
 	envManager *env.EnvManager,
 ) (services.CLIAgent, error) {
@@ -191,6 +199,9 @@ func createCLIAgent(
 	case "cursor":
 		cursorClient := cursorclient.NewCursorClient()
 		return cursorservice.NewCursorService(cursorClient, logDir, cursorModel), nil
+	case "codex":
+		codexClient := codexclient.NewCodexClient(permissionMode, workDir)
+		return codexservice.NewCodexService(codexClient, logDir, codexModel), nil
 	default:
 		return nil, fmt.Errorf("unsupported agent type: %s", agentType)
 	}
@@ -198,9 +209,10 @@ func createCLIAgent(
 
 type Options struct {
 	//nolint
-	Agent             string `long:"agent" description:"CLI agent to use (claude or cursor)" choice:"claude" choice:"cursor" default:"claude"`
-	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude (only applies when --agent=claude) (WARNING: Only use in controlled sandbox environments)"`
+	Agent             string `long:"agent" description:"CLI agent to use (claude, cursor, or codex)" choice:"claude" choice:"cursor" choice:"codex" default:"claude"`
+	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
 	CursorModel       string `long:"cursor-model" description:"Model to use with Cursor agent (only applies when --agent=cursor)" choice:"gpt-5" choice:"sonnet-4" choice:"sonnet-4-thinking"`
+	CodexModel        string `long:"codex-model" description:"Model to use with Codex agent (only applies when --agent=codex)" default:"gpt-5"`
 	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
@@ -237,6 +249,9 @@ func main() {
 	if opts.Agent == "cursor" && opts.CursorModel != "" {
 		log.Info("⚙️  Cursor model: %s", opts.CursorModel)
 	}
+	if opts.Agent == "codex" && opts.CodexModel != "" {
+		log.Info("⚙️  Codex model: %s", opts.CodexModel)
+	}
 	cwd, err := os.Getwd()
 	if err == nil {
 		log.Info("📁 Working directory: %s", cwd)
@@ -271,7 +286,7 @@ func main() {
 		)
 	}
 
-	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.CursorModel)
+	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.CursorModel, opts.CodexModel)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing CmdRunner: %v\n", err)
 		os.Exit(1)
