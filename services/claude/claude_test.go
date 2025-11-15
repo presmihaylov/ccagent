@@ -561,11 +561,11 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 						Content json.RawMessage `json:"content"`
 					}{
 						Role:    "user",
-						Content: json.RawMessage(`"Can you list all the database columns?"`),
+						Content: json.RawMessage(`"Can you provide a detailed breakdown?"`),
 					},
 					SessionID: "session_edge",
 				},
-				// Detailed table breakdown (>2000 chars) with tool_use
+				// Large detailed response (>2000 chars)
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
@@ -578,8 +578,8 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 						Type:       "message",
 						StopReason: "tool_use",
 						Content: []json.RawMessage{
-							// 2500+ character detailed breakdown
-							json.RawMessage(`{"type":"text","text":"Here is the complete database schema breakdown:\n\n## Table 1: users\n### Columns (5)\n- id: bigint, PRIMARY KEY, NOT NULL\n- email: varchar(255), UNIQUE, NOT NULL\n- name: varchar(100), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- UNIQUE INDEX (email)\n- INDEX (created_at)\n\n## Table 2: orders\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- user_id: bigint, FOREIGN KEY → users(id), NOT NULL\n- amount: decimal(10,2), NOT NULL\n- status: varchar(50), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- FOREIGN KEY (user_id)\n- INDEX (status)\n- INDEX (created_at)\n\n## Table 3: products\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- name: varchar(200), NOT NULL\n- description: text\n- price: decimal(10,2), NOT NULL\n- stock: integer, DEFAULT 0, NOT NULL\n- created_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- INDEX (name)\n- INDEX (price)\n\n## Summary\n- Total tables: 3\n- Total columns: 17 (excluding timestamps)\n- Total indexes: 11\n- Total foreign keys: 1\n\nAll tables follow standard naming conventions with created_at/updated_at timestamps."}`),
+							// Large response (2500+ chars) - generic Lorem Ipsum style content
+							json.RawMessage(`{"type":"text","text":"Here is the comprehensive analysis you requested:\n\n## Section A: Overview\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\n### Subsection A.1: First Component\n- Item alpha: Configuration parameter set to value X\n- Item beta: Configuration parameter set to value Y\n- Item gamma: Configuration parameter set to value Z\n- Item delta: Additional setting enabled\n- Item epsilon: Additional setting disabled\n\n### Subsection A.2: Second Component\n- Property one: Enabled for processing\n- Property two: Disabled for security\n- Property three: Set to default value\n- Property four: Customized setting\n- Property five: Auto-configured\n\n## Section B: Details\nDuis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident.\n\n### Subsection B.1: Configuration Items\n- Parameter A: Active status\n- Parameter B: Inactive status\n- Parameter C: Pending status\n- Parameter D: Completed status\n- Parameter E: Archived status\n- Parameter F: Processing status\n\n### Subsection B.2: Additional Settings\n- Setting one: Value configured\n- Setting two: Value configured\n- Setting three: Value configured\n- Setting four: Value configured\n- Setting five: Value configured\n- Setting six: Value configured\n\n## Section C: Summary\nSed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.\n\n### Key Metrics\n- Total items analyzed: 42\n- Configuration parameters: 18\n- Active settings: 12\n- Optimizations applied: 7\n\nAll configurations follow standard best practices and recommended patterns for optimal performance."}`),
 						},
 					},
 					SessionID: "session_edge",
@@ -591,11 +591,11 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 						Content json.RawMessage `json:"content"`
 					}{
 						Role:    "user",
-						Content: json.RawMessage(`[{"type":"tool_result","content":"17"}]`),
+						Content: json.RawMessage(`[{"type":"tool_result","content":"42"}]`),
 					},
 					SessionID: "session_edge",
 				},
-				// Brief confirmation (<400 chars)
+				// Brief confirmation
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
@@ -608,15 +608,15 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 						Type:       "message",
 						StopReason: "end_turn",
 						Content: []json.RawMessage{
-							json.RawMessage(`{"type":"text","text":"Perfect! 17 columns total across the 3 main database tables."}`),
+							json.RawMessage(`{"type":"text","text":"Perfect! Analysis complete with 42 items total."}`),
 						},
 					},
 					SessionID: "session_edge",
 				},
 			},
-			// Logic: First message (2500 chars) is 37x larger than second (67 chars)
-			// Since 37 > 5, should return BOTH: detailed breakdown + confirmation
-			expected:    "Here is the complete database schema breakdown:\n\n## Table 1: users\n### Columns (5)\n- id: bigint, PRIMARY KEY, NOT NULL\n- email: varchar(255), UNIQUE, NOT NULL\n- name: varchar(100), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- UNIQUE INDEX (email)\n- INDEX (created_at)\n\n## Table 2: orders\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- user_id: bigint, FOREIGN KEY → users(id), NOT NULL\n- amount: decimal(10,2), NOT NULL\n- status: varchar(50), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- FOREIGN KEY (user_id)\n- INDEX (status)\n- INDEX (created_at)\n\n## Table 3: products\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- name: varchar(200), NOT NULL\n- description: text\n- price: decimal(10,2), NOT NULL\n- stock: integer, DEFAULT 0, NOT NULL\n- created_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- INDEX (name)\n- INDEX (price)\n\n## Summary\n- Total tables: 3\n- Total columns: 17 (excluding timestamps)\n- Total indexes: 11\n- Total foreign keys: 1\n\nAll tables follow standard naming conventions with created_at/updated_at timestamps.\n\nPerfect! 17 columns total across the 3 main database tables.",
+			// Logic: First message (2500 chars) is 50x+ larger than second (50 chars)
+			// Since 50+ > 5, should return BOTH: detailed analysis + confirmation
+			expected:    "Here is the comprehensive analysis you requested:\n\n## Section A: Overview\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\n### Subsection A.1: First Component\n- Item alpha: Configuration parameter set to value X\n- Item beta: Configuration parameter set to value Y\n- Item gamma: Configuration parameter set to value Z\n- Item delta: Additional setting enabled\n- Item epsilon: Additional setting disabled\n\n### Subsection A.2: Second Component\n- Property one: Enabled for processing\n- Property two: Disabled for security\n- Property three: Set to default value\n- Property four: Customized setting\n- Property five: Auto-configured\n\n## Section B: Details\nDuis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident.\n\n### Subsection B.1: Configuration Items\n- Parameter A: Active status\n- Parameter B: Inactive status\n- Parameter C: Pending status\n- Parameter D: Completed status\n- Parameter E: Archived status\n- Parameter F: Processing status\n\n### Subsection B.2: Additional Settings\n- Setting one: Value configured\n- Setting two: Value configured\n- Setting three: Value configured\n- Setting four: Value configured\n- Setting five: Value configured\n- Setting six: Value configured\n\n## Section C: Summary\nSed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.\n\n### Key Metrics\n- Total items analyzed: 42\n- Configuration parameters: 18\n- Active settings: 12\n- Optimizations applied: 7\n\nAll configurations follow standard best practices and recommended patterns for optimal performance.\n\nPerfect! Analysis complete with 42 items total.",
 			expectError: false,
 		},
 		{
