@@ -514,6 +514,54 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 			expected:    "",
 			expectError: true,
 		},
+		{
+			name: "multiple assistant messages after user message - should collect all",
+			messages: []services.ClaudeMessage{
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`"What is the answer?"`),
+					},
+					SessionID: "session_123",
+				},
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID      string            `json:"id"`
+						Type    string            `json:"type"`
+						Content []json.RawMessage `json:"content"`
+					}{
+						ID:   "msg_detail",
+						Type: "message",
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"Here is the detailed answer with all the information you need."}`),
+						},
+					},
+					SessionID: "session_123",
+				},
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID      string            `json:"id"`
+						Type    string            `json:"type"`
+						Content []json.RawMessage `json:"content"`
+					}{
+						ID:   "msg_confirm",
+						Type: "message",
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"Hope this helps!"}`),
+						},
+					},
+					SessionID: "session_123",
+				},
+			},
+			expected:    "Here is the detailed answer with all the information you need.\n\nHope this helps!",
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {

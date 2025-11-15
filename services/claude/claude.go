@@ -249,23 +249,41 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
-	// Third priority: Fallback to assistant message (existing approach)
+	// Third priority: Collect ALL assistant messages after the last user message
+	// This handles cases where Claude sends multiple responses (detailed + confirmation)
+	var textParts []string
+	lastUserIndex := -1
+
+	// Find the last user message
 	for i := len(messages) - 1; i >= 0; i-- {
+		if _, ok := messages[i].(services.UserMessage); ok {
+			lastUserIndex = i
+			break
+		}
+	}
+
+	// Collect all assistant message text content after the last user message
+	for i := lastUserIndex + 1; i < len(messages); i++ {
 		if assistantMsg, ok := messages[i].(services.AssistantMessage); ok {
 			for _, contentRaw := range assistantMsg.Message.Content {
-				// Parse the content to check if it's a text content item
 				var contentItem struct {
 					Type string `json:"type"`
 					Text string `json:"text,omitempty"`
 				}
 				if err := json.Unmarshal(contentRaw, &contentItem); err == nil {
 					if contentItem.Type == "text" && contentItem.Text != "" {
-						return contentItem.Text, nil
+						textParts = append(textParts, contentItem.Text)
 					}
 				}
 			}
 		}
 	}
+
+	if len(textParts) > 0 {
+		// Join all text parts with double newline to separate multiple assistant messages
+		return strings.Join(textParts, "\n\n"), nil
+	}
+
 	return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")
 }
 
