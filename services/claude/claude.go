@@ -249,8 +249,8 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
-	// Third priority: Collect ALL assistant messages after the last user message
-	// This handles cases where Claude sends multiple responses (detailed + confirmation)
+	// Third priority: Collect assistant messages with stop_reason="end_turn" after last user message
+	// This filters out intermediate messages (stop_reason="tool_use") and only captures final responses
 	var textParts []string
 	lastUserIndex := -1
 
@@ -262,9 +262,16 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
-	// Collect all assistant message text content after the last user message
+	// Collect text content ONLY from assistant messages with stop_reason="end_turn"
+	// Messages with stop_reason="tool_use" are intermediate explanations before tool calls
 	for i := lastUserIndex + 1; i < len(messages); i++ {
 		if assistantMsg, ok := messages[i].(services.AssistantMessage); ok {
+			// Skip intermediate messages that will call tools
+			if assistantMsg.Message.StopReason == "tool_use" {
+				continue
+			}
+
+			// Collect text from final messages (end_turn)
 			for _, contentRaw := range assistantMsg.Message.Content {
 				var contentItem struct {
 					Type string `json:"type"`
@@ -280,7 +287,7 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 	}
 
 	if len(textParts) > 0 {
-		// Join all text parts with double newline to separate multiple assistant messages
+		// Join all text parts with double newline to separate multiple final assistant messages
 		return strings.Join(textParts, "\n\n"), nil
 	}
 

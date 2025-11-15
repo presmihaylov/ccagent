@@ -476,12 +476,14 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
-						ID      string            `json:"id"`
-						Type    string            `json:"type"`
-						Content []json.RawMessage `json:"content"`
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
 					}{
-						ID:   "msg_123",
-						Type: "message",
+						ID:         "msg_123",
+						Type:       "message",
+						StopReason: "end_turn",
 						Content: []json.RawMessage{
 							json.RawMessage(`{"type":"text","text":"Hello World!"}`),
 						},
@@ -515,7 +517,7 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "multiple assistant messages after user message - should collect all",
+			name: "multiple assistant messages - should only collect end_turn messages",
 			messages: []services.ClaudeMessage{
 				services.UserMessage{
 					Type: "user",
@@ -531,14 +533,16 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
-						ID      string            `json:"id"`
-						Type    string            `json:"type"`
-						Content []json.RawMessage `json:"content"`
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
 					}{
-						ID:   "msg_detail",
-						Type: "message",
+						ID:         "msg_intermediate",
+						Type:       "message",
+						StopReason: "tool_use", // Intermediate - will be skipped
 						Content: []json.RawMessage{
-							json.RawMessage(`{"type":"text","text":"Here is the detailed answer with all the information you need."}`),
+							json.RawMessage(`{"type":"text","text":"Let me check that for you..."}`),
 						},
 					},
 					SessionID: "session_123",
@@ -546,20 +550,22 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
-						ID      string            `json:"id"`
-						Type    string            `json:"type"`
-						Content []json.RawMessage `json:"content"`
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
 					}{
-						ID:   "msg_confirm",
-						Type: "message",
+						ID:         "msg_final",
+						Type:       "message",
+						StopReason: "end_turn", // Final - will be included
 						Content: []json.RawMessage{
-							json.RawMessage(`{"type":"text","text":"Hope this helps!"}`),
+							json.RawMessage(`{"type":"text","text":"Here is the answer: 42"}`),
 						},
 					},
 					SessionID: "session_123",
 				},
 			},
-			expected:    "Here is the detailed answer with all the information you need.\n\nHope this helps!",
+			expected:    "Here is the answer: 42",
 			expectError: false,
 		},
 	}
