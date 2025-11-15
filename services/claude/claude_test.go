@@ -429,13 +429,15 @@ func TestClaudeService_extractSessionID(t *testing.T) {
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
-						ID      string            `json:"id"`
-						Type    string            `json:"type"`
-						Content []json.RawMessage `json:"content"`
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
 					}{
-						ID:      "msg_123",
-						Type:    "message",
-						Content: []json.RawMessage{},
+						ID:         "msg_123",
+						Type:       "message",
+						StopReason: "end_turn",
+						Content:    []json.RawMessage{},
 					},
 					SessionID: "session_123",
 				},
@@ -500,12 +502,14 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
-						ID      string            `json:"id"`
-						Type    string            `json:"type"`
-						Content []json.RawMessage `json:"content"`
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
 					}{
-						ID:   "msg_123",
-						Type: "message",
+						ID:         "msg_123",
+						Type:       "message",
+						StopReason: "end_turn",
 						Content: []json.RawMessage{
 							json.RawMessage(`{"type":"image","url":"http://example.com/image.jpg"}`),
 						},
@@ -775,6 +779,97 @@ func TestClaudeService_handleClaudeClientError(t *testing.T) {
 				t.Errorf("Expected error to contain %q, got: %v", tt.expectedContain, result.Error())
 			}
 		})
+	}
+}
+
+func TestClaudeService_extractClaudeResult_CleanPoemHaikuBug(t *testing.T) {
+	mockClient := &services.MockClaudeClient{}
+	tmpDir, err := os.MkdirTemp("", "claude_test_logs_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	service := NewClaudeService(mockClient, tmpDir, nil, nil)
+
+	// Load clean JSONL file showing the bug
+	rawOutput, err := os.ReadFile("../fixtures/clean_poem_haiku_session.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to read fixture file: %v", err)
+	}
+
+	// Parse JSONL to messages
+	messages, err := services.MapClaudeOutputToMessages(string(rawOutput))
+	if err != nil {
+		t.Fatalf("Failed to parse JSONL: %v", err)
+	}
+
+	t.Logf("=== CLEAN POEM+HAIKU SESSION DEBUG ===")
+	t.Logf("Total messages: %d", len(messages))
+
+	for i, msg := range messages {
+		switch m := msg.(type) {
+		case services.UserMessage:
+			contentStr := string(m.Message.Content)
+			preview := contentStr
+			if len(preview) > 60 {
+				preview = preview[:60] + "..."
+			}
+			t.Logf("[%d] UserMessage: %s", i, preview)
+		case services.AssistantMessage:
+			textLen := 0
+			textPreview := ""
+			for _, contentRaw := range m.Message.Content {
+				var contentItem struct {
+					Type string `json:"type"`
+					Text string `json:"text,omitempty"`
+				}
+				if err := json.Unmarshal(contentRaw, &contentItem); err == nil {
+					if contentItem.Type == "text" && contentItem.Text != "" {
+						textLen = len(contentItem.Text)
+						if len(contentItem.Text) > 60 {
+							textPreview = contentItem.Text[:60] + "..."
+						} else {
+							textPreview = contentItem.Text
+						}
+					}
+				}
+			}
+			t.Logf("[%d] AssistantMessage (id=%s, textLen=%d, stop=%s): %s",
+				i, m.Message.ID, textLen, m.Message.StopReason, textPreview)
+		}
+	}
+
+	// Extract result
+	result, err := service.extractClaudeResult(messages)
+	if err != nil {
+		t.Fatalf("extractClaudeResult failed: %v", err)
+	}
+
+	t.Logf("\n=== RESULT ===")
+	t.Logf("Length: %d chars", len(result))
+
+	// Check for poem
+	containsPoem := strings.Contains(result, "The Ballad of Code and Connection")
+	t.Logf("Contains poem: %v", containsPoem)
+
+	// Check for haiku
+	containsHaiku := strings.Contains(result, "Branches diverge wide")
+	t.Logf("Contains haiku: %v", containsHaiku)
+
+	if len(result) < 500 {
+		t.Logf("FULL RESULT:\n%s", result)
+	}
+
+	// Assertions
+	if !containsPoem {
+		t.Errorf("BUG: Missing poem! Result should contain 'The Ballad of Code and Connection'")
+	}
+	if !containsHaiku {
+		t.Errorf("BUG: Missing haiku! Result should contain 'Branches diverge wide'")
+	}
+	if len(result) < 2000 {
+		t.Errorf("BUG: Result too short (%d chars). Expected >2000 (poem + haiku)", len(result))
 	}
 }
 

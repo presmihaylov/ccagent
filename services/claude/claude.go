@@ -229,6 +229,20 @@ func (c *ClaudeService) extractSessionID(messages []services.ClaudeMessage) stri
 	return "unknown"
 }
 
+// isRealUserMessage checks if a UserMessage is real human input (not a tool_result message).
+// Real user messages have Content as a JSON string, while tool_result messages have Content as an array.
+func isRealUserMessage(userMsg services.UserMessage) bool {
+	// Try to unmarshal as string first (real user input)
+	var simpleContent string
+	if err := json.Unmarshal(userMsg.Message.Content, &simpleContent); err == nil {
+		return true
+	}
+
+	// Check if contains tool_result type
+	contentStr := string(userMsg.Message.Content)
+	return !strings.Contains(contentStr, `"type":"tool_result"`)
+}
+
 func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (string, error) {
 	// First priority: Look for ExitPlanMode messages (highest priority)
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -265,11 +279,13 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 	var assistantMessages []assistantText
 	lastUserIndex := -1
 
-	// Find the last user message
+	// Find the last REAL user message (skip tool_result messages)
 	for i := len(messages) - 1; i >= 0; i-- {
-		if _, ok := messages[i].(services.UserMessage); ok {
-			lastUserIndex = i
-			break
+		if userMsg, ok := messages[i].(services.UserMessage); ok {
+			if isRealUserMessage(userMsg) {
+				lastUserIndex = i
+				break
+			}
 		}
 	}
 
