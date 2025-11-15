@@ -249,9 +249,16 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
-	// Third priority: Collect assistant messages with stop_reason="end_turn" after last user message
-	// This filters out intermediate messages (stop_reason="tool_use") and only captures final responses
-	var textParts []string
+	// Third priority: Smart collection of assistant messages after last user message
+	// Uses heuristics to handle both concise responses and edge cases where detailed
+	// content appears in tool_use messages followed by brief confirmations
+	const (
+		shortEndTurnThreshold        = 400  // If end_turn is shorter than this, check for substantial tool_use content
+		substantialContentThreshold  = 2000 // Tool_use messages longer than this are considered substantial
+	)
+
+	var endTurnTexts []string
+	var substantialToolUseTexts []string
 	lastUserIndex := -1
 
 	// Find the last user message
@@ -262,16 +269,9 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
-	// Collect text content ONLY from assistant messages with stop_reason="end_turn"
-	// Messages with stop_reason="tool_use" are intermediate explanations before tool calls
+	// Collect both end_turn and substantial tool_use messages
 	for i := lastUserIndex + 1; i < len(messages); i++ {
 		if assistantMsg, ok := messages[i].(services.AssistantMessage); ok {
-			// Skip intermediate messages that will call tools
-			if assistantMsg.Message.StopReason == "tool_use" {
-				continue
-			}
-
-			// Collect text from final messages (end_turn)
 			for _, contentRaw := range assistantMsg.Message.Content {
 				var contentItem struct {
 					Type string `json:"type"`
@@ -279,16 +279,37 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 				}
 				if err := json.Unmarshal(contentRaw, &contentItem); err == nil {
 					if contentItem.Type == "text" && contentItem.Text != "" {
-						textParts = append(textParts, contentItem.Text)
+						textLen := len(contentItem.Text)
+
+						if assistantMsg.Message.StopReason == "end_turn" {
+							// Always collect final messages
+							endTurnTexts = append(endTurnTexts, contentItem.Text)
+						} else if assistantMsg.Message.StopReason == "tool_use" && textLen > substantialContentThreshold {
+							// Collect substantial tool_use messages (potential detailed content)
+							substantialToolUseTexts = append(substantialToolUseTexts, contentItem.Text)
+						}
 					}
 				}
 			}
 		}
 	}
 
-	if len(textParts) > 0 {
-		// Join all text parts with double newline to separate multiple final assistant messages
-		return strings.Join(textParts, "\n\n"), nil
+	// Decision logic: Use heuristic to determine what to return
+	endTurnCombined := strings.Join(endTurnTexts, "\n\n")
+	endTurnLength := len(endTurnCombined)
+
+	if endTurnLength < shortEndTurnThreshold && len(substantialToolUseTexts) > 0 {
+		// Edge case: Short confirmation after detailed content
+		// Example: "Perfect! 60 columns total" (259 chars) after full table breakdown (10KB)
+		// Return both the detailed content and the confirmation
+		allTexts := append(substantialToolUseTexts, endTurnTexts...)
+		return strings.Join(allTexts, "\n\n"), nil
+	}
+
+	// Happy path: Return only final messages
+	// Example: Detailed analysis (31KB) + executive summary (1.1KB) → return only summary
+	if endTurnLength > 0 {
+		return endTurnCombined, nil
 	}
 
 	return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")

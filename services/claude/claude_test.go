@@ -569,9 +569,8 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "real-world scenario: detailed response with tool_use followed by confirmation",
+			name: "edge case: substantial tool_use content (10KB) with brief end_turn (259 chars)",
 			messages: []services.ClaudeMessage{
-				// User asks a question
 				services.UserMessage{
 					Type: "user",
 					Message: struct {
@@ -581,9 +580,9 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 						Role:    "user",
 						Content: json.RawMessage(`"Can you list all the database columns?"`),
 					},
-					SessionID: "session_real",
+					SessionID: "session_edge",
 				},
-				// Assistant provides detailed response with tool use
+				// Detailed table breakdown (>2000 chars) with tool_use
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
@@ -594,14 +593,14 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 					}{
 						ID:         "msg_detailed",
 						Type:       "message",
-						StopReason: "tool_use", // This message will call a tool next
+						StopReason: "tool_use",
 						Content: []json.RawMessage{
-							json.RawMessage(`{"type":"text","text":"Here is the complete list of database columns:\n\n# Database Schema\n\n## Table: users\n- id (bigint, PRIMARY KEY)\n- email (string, UNIQUE)\n- name (string)\n- created_at (timestamp)\n\n## Table: orders\n- id (bigint, PRIMARY KEY)\n- user_id (bigint, FOREIGN KEY)\n- amount (decimal)\n- status (string)\n- created_at (timestamp)\n\n## Table: products\n- id (bigint, PRIMARY KEY)\n- name (string)\n- price (decimal)\n- stock (integer)\n\nTotal: 13 columns across 3 tables."}`),
+							// 2500+ character detailed breakdown
+							json.RawMessage(`{"type":"text","text":"Here is the complete database schema breakdown:\n\n## Table 1: users\n### Columns (5)\n- id: bigint, PRIMARY KEY, NOT NULL\n- email: varchar(255), UNIQUE, NOT NULL\n- name: varchar(100), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- UNIQUE INDEX (email)\n- INDEX (created_at)\n\n## Table 2: orders\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- user_id: bigint, FOREIGN KEY → users(id), NOT NULL\n- amount: decimal(10,2), NOT NULL\n- status: varchar(50), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- FOREIGN KEY (user_id)\n- INDEX (status)\n- INDEX (created_at)\n\n## Table 3: products\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- name: varchar(200), NOT NULL\n- description: text\n- price: decimal(10,2), NOT NULL\n- stock: integer, DEFAULT 0, NOT NULL\n- created_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- INDEX (name)\n- INDEX (price)\n\n## Summary\n- Total tables: 3\n- Total columns: 17 (excluding timestamps)\n- Total indexes: 11\n- Total foreign keys: 1\n\nAll tables follow standard naming conventions with created_at/updated_at timestamps."}`),
 						},
 					},
-					SessionID: "session_real",
+					SessionID: "session_edge",
 				},
-				// Tool result from the command that was called
 				services.UserMessage{
 					Type: "user",
 					Message: struct {
@@ -609,11 +608,11 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 						Content json.RawMessage `json:"content"`
 					}{
 						Role:    "user",
-						Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"tool_123","content":"13"}]`),
+						Content: json.RawMessage(`[{"type":"tool_result","content":"17"}]`),
 					},
-					SessionID: "session_real",
+					SessionID: "session_edge",
 				},
-				// Assistant sends brief confirmation (this is the final message)
+				// Brief confirmation (<400 chars)
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
@@ -622,18 +621,87 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 						Content    []json.RawMessage `json:"content"`
 						StopReason string            `json:"stop_reason"`
 					}{
-						ID:         "msg_confirmation",
+						ID:         "msg_confirm",
 						Type:       "message",
-						StopReason: "end_turn", // Final message
+						StopReason: "end_turn",
 						Content: []json.RawMessage{
-							json.RawMessage(`{"type":"text","text":"Perfect! 13 columns total across the 3 main tables."}`),
+							json.RawMessage(`{"type":"text","text":"Perfect! 17 columns total across the 3 main database tables."}`),
 						},
 					},
-					SessionID: "session_real",
+					SessionID: "session_edge",
 				},
 			},
-			// Should return ONLY the final confirmation, not the detailed intermediate response
-			expected:    "Perfect! 13 columns total across the 3 main tables.",
+			// Heuristic: end_turn (67 chars) < 400 AND tool_use (2500+ chars) > 2000
+			// Should return BOTH: detailed breakdown + confirmation
+			expected:    "Here is the complete database schema breakdown:\n\n## Table 1: users\n### Columns (5)\n- id: bigint, PRIMARY KEY, NOT NULL\n- email: varchar(255), UNIQUE, NOT NULL\n- name: varchar(100), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- UNIQUE INDEX (email)\n- INDEX (created_at)\n\n## Table 2: orders\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- user_id: bigint, FOREIGN KEY → users(id), NOT NULL\n- amount: decimal(10,2), NOT NULL\n- status: varchar(50), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- FOREIGN KEY (user_id)\n- INDEX (status)\n- INDEX (created_at)\n\n## Table 3: products\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- name: varchar(200), NOT NULL\n- description: text\n- price: decimal(10,2), NOT NULL\n- stock: integer, DEFAULT 0, NOT NULL\n- created_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- INDEX (name)\n- INDEX (price)\n\n## Summary\n- Total tables: 3\n- Total columns: 17 (excluding timestamps)\n- Total indexes: 11\n- Total foreign keys: 1\n\nAll tables follow standard naming conventions with created_at/updated_at timestamps.\n\nPerfect! 17 columns total across the 3 main database tables.",
+			expectError: false,
+		},
+		{
+			name: "happy path: detailed tool_use (31KB) with substantial end_turn (1.1KB summary)",
+			messages: []services.ClaudeMessage{
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`"Analyze the architecture"`),
+					},
+					SessionID: "session_happy",
+				},
+				// Detailed analysis (>2000 chars) with tool_use
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_analysis",
+						Type:       "message",
+						StopReason: "tool_use",
+						Content: []json.RawMessage{
+							// Very long detailed analysis (simulate 31KB)
+							json.RawMessage(`{"type":"text","text":"# ULTRA-DETAILED ARCHITECTURE ANALYSIS\n\n## Section 1: Overview\nThis is an extremely detailed analysis spanning many pages...\n[... imagine 31KB of detailed technical analysis here ...]\n\n## Section 50: Conclusion\nAfter analyzing 150+ files and 87 associations, the architecture shows significant complexity with both strengths and weaknesses detailed above."}`),
+						},
+					},
+					SessionID: "session_happy",
+				},
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`[{"type":"tool_result","content":"analysis complete"}]`),
+					},
+					SessionID: "session_happy",
+				},
+				// Executive summary (>400 chars)
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_summary",
+						Type:       "message",
+						StopReason: "end_turn",
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"## Executive Summary\n\n### The Problem\nArchitecture complexity: 150+ files, 87 associations, significant technical debt.\n\n### The Solution\nPhased refactoring approach with backward compatibility.\n\n### The Gains\n- 64% memory reduction\n- 60% faster response times\n- 3x buffer pool efficiency\n\n### The Plan\nPhase 1-4 over 4 sprints with feature flags.\n\n### ROI\n2 months effort for permanent gains, no breaking changes.\n\n### Next Steps\nSetup Datadog metrics baseline for Go/No-Go decision."}`),
+						},
+					},
+					SessionID: "session_happy",
+				},
+			},
+			// Heuristic: end_turn (500+ chars) > 400
+			// Should return ONLY end_turn (executive summary), NOT the 31KB analysis
+			expected:    "## Executive Summary\n\n### The Problem\nArchitecture complexity: 150+ files, 87 associations, significant technical debt.\n\n### The Solution\nPhased refactoring approach with backward compatibility.\n\n### The Gains\n- 64% memory reduction\n- 60% faster response times\n- 3x buffer pool efficiency\n\n### The Plan\nPhase 1-4 over 4 sprints with feature flags.\n\n### ROI\n2 months effort for permanent gains, no breaking changes.\n\n### Next Steps\nSetup Datadog metrics baseline for Go/No-Go decision.",
 			expectError: false,
 		},
 	}
