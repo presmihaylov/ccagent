@@ -128,6 +128,8 @@ func (c *ClaudeService) StartNewConversationWithOptions(
 		log.Error("Failed to write Claude session log: %v", writeErr)
 	}
 
+	log.Info("Raw Claude output length=%d bytes, logPath=%s", len(rawOutput), logPath)
+
 	messages, err := services.MapClaudeOutputToMessages(rawOutput)
 	if err != nil {
 		log.Error("Failed to parse Claude output: %v", err)
@@ -146,6 +148,7 @@ func (c *ClaudeService) StartNewConversationWithOptions(
 		return nil, fmt.Errorf("failed to extract Claude result: %w", err)
 	}
 
+	log.Info("Parsed %d messages from StartNewConversation", len(messages))
 	log.Info("📋 Claude response extracted successfully, session: %s, output length: %d", sessionID, len(output))
 	result := &services.CLIAgentResult{
 		Output:    output,
@@ -194,6 +197,8 @@ func (c *ClaudeService) ContinueConversationWithOptions(
 		log.Error("Failed to write Claude session log: %v", writeErr)
 	}
 
+	log.Info("Raw Claude output length=%d bytes, logPath=%s", len(rawOutput), logPath)
+
 	messages, err := services.MapClaudeOutputToMessages(rawOutput)
 	if err != nil {
 		log.Error("Failed to parse Claude output: %v", err)
@@ -212,6 +217,7 @@ func (c *ClaudeService) ContinueConversationWithOptions(
 		return nil, fmt.Errorf("failed to extract Claude result: %w", err)
 	}
 
+	log.Info("Parsed %d messages from ContinueConversation", len(messages))
 	log.Info("📋 Claude response extracted successfully, session: %s, output length: %d", actualSessionID, len(output))
 	result := &services.CLIAgentResult{
 		Output:    output,
@@ -229,6 +235,20 @@ func (c *ClaudeService) extractSessionID(messages []services.ClaudeMessage) stri
 	return "unknown"
 }
 
+// isRealUserMessage checks if a UserMessage is real human input (not a tool_result message).
+// Real user messages have Content as a JSON string, while tool_result messages have Content as an array.
+func isRealUserMessage(userMsg services.UserMessage) bool {
+	// Try to unmarshal as string first (real user input)
+	var simpleContent string
+	if err := json.Unmarshal(userMsg.Message.Content, &simpleContent); err == nil {
+		return true
+	}
+
+	// Check if contains tool_result type
+	contentStr := string(userMsg.Message.Content)
+	return !strings.Contains(contentStr, `"type":"tool_result"`)
+}
+
 func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (string, error) {
 	// First priority: Look for ExitPlanMode messages (highest priority)
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -240,33 +260,120 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
+	// Track last result message to compare with assistant content later
+	var resultText string
 	// Second priority: Look for result message type
 	for i := len(messages) - 1; i >= 0; i-- {
 		if resultMsg, ok := messages[i].(services.ResultMessage); ok {
 			if resultMsg.Result != "" {
-				return resultMsg.Result, nil
+				resultText = resultMsg.Result
+				break
 			}
 		}
 	}
 
-	// Third priority: Fallback to assistant message (existing approach)
+	// Third priority: Collect last two assistant messages with text content
+	// Strategy: Get the last two unique assistant messages, compare their sizes
+	// If the first is significantly larger than the second, include both (detailed + summary)
+	// Otherwise, include only the last message
+	const (
+		sizeDifferenceThreshold = 5.0 // First message must be 5x larger than second to include both
+	)
+
+	type assistantText struct {
+		messageID string
+		text      string
+	}
+
+	var assistantMessages []assistantText
+	lastUserIndex := -1
+
+	// Find the last REAL user message (skip tool_result messages)
 	for i := len(messages) - 1; i >= 0; i-- {
+		if userMsg, ok := messages[i].(services.UserMessage); ok {
+			if isRealUserMessage(userMsg) {
+				lastUserIndex = i
+				break
+			}
+		}
+	}
+
+	// Collect all assistant messages with text content (skip tool_use-only messages)
+	for i := lastUserIndex + 1; i < len(messages); i++ {
 		if assistantMsg, ok := messages[i].(services.AssistantMessage); ok {
 			for _, contentRaw := range assistantMsg.Message.Content {
-				// Parse the content to check if it's a text content item
 				var contentItem struct {
 					Type string `json:"type"`
 					Text string `json:"text,omitempty"`
 				}
 				if err := json.Unmarshal(contentRaw, &contentItem); err == nil {
 					if contentItem.Type == "text" && contentItem.Text != "" {
-						return contentItem.Text, nil
+						assistantMessages = append(assistantMessages, assistantText{
+							messageID: assistantMsg.Message.ID,
+							text:      contentItem.Text,
+						})
 					}
 				}
 			}
 		}
 	}
-	return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")
+
+	if len(assistantMessages) == 0 {
+		if resultText != "" {
+			return resultText, nil
+		}
+		return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")
+	}
+
+	// Get the last two unique assistant messages
+	var lastTwo []string
+	seenMessageIDs := make(map[string]bool)
+
+	// Scan backwards to get last two unique message IDs
+	for i := len(assistantMessages) - 1; i >= 0 && len(lastTwo) < 2; i-- {
+		msgID := assistantMessages[i].messageID
+		if !seenMessageIDs[msgID] {
+			seenMessageIDs[msgID] = true
+			lastTwo = append([]string{assistantMessages[i].text}, lastTwo...) // prepend to maintain order
+		}
+	}
+
+	// Decision logic based on number of messages and size comparison
+	if len(lastTwo) == 1 {
+		// Only one assistant message - return it
+		if resultText != "" {
+			if len(resultText) >= len(lastTwo[0]) {
+				return resultText, nil
+			}
+		}
+		return lastTwo[0], nil
+	}
+
+	// Two messages: compare sizes
+	firstLen := len(lastTwo[0])
+	secondLen := len(lastTwo[1])
+
+	if firstLen > secondLen*int(sizeDifferenceThreshold) {
+		// First message is significantly larger (5x+) - likely detailed content followed by brief summary
+		// Example: 10KB table breakdown + "Perfect! 60 columns" → return both
+		assistantOutput := strings.Join(lastTwo, "\n\n")
+		if resultText != "" {
+			if len(resultText) >= len(assistantOutput) {
+				return resultText, nil
+			}
+		}
+		return assistantOutput, nil
+	}
+
+	// Messages are similar in size - return only the last one
+	// Example: Two similar-sized summaries → return the final one
+	assistantOutput := lastTwo[1]
+	if resultText != "" {
+		if len(resultText) >= len(assistantOutput) {
+			return resultText, nil
+		}
+	}
+	return assistantOutput, nil
 }
 
 // handleClaudeClientError processes errors from Claude client calls.

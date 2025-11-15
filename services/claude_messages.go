@@ -17,9 +17,10 @@ type ClaudeMessage interface {
 type AssistantMessage struct {
 	Type    string `json:"type"`
 	Message struct {
-		ID      string            `json:"id"`
-		Type    string            `json:"type"`
-		Content []json.RawMessage `json:"content"` // Use RawMessage to handle both text and tool_use content
+		ID         string            `json:"id"`
+		Type       string            `json:"type"`
+		Content    []json.RawMessage `json:"content"`     // Use RawMessage to handle both text and tool_use content
+		StopReason string            `json:"stop_reason"` // "end_turn" means final response, "tool_use" means more actions coming
 	} `json:"message"`
 	SessionID string `json:"session_id"`
 }
