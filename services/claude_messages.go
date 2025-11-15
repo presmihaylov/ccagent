@@ -19,7 +19,7 @@ type AssistantMessage struct {
 	Message struct {
 		ID         string            `json:"id"`
 		Type       string            `json:"type"`
-		Content    []json.RawMessage `json:"content"`    // Use RawMessage to handle both text and tool_use content
+		Content    []json.RawMessage `json:"content"`     // Use RawMessage to handle both text and tool_use content
 		StopReason string            `json:"stop_reason"` // "end_turn" means final response, "tool_use" means more actions coming
 	} `json:"message"`
 	SessionID string `json:"session_id"`
@@ -156,6 +156,7 @@ func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
 	output = stripBase64Images(output)
 
 	var messages []ClaudeMessage
+	lineNumber := 0
 
 	// Use a scanner with a larger buffer to handle long lines
 	scanner := bufio.NewScanner(strings.NewReader(output))
@@ -164,6 +165,7 @@ func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
 	scanner.Buffer(make([]byte, 0, maxBufferSize), maxBufferSize)
 
 	for scanner.Scan() {
+		lineNumber++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue

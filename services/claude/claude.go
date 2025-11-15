@@ -128,6 +128,8 @@ func (c *ClaudeService) StartNewConversationWithOptions(
 		log.Error("Failed to write Claude session log: %v", writeErr)
 	}
 
+	log.Info("Raw Claude output length=%d bytes, logPath=%s", len(rawOutput), logPath)
+
 	messages, err := services.MapClaudeOutputToMessages(rawOutput)
 	if err != nil {
 		log.Error("Failed to parse Claude output: %v", err)
@@ -146,6 +148,7 @@ func (c *ClaudeService) StartNewConversationWithOptions(
 		return nil, fmt.Errorf("failed to extract Claude result: %w", err)
 	}
 
+	log.Info("Parsed %d messages from StartNewConversation", len(messages))
 	log.Info("📋 Claude response extracted successfully, session: %s, output length: %d", sessionID, len(output))
 	result := &services.CLIAgentResult{
 		Output:    output,
@@ -194,6 +197,8 @@ func (c *ClaudeService) ContinueConversationWithOptions(
 		log.Error("Failed to write Claude session log: %v", writeErr)
 	}
 
+	log.Info("Raw Claude output length=%d bytes, logPath=%s", len(rawOutput), logPath)
+
 	messages, err := services.MapClaudeOutputToMessages(rawOutput)
 	if err != nil {
 		log.Error("Failed to parse Claude output: %v", err)
@@ -212,6 +217,7 @@ func (c *ClaudeService) ContinueConversationWithOptions(
 		return nil, fmt.Errorf("failed to extract Claude result: %w", err)
 	}
 
+	log.Info("Parsed %d messages from ContinueConversation", len(messages))
 	log.Info("📋 Claude response extracted successfully, session: %s, output length: %d", actualSessionID, len(output))
 	result := &services.CLIAgentResult{
 		Output:    output,
@@ -254,11 +260,14 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
+	// Track last result message to compare with assistant content later
+	var resultText string
 	// Second priority: Look for result message type
 	for i := len(messages) - 1; i >= 0; i-- {
 		if resultMsg, ok := messages[i].(services.ResultMessage); ok {
 			if resultMsg.Result != "" {
-				return resultMsg.Result, nil
+				resultText = resultMsg.Result
+				break
 			}
 		}
 	}
@@ -310,6 +319,9 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 	}
 
 	if len(assistantMessages) == 0 {
+		if resultText != "" {
+			return resultText, nil
+		}
 		return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")
 	}
 
@@ -329,6 +341,11 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 	// Decision logic based on number of messages and size comparison
 	if len(lastTwo) == 1 {
 		// Only one assistant message - return it
+		if resultText != "" {
+			if len(resultText) >= len(lastTwo[0]) {
+				return resultText, nil
+			}
+		}
 		return lastTwo[0], nil
 	}
 
@@ -339,12 +356,24 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 	if firstLen > secondLen*int(sizeDifferenceThreshold) {
 		// First message is significantly larger (5x+) - likely detailed content followed by brief summary
 		// Example: 10KB table breakdown + "Perfect! 60 columns" → return both
-		return strings.Join(lastTwo, "\n\n"), nil
+		assistantOutput := strings.Join(lastTwo, "\n\n")
+		if resultText != "" {
+			if len(resultText) >= len(assistantOutput) {
+				return resultText, nil
+			}
+		}
+		return assistantOutput, nil
 	}
 
 	// Messages are similar in size - return only the last one
 	// Example: Two similar-sized summaries → return the final one
-	return lastTwo[1], nil
+	assistantOutput := lastTwo[1]
+	if resultText != "" {
+		if len(resultText) >= len(assistantOutput) {
+			return resultText, nil
+		}
+	}
+	return assistantOutput, nil
 }
 
 // handleClaudeClientError processes errors from Claude client calls.
