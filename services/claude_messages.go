@@ -156,7 +156,6 @@ func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
 	output = stripBase64Images(output)
 
 	var messages []ClaudeMessage
-	lineNumber := 0
 
 	// Use a scanner with a larger buffer to handle long lines
 	scanner := bufio.NewScanner(strings.NewReader(output))
@@ -165,7 +164,6 @@ func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
 	scanner.Buffer(make([]byte, 0, maxBufferSize), maxBufferSize)
 
 	for scanner.Scan() {
-		lineNumber++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
