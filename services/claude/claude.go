@@ -249,16 +249,20 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
-	// Third priority: Smart collection of assistant messages after last user message
-	// Uses heuristics to handle both concise responses and edge cases where detailed
-	// content appears in tool_use messages followed by brief confirmations
+	// Third priority: Collect last two assistant messages with text content
+	// Strategy: Get the last two unique assistant messages, compare their sizes
+	// If the first is significantly larger than the second, include both (detailed + summary)
+	// Otherwise, include only the last message
 	const (
-		shortEndTurnThreshold        = 400  // If end_turn is shorter than this, check for substantial tool_use content
-		substantialContentThreshold  = 2000 // Tool_use messages longer than this are considered substantial
+		sizeDifferenceThreshold = 5.0 // First message must be 5x larger than second to include both
 	)
 
-	var endTurnTexts []string
-	var substantialToolUseTexts []string
+	type assistantText struct {
+		messageID string
+		text      string
+	}
+
+	var assistantMessages []assistantText
 	lastUserIndex := -1
 
 	// Find the last user message
@@ -269,7 +273,7 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		}
 	}
 
-	// Collect both end_turn and substantial tool_use messages
+	// Collect all assistant messages with text content (skip tool_use-only messages)
 	for i := lastUserIndex + 1; i < len(messages); i++ {
 		if assistantMsg, ok := messages[i].(services.AssistantMessage); ok {
 			for _, contentRaw := range assistantMsg.Message.Content {
@@ -279,40 +283,52 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 				}
 				if err := json.Unmarshal(contentRaw, &contentItem); err == nil {
 					if contentItem.Type == "text" && contentItem.Text != "" {
-						textLen := len(contentItem.Text)
-
-						if assistantMsg.Message.StopReason == "end_turn" {
-							// Always collect final messages
-							endTurnTexts = append(endTurnTexts, contentItem.Text)
-						} else if assistantMsg.Message.StopReason == "tool_use" && textLen > substantialContentThreshold {
-							// Collect substantial tool_use messages (potential detailed content)
-							substantialToolUseTexts = append(substantialToolUseTexts, contentItem.Text)
-						}
+						assistantMessages = append(assistantMessages, assistantText{
+							messageID: assistantMsg.Message.ID,
+							text:      contentItem.Text,
+						})
 					}
 				}
 			}
 		}
 	}
 
-	// Decision logic: Use heuristic to determine what to return
-	endTurnCombined := strings.Join(endTurnTexts, "\n\n")
-	endTurnLength := len(endTurnCombined)
-
-	if endTurnLength < shortEndTurnThreshold && len(substantialToolUseTexts) > 0 {
-		// Edge case: Short confirmation after detailed content
-		// Example: "Perfect! 60 columns total" (259 chars) after full table breakdown (10KB)
-		// Return both the detailed content and the confirmation
-		allTexts := append(substantialToolUseTexts, endTurnTexts...)
-		return strings.Join(allTexts, "\n\n"), nil
+	if len(assistantMessages) == 0 {
+		return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")
 	}
 
-	// Happy path: Return only final messages
-	// Example: Detailed analysis (31KB) + executive summary (1.1KB) → return only summary
-	if endTurnLength > 0 {
-		return endTurnCombined, nil
+	// Get the last two unique assistant messages
+	var lastTwo []string
+	seenMessageIDs := make(map[string]bool)
+
+	// Scan backwards to get last two unique message IDs
+	for i := len(assistantMessages) - 1; i >= 0 && len(lastTwo) < 2; i-- {
+		msgID := assistantMessages[i].messageID
+		if !seenMessageIDs[msgID] {
+			seenMessageIDs[msgID] = true
+			lastTwo = append([]string{assistantMessages[i].text}, lastTwo...) // prepend to maintain order
+		}
 	}
 
-	return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")
+	// Decision logic based on number of messages and size comparison
+	if len(lastTwo) == 1 {
+		// Only one assistant message - return it
+		return lastTwo[0], nil
+	}
+
+	// Two messages: compare sizes
+	firstLen := len(lastTwo[0])
+	secondLen := len(lastTwo[1])
+
+	if firstLen > secondLen*int(sizeDifferenceThreshold) {
+		// First message is significantly larger (5x+) - likely detailed content followed by brief summary
+		// Example: 10KB table breakdown + "Perfect! 60 columns" → return both
+		return strings.Join(lastTwo, "\n\n"), nil
+	}
+
+	// Messages are similar in size - return only the last one
+	// Example: Two similar-sized summaries → return the final one
+	return lastTwo[1], nil
 }
 
 // handleClaudeClientError processes errors from Claude client calls.

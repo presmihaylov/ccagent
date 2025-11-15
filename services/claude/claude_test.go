@@ -517,7 +517,7 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "multiple assistant messages - should only collect end_turn messages",
+			name: "single assistant message - return it",
 			messages: []services.ClaudeMessage{
 				services.UserMessage{
 					Type: "user",
@@ -538,26 +538,9 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 						Content    []json.RawMessage `json:"content"`
 						StopReason string            `json:"stop_reason"`
 					}{
-						ID:         "msg_intermediate",
+						ID:         "msg_only",
 						Type:       "message",
-						StopReason: "tool_use", // Intermediate - will be skipped
-						Content: []json.RawMessage{
-							json.RawMessage(`{"type":"text","text":"Let me check that for you..."}`),
-						},
-					},
-					SessionID: "session_123",
-				},
-				services.AssistantMessage{
-					Type: "assistant",
-					Message: struct {
-						ID         string            `json:"id"`
-						Type       string            `json:"type"`
-						Content    []json.RawMessage `json:"content"`
-						StopReason string            `json:"stop_reason"`
-					}{
-						ID:         "msg_final",
-						Type:       "message",
-						StopReason: "end_turn", // Final - will be included
+						StopReason: "end_turn",
 						Content: []json.RawMessage{
 							json.RawMessage(`{"type":"text","text":"Here is the answer: 42"}`),
 						},
@@ -569,7 +552,7 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "edge case: substantial tool_use content (10KB) with brief end_turn (259 chars)",
+			name: "edge case: large first message (10KB) + small second message (67 chars) - return both",
 			messages: []services.ClaudeMessage{
 				services.UserMessage{
 					Type: "user",
@@ -631,13 +614,13 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 					SessionID: "session_edge",
 				},
 			},
-			// Heuristic: end_turn (67 chars) < 400 AND tool_use (2500+ chars) > 2000
-			// Should return BOTH: detailed breakdown + confirmation
+			// Logic: First message (2500 chars) is 37x larger than second (67 chars)
+			// Since 37 > 5, should return BOTH: detailed breakdown + confirmation
 			expected:    "Here is the complete database schema breakdown:\n\n## Table 1: users\n### Columns (5)\n- id: bigint, PRIMARY KEY, NOT NULL\n- email: varchar(255), UNIQUE, NOT NULL\n- name: varchar(100), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- UNIQUE INDEX (email)\n- INDEX (created_at)\n\n## Table 2: orders\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- user_id: bigint, FOREIGN KEY → users(id), NOT NULL\n- amount: decimal(10,2), NOT NULL\n- status: varchar(50), NOT NULL\n- created_at: timestamp, NOT NULL\n- updated_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- FOREIGN KEY (user_id)\n- INDEX (status)\n- INDEX (created_at)\n\n## Table 3: products\n### Columns (6)\n- id: bigint, PRIMARY KEY, NOT NULL\n- name: varchar(200), NOT NULL\n- description: text\n- price: decimal(10,2), NOT NULL\n- stock: integer, DEFAULT 0, NOT NULL\n- created_at: timestamp, NOT NULL\n\n### Indexes\n- PRIMARY KEY (id)\n- INDEX (name)\n- INDEX (price)\n\n## Summary\n- Total tables: 3\n- Total columns: 17 (excluding timestamps)\n- Total indexes: 11\n- Total foreign keys: 1\n\nAll tables follow standard naming conventions with created_at/updated_at timestamps.\n\nPerfect! 17 columns total across the 3 main database tables.",
 			expectError: false,
 		},
 		{
-			name: "happy path: detailed tool_use (31KB) with substantial end_turn (1.1KB summary)",
+			name: "happy path: two similar-sized messages - return only last one",
 			messages: []services.ClaudeMessage{
 				services.UserMessage{
 					Type: "user",
@@ -699,8 +682,8 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 					SessionID: "session_happy",
 				},
 			},
-			// Heuristic: end_turn (500+ chars) > 400
-			// Should return ONLY end_turn (executive summary), NOT the 31KB analysis
+			// Logic: First message (~300 chars) is NOT 5x larger than second (~500 chars)
+			// Since 300/500 < 5, should return ONLY the last message
 			expected:    "## Executive Summary\n\n### The Problem\nArchitecture complexity: 150+ files, 87 associations, significant technical debt.\n\n### The Solution\nPhased refactoring approach with backward compatibility.\n\n### The Gains\n- 64% memory reduction\n- 60% faster response times\n- 3x buffer pool efficiency\n\n### The Plan\nPhase 1-4 over 4 sprints with feature flags.\n\n### ROI\n2 months effort for permanent gains, no breaking changes.\n\n### Next Steps\nSetup Datadog metrics baseline for Go/No-Go decision.",
 			expectError: false,
 		},
