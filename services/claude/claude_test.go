@@ -568,6 +568,74 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 			expected:    "Here is the answer: 42",
 			expectError: false,
 		},
+		{
+			name: "real-world scenario: detailed response with tool_use followed by confirmation",
+			messages: []services.ClaudeMessage{
+				// User asks a question
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`"Can you list all the database columns?"`),
+					},
+					SessionID: "session_real",
+				},
+				// Assistant provides detailed response with tool use
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_detailed",
+						Type:       "message",
+						StopReason: "tool_use", // This message will call a tool next
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"Here is the complete list of database columns:\n\n# Database Schema\n\n## Table: users\n- id (bigint, PRIMARY KEY)\n- email (string, UNIQUE)\n- name (string)\n- created_at (timestamp)\n\n## Table: orders\n- id (bigint, PRIMARY KEY)\n- user_id (bigint, FOREIGN KEY)\n- amount (decimal)\n- status (string)\n- created_at (timestamp)\n\n## Table: products\n- id (bigint, PRIMARY KEY)\n- name (string)\n- price (decimal)\n- stock (integer)\n\nTotal: 13 columns across 3 tables."}`),
+						},
+					},
+					SessionID: "session_real",
+				},
+				// Tool result from the command that was called
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"tool_123","content":"13"}]`),
+					},
+					SessionID: "session_real",
+				},
+				// Assistant sends brief confirmation (this is the final message)
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_confirmation",
+						Type:       "message",
+						StopReason: "end_turn", // Final message
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"Perfect! 13 columns total across the 3 main tables."}`),
+						},
+					},
+					SessionID: "session_real",
+				},
+			},
+			// Should return ONLY the final confirmation, not the detailed intermediate response
+			expected:    "Perfect! 13 columns total across the 3 main tables.",
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
