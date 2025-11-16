@@ -1,3 +1,12 @@
+## [v0.0.21] - 2025-11-16
+
+### Bugfixes
+
+- Fix: Collect all assistant messages in conversation response ([#38](https://github.com/presmihaylov/ccagent/pull/38))
+  - Ensures all assistant messages are properly collected in multi-turn conversations
+  - Fixes message loss issues in conversation responses
+  - Improves reliability of conversation handling
+
 ## [v0.0.20] - 2025-11-08
 
 ### Features
