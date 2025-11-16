@@ -429,13 +429,15 @@ func TestClaudeService_extractSessionID(t *testing.T) {
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
-						ID      string            `json:"id"`
-						Type    string            `json:"type"`
-						Content []json.RawMessage `json:"content"`
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
 					}{
-						ID:      "msg_123",
-						Type:    "message",
-						Content: []json.RawMessage{},
+						ID:         "msg_123",
+						Type:       "message",
+						StopReason: "end_turn",
+						Content:    []json.RawMessage{},
 					},
 					SessionID: "session_123",
 				},
@@ -476,12 +478,14 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
-						ID      string            `json:"id"`
-						Type    string            `json:"type"`
-						Content []json.RawMessage `json:"content"`
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
 					}{
-						ID:   "msg_123",
-						Type: "message",
+						ID:         "msg_123",
+						Type:       "message",
+						StopReason: "end_turn",
 						Content: []json.RawMessage{
 							json.RawMessage(`{"type":"text","text":"Hello World!"}`),
 						},
@@ -498,12 +502,14 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 				services.AssistantMessage{
 					Type: "assistant",
 					Message: struct {
-						ID      string            `json:"id"`
-						Type    string            `json:"type"`
-						Content []json.RawMessage `json:"content"`
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
 					}{
-						ID:   "msg_123",
-						Type: "message",
+						ID:         "msg_123",
+						Type:       "message",
+						StopReason: "end_turn",
 						Content: []json.RawMessage{
 							json.RawMessage(`{"type":"image","url":"http://example.com/image.jpg"}`),
 						},
@@ -513,6 +519,239 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 			},
 			expected:    "",
 			expectError: true,
+		},
+		{
+			name: "single assistant message - return it",
+			messages: []services.ClaudeMessage{
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`"What is the answer?"`),
+					},
+					SessionID: "session_123",
+				},
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_only",
+						Type:       "message",
+						StopReason: "end_turn",
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"Here is the answer: 42"}`),
+						},
+					},
+					SessionID: "session_123",
+				},
+			},
+			expected:    "Here is the answer: 42",
+			expectError: false,
+		},
+		{
+			name: "edge case: large first message (10KB) + small second message (67 chars) - return both",
+			messages: []services.ClaudeMessage{
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`"Can you provide a detailed breakdown?"`),
+					},
+					SessionID: "session_edge",
+				},
+				// Large detailed response (>2000 chars)
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_detailed",
+						Type:       "message",
+						StopReason: "tool_use",
+						Content: []json.RawMessage{
+							// Large response (2500+ chars) - generic Lorem Ipsum style content
+							json.RawMessage(`{"type":"text","text":"Here is the comprehensive analysis you requested:\n\n## Section A: Overview\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\n### Subsection A.1: First Component\n- Item alpha: Configuration parameter set to value X\n- Item beta: Configuration parameter set to value Y\n- Item gamma: Configuration parameter set to value Z\n- Item delta: Additional setting enabled\n- Item epsilon: Additional setting disabled\n\n### Subsection A.2: Second Component\n- Property one: Enabled for processing\n- Property two: Disabled for security\n- Property three: Set to default value\n- Property four: Customized setting\n- Property five: Auto-configured\n\n## Section B: Details\nDuis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident.\n\n### Subsection B.1: Configuration Items\n- Parameter A: Active status\n- Parameter B: Inactive status\n- Parameter C: Pending status\n- Parameter D: Completed status\n- Parameter E: Archived status\n- Parameter F: Processing status\n\n### Subsection B.2: Additional Settings\n- Setting one: Value configured\n- Setting two: Value configured\n- Setting three: Value configured\n- Setting four: Value configured\n- Setting five: Value configured\n- Setting six: Value configured\n\n## Section C: Summary\nSed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.\n\n### Key Metrics\n- Total items analyzed: 42\n- Configuration parameters: 18\n- Active settings: 12\n- Optimizations applied: 7\n\nAll configurations follow standard best practices and recommended patterns for optimal performance."}`),
+						},
+					},
+					SessionID: "session_edge",
+				},
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`[{"type":"tool_result","content":"42"}]`),
+					},
+					SessionID: "session_edge",
+				},
+				// Brief confirmation
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_confirm",
+						Type:       "message",
+						StopReason: "end_turn",
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"Perfect! Analysis complete with 42 items total."}`),
+						},
+					},
+					SessionID: "session_edge",
+				},
+			},
+			// Logic: First message (2500 chars) is 50x+ larger than second (50 chars)
+			// Since 50+ > 5, should return BOTH: detailed analysis + confirmation
+			expected:    "Here is the comprehensive analysis you requested:\n\n## Section A: Overview\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\n### Subsection A.1: First Component\n- Item alpha: Configuration parameter set to value X\n- Item beta: Configuration parameter set to value Y\n- Item gamma: Configuration parameter set to value Z\n- Item delta: Additional setting enabled\n- Item epsilon: Additional setting disabled\n\n### Subsection A.2: Second Component\n- Property one: Enabled for processing\n- Property two: Disabled for security\n- Property three: Set to default value\n- Property four: Customized setting\n- Property five: Auto-configured\n\n## Section B: Details\nDuis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident.\n\n### Subsection B.1: Configuration Items\n- Parameter A: Active status\n- Parameter B: Inactive status\n- Parameter C: Pending status\n- Parameter D: Completed status\n- Parameter E: Archived status\n- Parameter F: Processing status\n\n### Subsection B.2: Additional Settings\n- Setting one: Value configured\n- Setting two: Value configured\n- Setting three: Value configured\n- Setting four: Value configured\n- Setting five: Value configured\n- Setting six: Value configured\n\n## Section C: Summary\nSed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.\n\n### Key Metrics\n- Total items analyzed: 42\n- Configuration parameters: 18\n- Active settings: 12\n- Optimizations applied: 7\n\nAll configurations follow standard best practices and recommended patterns for optimal performance.\n\nPerfect! Analysis complete with 42 items total.",
+			expectError: false,
+		},
+		{
+			name: "happy path: two similar-sized messages - return only last one",
+			messages: []services.ClaudeMessage{
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`"Analyze the architecture"`),
+					},
+					SessionID: "session_happy",
+				},
+				// Detailed analysis (>2000 chars) with tool_use
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_analysis",
+						Type:       "message",
+						StopReason: "tool_use",
+						Content: []json.RawMessage{
+							// Very long detailed analysis (simulate 31KB)
+							json.RawMessage(`{"type":"text","text":"# ULTRA-DETAILED ARCHITECTURE ANALYSIS\n\n## Section 1: Overview\nThis is an extremely detailed analysis spanning many pages...\n[... imagine 31KB of detailed technical analysis here ...]\n\n## Section 50: Conclusion\nAfter analyzing 150+ files and 87 associations, the architecture shows significant complexity with both strengths and weaknesses detailed above."}`),
+						},
+					},
+					SessionID: "session_happy",
+				},
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`[{"type":"tool_result","content":"analysis complete"}]`),
+					},
+					SessionID: "session_happy",
+				},
+				// Executive summary (>400 chars)
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_summary",
+						Type:       "message",
+						StopReason: "end_turn",
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"## Executive Summary\n\n### The Problem\nArchitecture complexity: 150+ files, 87 associations, significant technical debt.\n\n### The Solution\nPhased refactoring approach with backward compatibility.\n\n### The Gains\n- 64% memory reduction\n- 60% faster response times\n- 3x buffer pool efficiency\n\n### The Plan\nPhase 1-4 over 4 sprints with feature flags.\n\n### ROI\n2 months effort for permanent gains, no breaking changes.\n\n### Next Steps\nSetup Datadog metrics baseline for Go/No-Go decision."}`),
+						},
+					},
+					SessionID: "session_happy",
+				},
+			},
+			// Logic: First message (~300 chars) is NOT 5x larger than second (~500 chars)
+			// Since 300/500 < 5, should return ONLY the last message
+			expected:    "## Executive Summary\n\n### The Problem\nArchitecture complexity: 150+ files, 87 associations, significant technical debt.\n\n### The Solution\nPhased refactoring approach with backward compatibility.\n\n### The Gains\n- 64% memory reduction\n- 60% faster response times\n- 3x buffer pool efficiency\n\n### The Plan\nPhase 1-4 over 4 sprints with feature flags.\n\n### ROI\n2 months effort for permanent gains, no breaking changes.\n\n### Next Steps\nSetup Datadog metrics baseline for Go/No-Go decision.",
+			expectError: false,
+		},
+		{
+			name: "prefers assistant text when result shorter",
+			messages: []services.ClaudeMessage{
+				// Assistant poem (long)
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_poem",
+						Type:       "message",
+						StopReason: "tool_use",
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"` + strings.Repeat("poem ", 400) + `"}`),
+						},
+					},
+					SessionID: "session_pref",
+				},
+				// Tool result from user (should be ignored as real user)
+				services.UserMessage{
+					Type: "user",
+					Message: struct {
+						Role    string          `json:"role"`
+						Content json.RawMessage `json:"content"`
+					}{
+						Role:    "user",
+						Content: json.RawMessage(`[{"type":"tool_result","content":""}]`),
+					},
+					SessionID: "session_pref",
+				},
+				// Assistant haiku (short)
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:         "msg_haiku",
+						Type:       "message",
+						StopReason: "end_turn",
+						Content: []json.RawMessage{
+							json.RawMessage(`{"type":"text","text":"Code flows like streams"}`),
+						},
+					},
+					SessionID: "session_pref",
+				},
+				// Result message (shorter than poem)
+				services.ResultMessage{
+					Type:      "result",
+					Subtype:   "success",
+					IsError:   false,
+					Result:    "Code flows like streams",
+					SessionID: "session_pref",
+				},
+			},
+			expected: strings.Repeat("poem ", 400) + "\n\nCode flows like streams",
 		},
 	}
 
