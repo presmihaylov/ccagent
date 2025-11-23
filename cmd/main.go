@@ -149,7 +149,27 @@ func NewCmdRunner(agentType, permissionMode, cursorModel, codexModel string) (*C
 
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
 
-	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender, agentsApiClient)
+	// Determine default model based on agent type
+	defaultModel := ""
+	if agentType == "cursor" {
+		defaultModel = cursorModel
+	} else if agentType == "codex" {
+		defaultModel = codexModel
+	}
+
+	messageHandler := handlers.NewMessageHandler(
+		cliAgent,
+		gitUseCase,
+		appState,
+		envManager,
+		messageSender,
+		agentsApiClient,
+		agentType,
+		defaultModel,
+		permissionMode,
+		logDir,
+		workDir,
+	)
 
 	// Create the CmdRunner instance
 	cr := &CmdRunner{

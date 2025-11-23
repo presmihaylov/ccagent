@@ -28,6 +28,8 @@ type JobData struct {
 	MessageLink        string    `json:"message_link"`         // Link to the original chat message
 	Status             JobStatus `json:"status"`               // Current status of the job: "in_progress" or "completed"
 	UpdatedAt          time.Time `json:"updated_at"`
+	Agent              string    `json:"agent,omitempty"`   // Agent type for this job: claude, codex (empty uses default)
+	Model              string    `json:"model,omitempty"`   // Model for this job (empty uses default)
 }
 
 // QueuedMessage represents a message that has been queued for processing but not yet started
@@ -114,6 +116,8 @@ func (a *AppState) GetJobData(jobID string) (*JobData, bool) {
 		MessageLink:        data.MessageLink,
 		Status:             data.Status,
 		UpdatedAt:          data.UpdatedAt,
+		Agent:              data.Agent,
+		Model:              data.Model,
 	}, true
 }
 
@@ -147,6 +151,8 @@ func (a *AppState) GetAllJobs() map[string]JobData {
 			MessageLink:        data.MessageLink,
 			Status:             data.Status,
 			UpdatedAt:          data.UpdatedAt,
+			Agent:              data.Agent,
+			Model:              data.Model,
 		}
 	}
 	return result

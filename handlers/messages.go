@@ -17,12 +17,20 @@ import (
 )
 
 type MessageHandler struct {
-	claudeService   services.CLIAgent
+	claudeService   services.CLIAgent // Default agent (backward compatibility)
 	gitUseCase      *usecases.GitUseCase
 	appState        *models.AppState
 	envManager      *env.EnvManager
 	messageSender   *MessageSender
 	agentsApiClient *clients.AgentsApiClient
+
+	// Configuration for dynamic agent creation
+	defaultAgent      string
+	defaultModel      string
+	permissionMode    string
+	logDir            string
+	workDir           string
+	jobAgents         map[string]services.CLIAgent // Per-job agent instances
 }
 
 func NewMessageHandler(
@@ -32,6 +40,11 @@ func NewMessageHandler(
 	envManager *env.EnvManager,
 	messageSender *MessageSender,
 	agentsApiClient *clients.AgentsApiClient,
+	defaultAgent string,
+	defaultModel string,
+	permissionMode string,
+	logDir string,
+	workDir string,
 ) *MessageHandler {
 	return &MessageHandler{
 		claudeService:   claudeService,
@@ -40,7 +53,52 @@ func NewMessageHandler(
 		envManager:      envManager,
 		messageSender:   messageSender,
 		agentsApiClient: agentsApiClient,
+		defaultAgent:    defaultAgent,
+		defaultModel:    defaultModel,
+		permissionMode:  permissionMode,
+		logDir:          logDir,
+		workDir:         workDir,
+		jobAgents:       make(map[string]services.CLIAgent),
 	}
+}
+
+// getOrCreateJobAgent returns the agent for a specific job, creating it if necessary
+func (mh *MessageHandler) getOrCreateJobAgent(jobID, agent, model string) (services.CLIAgent, error) {
+	// Use defaults if not specified
+	if agent == "" {
+		agent = mh.defaultAgent
+	}
+	if model == "" {
+		model = mh.defaultModel
+	}
+
+	// Check if we already have an agent for this job
+	if existingAgent, ok := mh.jobAgents[jobID]; ok {
+		return existingAgent, nil
+	}
+
+	// Create new agent for this job
+	jobAgent, err := CreateCLIAgent(
+		agent,
+		model,
+		mh.permissionMode,
+		mh.logDir,
+		mh.workDir,
+		mh.agentsApiClient,
+		mh.envManager,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create agent '%s' with model '%s': %w", agent, model, err)
+	}
+
+	// Store the agent for this job
+	mh.jobAgents[jobID] = jobAgent
+	return jobAgent, nil
+}
+
+// cleanupJobAgent removes the agent instance for a completed job
+func (mh *MessageHandler) cleanupJobAgent(jobID string) {
+	delete(mh.jobAgents, jobID)
 }
 
 // processAttachmentsForPrompt fetches attachments from API and returns file paths and formatted text
@@ -212,6 +270,34 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		return fmt.Errorf("failed to unmarshal start conversation payload: %w", err)
 	}
 
+	// Determine which agent and model to use for this job
+	agent := payload.Agent
+	model := payload.Model
+	if agent == "" {
+		agent = mh.defaultAgent
+	}
+	if model == "" {
+		model = mh.defaultModel
+	}
+
+	// Validate and create agent for this job
+	jobAgent, err := mh.getOrCreateJobAgent(payload.JobID, agent, model)
+	if err != nil {
+		log.Error("❌ Failed to create agent for job %s: %v", payload.JobID, err)
+		// Send system message about the error
+		systemErr := mh.sendSystemMessage(
+			fmt.Sprintf("ccagent error: %v", err),
+			payload.ProcessedMessageID,
+			payload.JobID,
+		)
+		if systemErr != nil {
+			log.Error("❌ Failed to send system message: %v", systemErr)
+		}
+		return fmt.Errorf("failed to create agent for job: %w", err)
+	}
+
+	log.Info("✅ Using agent '%s' with model '%s' for job %s", agent, model, payload.JobID)
+
 	// Send processing message notification that agent is starting to process
 	if err := mh.sendProcessingMessage(payload.ProcessedMessageID, payload.JobID); err != nil {
 		log.Info("❌ Failed to send processing message notification: %v", err)
@@ -235,12 +321,12 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	log.Info("🔄 Refreshed environment variables before starting conversation")
 
 	// Fetch and refresh agent tokens before starting conversation
-	if err := mh.claudeService.FetchAndRefreshAgentTokens(); err != nil {
+	if err := jobAgent.FetchAndRefreshAgentTokens(); err != nil {
 		log.Error("❌ Failed to fetch and refresh agent tokens: %v", err)
 		return fmt.Errorf("failed to fetch and refresh agent tokens: %w", err)
 	}
 
-	// Persist job state with message BEFORE calling Claude
+	// Persist job state with message BEFORE calling the agent
 	// This enables crash recovery and future reprocessing
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
@@ -252,11 +338,13 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		MessageLink:        payload.MessageLink,
 		Status:             models.JobStatusInProgress,
 		UpdatedAt:          time.Now(),
+		Agent:              agent,
+		Model:              model,
 	}); err != nil {
-		log.Error("❌ Failed to persist job state before Claude call: %v", err)
-		return fmt.Errorf("failed to persist job state before Claude call: %w", err)
+		log.Error("❌ Failed to persist job state before agent call: %v", err)
+		return fmt.Errorf("failed to persist job state before agent call: %w", err)
 	}
-	log.Info("💾 Persisted job state with in_progress status before calling Claude")
+	log.Info("💾 Persisted job state with in_progress status before calling agent")
 
 	// Remove from queued messages now that we're processing
 	if err := mh.appState.RemoveQueuedMessage(payload.ProcessedMessageID); err != nil {
@@ -266,7 +354,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 
 	// Get appropriate system prompt based on agent type
 	systemPrompt := GetClaudeSystemPrompt()
-	if mh.claudeService.AgentName() == "cursor" {
+	if jobAgent.AgentName() == "cursor" {
 		systemPrompt = GetCursorSystemPrompt()
 	}
 
@@ -292,22 +380,22 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		log.Info("📝 Formatted thread context with %d previous messages", len(payload.PreviousMessages))
 	}
 
-	claudeResult, err := mh.claudeService.StartNewConversationWithSystemPrompt(finalPrompt, systemPrompt)
+	agentResult, err := jobAgent.StartNewConversationWithSystemPrompt(finalPrompt, systemPrompt)
 	if err != nil {
-		log.Info("❌ Error starting Claude session: %v", err)
+		log.Info("❌ Error starting agent session: %v", err)
 		systemErr := mh.sendSystemMessage(
 			fmt.Sprintf("ccagent encountered error: %v", err),
 			payload.ProcessedMessageID,
 			payload.JobID,
 		)
 		if systemErr != nil {
-			log.Error("❌ Failed to send system message for Claude error: %v", systemErr)
+			log.Error("❌ Failed to send system message for agent error: %v", systemErr)
 		}
-		return fmt.Errorf("error starting Claude session: %w", err)
+		return fmt.Errorf("error starting agent session: %w", err)
 	}
 
 	// Auto-commit changes if needed
-	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
+	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, agentResult.SessionID)
 	if err != nil {
 		log.Info("❌ Auto-commit failed: %v", err)
 		return fmt.Errorf("auto-commit failed: %w", err)
@@ -328,7 +416,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	// Send assistant response back first
 	assistantPayload := models.AssistantMessagePayload{
 		JobID:              payload.JobID,
-		Message:            claudeResult.Output,
+		Message:            agentResult.Output,
 		ProcessedMessageID: payload.ProcessedMessageID,
 	}
 
@@ -344,13 +432,15 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
 		BranchName:         finalBranchName,
-		ClaudeSessionID:    claudeResult.SessionID,
+		ClaudeSessionID:    agentResult.SessionID,
 		PullRequestID:      prID,
 		LastMessage:        payload.Message,
 		ProcessedMessageID: payload.ProcessedMessageID,
 		MessageLink:        payload.MessageLink,
 		Status:             models.JobStatusCompleted,
 		UpdatedAt:          time.Now(),
+		Agent:              agent,
+		Model:              model,
 	}); err != nil {
 		log.Error("❌ Failed to persist final job state: %v", err)
 		return fmt.Errorf("failed to persist final job state: %w", err)
@@ -392,7 +482,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 
 	log.Info("💬 Continuing conversation with message: %s", payload.Message)
 
-	// Get the current job data to retrieve the Claude session ID and branch
+	// Get the current job data to retrieve the session ID, branch, and agent/model config
 	jobData, exists := mh.appState.GetJobData(payload.JobID)
 	if !exists {
 		log.Info("❌ JobID %s not found in AppState", payload.JobID)
@@ -401,8 +491,15 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 
 	sessionID := jobData.ClaudeSessionID
 	if sessionID == "" {
-		log.Info("❌ No Claude session ID found for job %s", payload.JobID)
-		return fmt.Errorf("no active Claude session found for job %s", payload.JobID)
+		log.Info("❌ No session ID found for job %s", payload.JobID)
+		return fmt.Errorf("no active session found for job %s", payload.JobID)
+	}
+
+	// Get the agent for this job (must already exist from start conversation)
+	jobAgent, err := mh.getOrCreateJobAgent(payload.JobID, jobData.Agent, jobData.Model)
+	if err != nil {
+		log.Error("❌ Failed to get agent for job %s: %v", payload.JobID, err)
+		return fmt.Errorf("failed to get agent for job: %w", err)
 	}
 
 	// Assert that BranchName is never empty
@@ -430,12 +527,12 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	log.Info("🔄 Refreshed environment variables before continuing conversation")
 
 	// Fetch and refresh agent tokens before continuing conversation
-	if err := mh.claudeService.FetchAndRefreshAgentTokens(); err != nil {
+	if err := jobAgent.FetchAndRefreshAgentTokens(); err != nil {
 		log.Error("❌ Failed to fetch and refresh agent tokens: %v", err)
 		return fmt.Errorf("failed to fetch and refresh agent tokens: %w", err)
 	}
 
-	// Persist updated message BEFORE calling Claude
+	// Persist updated message BEFORE calling the agent
 	// This enables crash recovery and future reprocessing
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
@@ -447,11 +544,13 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		MessageLink:        payload.MessageLink,
 		Status:             models.JobStatusInProgress,
 		UpdatedAt:          time.Now(),
+		Agent:              jobData.Agent,
+		Model:              jobData.Model,
 	}); err != nil {
-		log.Error("❌ Failed to persist job state before Claude call: %v", err)
-		return fmt.Errorf("failed to persist job state before Claude call: %w", err)
+		log.Error("❌ Failed to persist job state before agent call: %v", err)
+		return fmt.Errorf("failed to persist job state before agent call: %w", err)
 	}
-	log.Info("💾 Persisted job state with in_progress status before calling Claude")
+	log.Info("💾 Persisted job state with in_progress status before calling agent")
 
 	// Remove from queued messages now that we're processing
 	if err := mh.appState.RemoveQueuedMessage(payload.ProcessedMessageID); err != nil {
@@ -486,22 +585,22 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		finalPrompt = payload.Message + "\n" + attachmentText
 	}
 
-	claudeResult, err := mh.claudeService.ContinueConversation(sessionID, finalPrompt)
+	agentResult, err := jobAgent.ContinueConversation(sessionID, finalPrompt)
 	if err != nil {
-		log.Info("❌ Error continuing Claude session: %v", err)
+		log.Info("❌ Error continuing agent session: %v", err)
 		systemErr := mh.sendSystemMessage(
 			fmt.Sprintf("ccagent encountered error: %v", err),
 			payload.ProcessedMessageID,
 			payload.JobID,
 		)
 		if systemErr != nil {
-			log.Error("❌ Failed to send system message for Claude error: %v", systemErr)
+			log.Error("❌ Failed to send system message for agent error: %v", systemErr)
 		}
-		return fmt.Errorf("error continuing Claude session: %w", err)
+		return fmt.Errorf("error continuing agent session: %w", err)
 	}
 
 	// Auto-commit changes if needed
-	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
+	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, agentResult.SessionID)
 	if err != nil {
 		log.Info("❌ Auto-commit failed: %v", err)
 		return fmt.Errorf("auto-commit failed: %w", err)
@@ -522,7 +621,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	// Send assistant response back first
 	assistantPayload := models.AssistantMessagePayload{
 		JobID:              payload.JobID,
-		Message:            claudeResult.Output,
+		Message:            agentResult.Output,
 		ProcessedMessageID: payload.ProcessedMessageID,
 	}
 
@@ -538,13 +637,15 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
 		BranchName:         finalBranchName,
-		ClaudeSessionID:    claudeResult.SessionID,
+		ClaudeSessionID:    agentResult.SessionID,
 		PullRequestID:      prID,
 		LastMessage:        payload.Message,
 		ProcessedMessageID: payload.ProcessedMessageID,
 		MessageLink:        payload.MessageLink,
 		Status:             models.JobStatusCompleted,
 		UpdatedAt:          time.Now(),
+		Agent:              jobData.Agent,
+		Model:              jobData.Model,
 	}); err != nil {
 		log.Error("❌ Failed to persist final job state: %v", err)
 		return fmt.Errorf("failed to persist final job state: %w", err)

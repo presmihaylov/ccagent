@@ -37,6 +37,8 @@ type StartConversationPayload struct {
 	MessageLink        string              `json:"message_link"`
 	Attachments        []MessageAttachment `json:"attachments,omitempty"`
 	PreviousMessages   []PreviousMessage   `json:"previous_messages,omitempty"`
+	Agent              string              `json:"agent,omitempty"` // Optional: claude, codex (defaults to command-line flag)
+	Model              string              `json:"model,omitempty"` // Optional: model to use (defaults to command-line flag)
 }
 
 type StartConversationResponsePayload struct {
