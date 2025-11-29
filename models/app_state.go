@@ -27,7 +27,7 @@ type JobData struct {
 	ProcessedMessageID string           `json:"processed_message_id"` // ID of the chat platform message being processed
 	MessageLink        string           `json:"message_link"`         // Link to the original chat message
 	Status             JobStatus        `json:"status"`               // Current status of the job: "in_progress" or "completed"
-	Mode               ConversationMode `json:"mode"`                 // "execute" or "ask" - determines if agent can modify files
+	Mode               AgentMode        `json:"mode"`                 // "execute" or "ask" - determines if agent can modify files
 	UpdatedAt          time.Time        `json:"updated_at"`
 }
 

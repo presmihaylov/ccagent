@@ -3,7 +3,7 @@ package handlers
 import "ccagent/models"
 
 // GetClaudeSystemPrompt returns the system prompt for Claude agents
-func GetClaudeSystemPrompt(mode models.ConversationMode) string {
+func GetClaudeSystemPrompt(mode models.AgentMode) string {
 	basePrompt := `You are a Claude Code instance referred to by the user as "Claude Control" for this session. When someone says "Claude Control", they refer to you.
 
 About Claude Control:
@@ -41,7 +41,7 @@ CRITICAL: Never create git commits or pull requests unless explicitly asked. Wai
 CRITICAL: Keep ALL responses under 400 characters (strict Slack limit).`
 
 	// Add mode-specific instructions
-	if mode == models.ConversationModeAsk {
+	if mode == models.AgentModeAsk {
 		basePrompt += `
 
 MODE: You are in ASK mode.
@@ -55,7 +55,7 @@ MODE: You are in ASK mode.
 }
 
 // GetCursorSystemPrompt returns the system prompt for Cursor agents
-func GetCursorSystemPrompt(mode models.ConversationMode) string {
+func GetCursorSystemPrompt(mode models.AgentMode) string {
 	basePrompt := `You are a Cursor agent acting as "Claude Control" for this session. When someone says "Claude Control", they refer to you.
 
 About Claude Control:
@@ -93,7 +93,7 @@ CRITICAL: Never create git commits or pull requests unless explicitly asked. Wai
 CRITICAL: Keep ALL responses under 1000 characters (strict Slack limit).`
 
 	// Add mode-specific instructions
-	if mode == models.ConversationModeAsk {
+	if mode == models.AgentModeAsk {
 		basePrompt += `
 
 MODE: You are in ASK mode.
