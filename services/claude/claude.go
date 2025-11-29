@@ -322,7 +322,7 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		if resultText != "" {
 			return resultText, nil
 		}
-		return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")
+		return "(agent returned no response)", nil
 	}
 
 	// Get the last two unique assistant messages
