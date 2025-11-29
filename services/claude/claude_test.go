@@ -56,11 +56,13 @@ func TestClaudeService_StartNewConversation(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "invalid JSON response",
-			prompt:      "Hello",
-			mockOutput:  "invalid json",
-			mockError:   nil,
-			expectError: true,
+			name:            "invalid JSON response",
+			prompt:          "Hello",
+			mockOutput:      "invalid json",
+			mockError:       nil,
+			expectError:     false,
+			expectedOutput:  "(agent returned no response)",
+			expectedSession: "unknown",
 		},
 		{
 			name:            "empty prompt",
@@ -469,8 +471,8 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 		{
 			name:        "empty messages",
 			messages:    []services.ClaudeMessage{},
-			expected:    "",
-			expectError: true,
+			expected:    "(agent returned no response)",
+			expectError: false,
 		},
 		{
 			name: "valid assistant message with text",
@@ -517,8 +519,8 @@ func TestClaudeService_extractClaudeResult(t *testing.T) {
 					SessionID: "session_123",
 				},
 			},
-			expected:    "",
-			expectError: true,
+			expected:    "(agent returned no response)",
+			expectError: false,
 		},
 		{
 			name: "single assistant message - return it",
@@ -851,7 +853,7 @@ func TestClaudeService_ParseErrorHandling(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Mock output that doesn't contain valid assistant message (will fail at extract stage)
+	// Mock output that doesn't contain valid assistant message (will succeed with fallback message)
 	mockClient := &services.MockClaudeClient{
 		StartNewSessionFunc: func(prompt string, options *clients.ClaudeOptions) (string, error) {
 			if prompt == "test" {
@@ -865,18 +867,19 @@ func TestClaudeService_ParseErrorHandling(t *testing.T) {
 
 	result, err := service.StartNewConversation("test")
 
-	// Should return error (not ClaudeParseError since parsing succeeds but extraction fails)
-	if err == nil {
-		t.Errorf("Expected error but got no error")
+	// Should return success with fallback message (not error)
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
 	}
 
-	if result != nil {
-		t.Errorf("Expected nil result on error, got: %v", result)
+	if result == nil {
+		t.Errorf("Expected result but got nil")
+		return
 	}
 
-	// Check that error contains expected message about no ExitPlanMode, result or assistant message
-	if !strings.Contains(err.Error(), "no ExitPlanMode, result, or assistant message with text content found") {
-		t.Errorf("Expected error about no ExitPlanMode, result or assistant message, got: %v", err)
+	// Check that result contains the fallback message
+	if result.Output != "(agent returned no response)" {
+		t.Errorf("Expected output '(agent returned no response)', got: %v", result.Output)
 	}
 
 	// Mock verification not needed with function-based mocks
