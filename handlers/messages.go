@@ -309,7 +309,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 
 	// Auto-commit changes if needed (skip in ask mode)
 	var commitResult *usecases.AutoCommitResult
-	if payload.Mode != "ask" {
+	if payload.Mode != models.ConversationModeAsk {
 		var err error
 		commitResult, err = mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
 		if err != nil {
@@ -510,7 +510,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 
 	// Auto-commit changes if needed (skip in ask mode)
 	var commitResult *usecases.AutoCommitResult
-	if jobData.Mode != "ask" {
+	if jobData.Mode != models.ConversationModeAsk {
 		var err error
 		commitResult, err = mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
 		if err != nil {

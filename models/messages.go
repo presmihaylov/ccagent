@@ -1,5 +1,13 @@
 package models
 
+// ConversationMode represents the mode of a conversation
+type ConversationMode string
+
+const (
+	ConversationModeExecute ConversationMode = "execute"
+	ConversationModeAsk     ConversationMode = "ask"
+)
+
 // Message types
 const (
 	MessageTypeStartConversation         = "start_conversation_v1"
@@ -37,7 +45,7 @@ type StartConversationPayload struct {
 	MessageLink        string              `json:"message_link"`
 	Attachments        []MessageAttachment `json:"attachments,omitempty"`
 	PreviousMessages   []PreviousMessage   `json:"previous_messages,omitempty"`
-	Mode               string              `json:"mode"` // "execute" or "ask"
+	Mode               ConversationMode    `json:"mode"`
 }
 
 type StartConversationResponsePayload struct {
