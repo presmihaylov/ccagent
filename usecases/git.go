@@ -479,7 +479,14 @@ func (g *GitUseCase) generatePRTitleWithClaude(sessionID, branchName string) (st
 func (g *GitUseCase) generatePRBodyWithClaude(sessionID, branchName, slackThreadLink string) (string, error) {
 	log.Info("🤖 Asking Claude to generate PR body")
 
-	prompt := PRDescriptionGenerationPrompt(branchName)
+	// Look for GitHub PR template
+	prTemplate, err := g.gitClient.FindPRTemplate()
+	if err != nil {
+		log.Error("⚠️ Failed to search for PR template: %v (continuing with default)", err)
+		prTemplate = ""
+	}
+
+	prompt := PRDescriptionGenerationPrompt(branchName, prTemplate)
 
 	result, err := g.claudeService.ContinueConversation(sessionID, prompt)
 	if err != nil {

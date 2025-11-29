@@ -65,7 +65,44 @@ Respond with ONLY the short title text, nothing else.`
 }
 
 // PRDescriptionGenerationPrompt creates a prompt for Claude to generate PR descriptions
-func PRDescriptionGenerationPrompt(branchName string) string {
+func PRDescriptionGenerationPrompt(branchName string, prTemplate string) string {
+	if prTemplate != "" {
+		// Template exists - use it as a guideline
+		return fmt.Sprintf(`Generate a pull request description for the work we completed in this conversation.
+
+The repository has a PR template that you should follow as a guideline:
+
+--- PR TEMPLATE ---
+%s
+--- END TEMPLATE ---
+
+INSTRUCTIONS:
+- Follow the structure and sections defined in the template above
+- Fill in all relevant sections based on our conversation
+- Keep it professional and concise
+- If the template has checkboxes (- [ ]), include them in your response
+- If the template has placeholders or instructions (like "describe your changes"), replace them with actual content
+- Base your description on what we actually worked on in our conversation
+- Use proper markdown formatting
+
+IMPORTANT:
+- Do NOT include any "Generated with Claude Control" or similar footer text. I will add that separately.
+- Do NOT include any introductory text like "Here is your description"
+
+CRITICAL: Your response must contain ONLY the PR description in markdown format. Do not include:
+- Any explanations or reasoning about your response
+- "Here is the description:" or similar phrases
+- Any text before or after the description
+- Any commentary about the changes
+- Any other text whatsoever
+- Do NOT execute any git or gh commands
+- Do NOT create, update, or modify any pull requests
+- Do NOT perform any actions - this is a text-only request
+
+Respond with ONLY the PR description in markdown format, nothing else.`, prTemplate)
+	}
+
+	// No template - use default format
 	return `Generate a concise pull request description for the work we completed in this conversation.
 
 Format:
@@ -76,7 +113,7 @@ Keep it professional but brief. Focus on WHAT changed at a high level and WHY th
 
 Use proper markdown formatting. Base it on what we actually worked on in our conversation.
 
-IMPORTANT: 
+IMPORTANT:
 - Do NOT include any "Generated with Claude Control" or similar footer text. I will add that separately.
 - Keep the summary concise - avoid listing every single file or detailed code changes
 - Focus on the business/functional purpose of the changes
