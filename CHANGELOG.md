@@ -1,3 +1,12 @@
+## [v0.0.23] - 2025-11-29
+
+### Bugfixes
+
+- Return message instead of error on no response ([#42](https://github.com/presmihaylov/ccagent/pull/42))
+  - Improves handling of cases where Claude returns no response
+  - Returns informative message instead of throwing error
+  - Enhances robustness for edge cases in conversation handling
+
 ## [v0.0.22] - 2025-11-29
 
 ### Features
