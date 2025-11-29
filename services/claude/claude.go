@@ -230,7 +230,10 @@ func (c *ClaudeService) ContinueConversationWithOptions(
 
 func (c *ClaudeService) extractSessionID(messages []services.ClaudeMessage) string {
 	if len(messages) > 0 {
-		return messages[0].GetSessionID()
+		sessionID := messages[0].GetSessionID()
+		if sessionID != "" {
+			return sessionID
+		}
 	}
 	return "unknown"
 }
@@ -322,7 +325,7 @@ func (c *ClaudeService) extractClaudeResult(messages []services.ClaudeMessage) (
 		if resultText != "" {
 			return resultText, nil
 		}
-		return "", fmt.Errorf("no ExitPlanMode, result, or assistant message with text content found")
+		return "(agent returned no response)", nil
 	}
 
 	// Get the last two unique assistant messages
