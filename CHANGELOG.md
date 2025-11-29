@@ -1,3 +1,12 @@
+## [v0.0.22] - 2025-11-29
+
+### Features
+
+- Add PR template support to descriptions ([#41](https://github.com/presmihaylov/ccagent/pull/41))
+  - Supports custom PR description templates for enhanced pull request workflows
+  - Enables teams to standardize PR formatting and content
+  - Improves consistency across repository contributions
+
 ## [v0.0.21] - 2025-11-16
 
 ### Bugfixes
