@@ -910,3 +910,31 @@ func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
 	log.Info("📋 Completed successfully - updated remote URL with token")
 	return nil
 }
+
+// FindPRTemplate searches for GitHub PR template in standard locations
+// Returns the template content if found, empty string otherwise
+func (g *GitClient) FindPRTemplate() (string, error) {
+	log.Info("🔍 Searching for GitHub PR template")
+
+	// Standard locations per GitHub docs
+	// https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/creating-a-pull-request-template-for-your-repository
+	templatePaths := []string{
+		"pull_request_template.md",
+		"PULL_REQUEST_TEMPLATE.md",
+		".github/pull_request_template.md",
+		".github/PULL_REQUEST_TEMPLATE.md",
+		"docs/pull_request_template.md",
+		"docs/PULL_REQUEST_TEMPLATE.md",
+		".github/PULL_REQUEST_TEMPLATE/pull_request_template.md",
+	}
+
+	for _, path := range templatePaths {
+		if content, err := os.ReadFile(path); err == nil {
+			log.Info("✅ Found PR template at: %s", path)
+			return strings.TrimSpace(string(content)), nil
+		}
+	}
+
+	log.Info("ℹ️ No PR template found in standard locations")
+	return "", nil
+}
