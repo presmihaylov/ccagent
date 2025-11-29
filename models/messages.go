@@ -37,6 +37,7 @@ type StartConversationPayload struct {
 	MessageLink        string              `json:"message_link"`
 	Attachments        []MessageAttachment `json:"attachments,omitempty"`
 	PreviousMessages   []PreviousMessage   `json:"previous_messages,omitempty"`
+	Mode               string              `json:"mode"` // "execute" or "ask"
 }
 
 type StartConversationResponsePayload struct {
