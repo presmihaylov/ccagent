@@ -77,6 +77,8 @@ The release process includes:
 - Git and GitHub CLI (`gh`) must be configured
 - Go 1.24+ for building from source
 
+For more information, see the [Claude Control documentation](https://claudecontrol.app/docs)
+
 ## Security Considerations
 
 - Secure mode (acceptEdits) recommended for local development
