@@ -1,3 +1,12 @@
+## [v0.0.24] - 2025-11-30
+
+### Features
+
+- Add ask/execute mode to control file edits ([#43](https://github.com/presmihaylov/ccagent/pull/43))
+  - Introduces ask/execute mode for controlled file editing operations
+  - Allows users to review and approve file changes before they are applied
+  - Enhances safety and control over agent-initiated file modifications
+
 ## [v0.0.23] - 2025-11-29
 
 ### Bugfixes
