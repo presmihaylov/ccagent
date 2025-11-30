@@ -1,5 +1,13 @@
 package models
 
+// AgentMode represents the mode of a conversation
+type AgentMode string
+
+const (
+	AgentModeExecute AgentMode = "execute"
+	AgentModeAsk     AgentMode = "ask"
+)
+
 // Message types
 const (
 	MessageTypeStartConversation         = "start_conversation_v1"
@@ -37,6 +45,7 @@ type StartConversationPayload struct {
 	MessageLink        string              `json:"message_link"`
 	Attachments        []MessageAttachment `json:"attachments,omitempty"`
 	PreviousMessages   []PreviousMessage   `json:"previous_messages,omitempty"`
+	Mode               AgentMode           `json:"mode"`
 }
 
 type StartConversationResponsePayload struct {

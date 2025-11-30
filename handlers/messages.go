@@ -251,6 +251,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		ProcessedMessageID: payload.ProcessedMessageID,
 		MessageLink:        payload.MessageLink,
 		Status:             models.JobStatusInProgress,
+		Mode:               payload.Mode,
 		UpdatedAt:          time.Now(),
 	}); err != nil {
 		log.Error("❌ Failed to persist job state before Claude call: %v", err)
@@ -264,10 +265,10 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		// Don't fail - message will be deduplicated during recovery
 	}
 
-	// Get appropriate system prompt based on agent type
-	systemPrompt := GetClaudeSystemPrompt()
+	// Get appropriate system prompt based on agent type and mode
+	systemPrompt := GetClaudeSystemPrompt(payload.Mode)
 	if mh.claudeService.AgentName() == "cursor" {
-		systemPrompt = GetCursorSystemPrompt()
+		systemPrompt = GetCursorSystemPrompt(payload.Mode)
 	}
 
 	// Process thread context (previous messages) and attachments
@@ -306,11 +307,17 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		return fmt.Errorf("error starting Claude session: %w", err)
 	}
 
-	// Auto-commit changes if needed
-	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
-	if err != nil {
-		log.Info("❌ Auto-commit failed: %v", err)
-		return fmt.Errorf("auto-commit failed: %w", err)
+	// Auto-commit changes if needed (skip in ask mode)
+	var commitResult *usecases.AutoCommitResult
+	if payload.Mode != models.AgentModeAsk {
+		var err error
+		commitResult, err = mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
+		if err != nil {
+			log.Info("❌ Auto-commit failed: %v", err)
+			return fmt.Errorf("auto-commit failed: %w", err)
+		}
+	} else {
+		log.Info("📋 Skipping auto-commit in ask mode")
 	}
 
 	// Update JobData with conversation info (use commitResult.BranchName if available, otherwise branchName)
@@ -350,6 +357,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		ProcessedMessageID: payload.ProcessedMessageID,
 		MessageLink:        payload.MessageLink,
 		Status:             models.JobStatusCompleted,
+		Mode:               payload.Mode,
 		UpdatedAt:          time.Now(),
 	}); err != nil {
 		log.Error("❌ Failed to persist final job state: %v", err)
@@ -500,11 +508,17 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		return fmt.Errorf("error continuing Claude session: %w", err)
 	}
 
-	// Auto-commit changes if needed
-	commitResult, err := mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
-	if err != nil {
-		log.Info("❌ Auto-commit failed: %v", err)
-		return fmt.Errorf("auto-commit failed: %w", err)
+	// Auto-commit changes if needed (skip in ask mode)
+	var commitResult *usecases.AutoCommitResult
+	if jobData.Mode != models.AgentModeAsk {
+		var err error
+		commitResult, err = mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
+		if err != nil {
+			log.Info("❌ Auto-commit failed: %v", err)
+			return fmt.Errorf("auto-commit failed: %w", err)
+		}
+	} else {
+		log.Info("📋 Skipping auto-commit in ask mode")
 	}
 
 	// Update JobData with latest session ID and branch name from commit result
@@ -538,6 +552,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
 		BranchName:         finalBranchName,
+		Mode:               jobData.Mode,
 		ClaudeSessionID:    claudeResult.SessionID,
 		PullRequestID:      prID,
 		LastMessage:        payload.Message,
