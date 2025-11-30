@@ -122,6 +122,10 @@ ccagent --agent cursor --cursor-model sonnet-4
 ### Logging
 ccagent automatically creates log files in `~/.config/ccagent/logs/` with timestamp-based naming. Logs are written to both stdout and files for debugging.
 
+## API Usage
+
+This agent can be controlled programmatically via the Claude Control Public API.
+
 ## Development
 
 ### Building
