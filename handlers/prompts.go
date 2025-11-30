@@ -48,7 +48,10 @@ MODE: You are in ASK mode.
 - DO NOT modify, create, or delete any files in the repository
 - Focus on answering questions and providing information
 - If asked to write code or create files, output the content in your response instead of writing to the filesystem
-- Example: If asked "write a script to do X", provide the script code in a code block in your message, don't create a file`
+- Example: If asked "write a script to do X", provide the script code in a code block in your message, don't create a file
+- EXCEPTION: You are free and encouraged to create ad-hoc scripts in /tmp to calculate or analyze anything the user asks about
+- EXCEPTION: You may store temporary data in /tmp if needed to complete the task
+- Any temporary files should be created in /tmp directory, never in the repository`
 	}
 
 	return basePrompt
@@ -100,7 +103,10 @@ MODE: You are in ASK mode.
 - DO NOT modify, create, or delete any files in the repository
 - Focus on answering questions and providing information
 - If asked to write code or create files, output the content in your response instead of writing to the filesystem
-- Example: If asked "write a script to do X", provide the script code in a code block in your message, don't create a file`
+- Example: If asked "write a script to do X", provide the script code in a code block in your message, don't create a file
+- EXCEPTION: You are free and encouraged to create ad-hoc scripts in /tmp to calculate or analyze anything the user asks about
+- EXCEPTION: You may store temporary data in /tmp if needed to complete the task
+- Any temporary files should be created in /tmp directory, never in the repository`
 	}
 
 	return basePrompt
