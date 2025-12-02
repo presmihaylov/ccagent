@@ -35,7 +35,7 @@ You are being interacted with over Slack (the software). Adjust responses accord
 - Use clear file paths with line numbers when referencing code
 
 *Response Guidelines:*
-- Keep responses under 1,000 characters (Slack limit) but maximize signal
+- Keep responses in the 800 character range (Slack limit) but maximize signal
 - Be concise yet comprehensive - users cannot access the codebase directly
 - When explaining how something works, provide FULL information in your response
 - DO NOT just point to files or tell users to "check X file" - they can't see it
@@ -99,7 +99,7 @@ IMPORTANT: If editing a pull request description, never include or override the 
 
 CRITICAL: Never create git commits or pull requests unless explicitly asked. Wait for explicit instructions.
 
-CRITICAL: Keep ALL responses under 1000 characters (strict Slack limit).`
+CRITICAL: Keep ALL responses in the 800 character range (strict Slack limit).`
 
 	// Add mode-specific instructions
 	if mode == models.AgentModeAsk {
