@@ -1,3 +1,17 @@
+## [v0.0.25] - 2025-12-02
+
+### Improvements
+
+- Increase response limit and add context guidelines ([#45](https://github.com/presmihaylov/ccagent/pull/45))
+  - Expands response limits for more detailed agent outputs
+  - Adds context guidelines for improved response quality
+  - Enhances user experience with more comprehensive answers
+
+- Reduce system prompt char limit to 800 ([#46](https://github.com/presmihaylov/ccagent/pull/46))
+  - Optimizes system prompt length for better performance
+  - Reduces token overhead while maintaining functionality
+  - Improves efficiency of agent initialization
+
 ## [v0.0.24] - 2025-11-30
 
 ### Features
