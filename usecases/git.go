@@ -117,6 +117,19 @@ func (g *GitUseCase) PullLatestChanges() error {
 	log.Info("📋 Starting to pull latest changes")
 
 	if err := g.gitClient.PullLatest(); err != nil {
+		// Check if error is due to remote branch being deleted
+		if strings.Contains(err.Error(), "remote branch deleted") {
+			log.Warn("⚠️ Remote branch was deleted - switching to default branch to recover")
+			// Switch to default branch and pull latest
+			if resetErr := g.resetAndPullDefaultBranch(); resetErr != nil {
+				log.Error("❌ Failed to reset and pull default branch after remote branch deletion: %v", resetErr)
+				return fmt.Errorf("failed to recover from deleted remote branch: %w", resetErr)
+			}
+			log.Info("✅ Successfully recovered by switching to default branch")
+			log.Info("📋 Completed successfully - recovered from deleted remote branch")
+			return nil
+		}
+
 		log.Error("❌ Failed to pull latest changes: %v", err)
 		return fmt.Errorf("failed to pull latest changes: %w", err)
 	}
@@ -153,7 +166,7 @@ func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 		return fmt.Errorf("failed to checkout default branch %s: %w", defaultBranch, err)
 	}
 
-	// Step 4: Pull latest changes
+	// Step 4: Pull latest changes (this should always succeed on default branch)
 	if err := g.gitClient.PullLatest(); err != nil {
 		log.Error("❌ Failed to pull latest changes: %v", err)
 		return fmt.Errorf("failed to pull latest changes: %w", err)
@@ -227,7 +240,9 @@ func (g *GitUseCase) resetAndPullDefaultBranch() error {
 		return fmt.Errorf("failed to checkout default branch %s: %w", defaultBranch, err)
 	}
 
-	// Step 4: Pull latest changes
+	// Step 4: Pull latest changes (should always succeed on default branch)
+	// If we hit the remote branch deleted error here, it means the default branch itself
+	// was deleted which is a critical error
 	if err := g.gitClient.PullLatest(); err != nil {
 		log.Error("❌ Failed to pull latest changes: %v", err)
 		return fmt.Errorf("failed to pull latest changes: %w", err)

@@ -116,6 +116,15 @@ func (g *GitClient) PullLatest() error {
 			return nil
 		}
 
+		// Check if error is due to remote branch being deleted
+		// This happens when branch was pushed but later deleted remotely (e.g., after PR merge)
+		if strings.Contains(outputStr, "no such ref was fetched") ||
+			strings.Contains(outputStr, "couldn't find remote ref") {
+			log.Warn("⚠️ Remote branch has been deleted - this may indicate the PR was merged or branch was manually removed")
+			// Return a special error that the caller can handle by switching to default branch
+			return fmt.Errorf("remote branch deleted: %w", err)
+		}
+
 		log.Error("❌ Git pull failed: %v\nOutput: %s", err, string(output))
 		return fmt.Errorf("git pull failed: %w\nOutput: %s", err, string(output))
 	}
