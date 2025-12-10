@@ -926,14 +926,14 @@ func (g *GitUseCase) BranchExists(branchName string) (bool, error) {
 }
 
 // AbandonJobAndCleanup abandons a job due to deleted remote branch
-// This resets to the default branch and optionally deletes the local branch
+// This resets to the default branch and deletes the local branch
 func (g *GitUseCase) AbandonJobAndCleanup(jobID, branchName string) error {
 	log.Info("📋 Starting to abandon job %s and cleanup branch %s", jobID, branchName)
 
 	// Remove job from app state first
 	if err := g.appState.RemoveJob(jobID); err != nil {
 		log.Error("❌ Failed to remove job %s from state: %v", jobID, err)
-		// Continue with cleanup even if state removal fails
+		return fmt.Errorf("failed to remove job from state: %w", err)
 	}
 
 	// Switch to default branch to clean up state
@@ -945,15 +945,16 @@ func (g *GitUseCase) AbandonJobAndCleanup(jobID, branchName string) error {
 	// Delete the local branch if it exists
 	branchExists, err := g.BranchExists(branchName)
 	if err != nil {
-		log.Warn("⚠️ Failed to check if branch %s exists: %v", branchName, err)
-		// Continue anyway
-	} else if branchExists {
+		log.Error("❌ Failed to check if branch %s exists: %v", branchName, err)
+		return fmt.Errorf("failed to check if branch exists: %w", err)
+	}
+
+	if branchExists {
 		if err := g.gitClient.DeleteLocalBranch(branchName); err != nil {
-			log.Warn("⚠️ Failed to delete local branch %s: %v", branchName, err)
-			// Don't fail the abandonment if branch deletion fails
-		} else {
-			log.Info("🗑️ Deleted local branch: %s", branchName)
+			log.Error("❌ Failed to delete local branch %s: %v", branchName, err)
+			return fmt.Errorf("failed to delete local branch: %w", err)
 		}
+		log.Info("🗑️ Deleted local branch: %s", branchName)
 	}
 
 	log.Info("✅ Successfully abandoned job and cleaned up")
