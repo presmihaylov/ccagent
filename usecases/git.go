@@ -112,11 +112,21 @@ func (g *GitUseCase) ValidateGitEnvironment() error {
 	return nil
 }
 
-// SwitchToJobBranch switches to the specified branch, discarding local changes and pulling latest from main
+// PullLatestChanges pulls latest changes on the current branch
+// If the remote branch has been deleted, this returns a special error that should be handled
+// by abandoning the job and switching to the default branch
 func (g *GitUseCase) PullLatestChanges() error {
 	log.Info("📋 Starting to pull latest changes")
 
 	if err := g.gitClient.PullLatest(); err != nil {
+		// Check if error is due to remote branch being deleted
+		// This likely means the PR was merged or branch was manually removed
+		// The caller should abandon the job and clean up
+		if strings.Contains(err.Error(), "remote branch deleted") {
+			log.Warn("⚠️ Remote branch was deleted - job should be abandoned")
+			return fmt.Errorf("remote branch deleted, cannot continue job: %w", err)
+		}
+
 		log.Error("❌ Failed to pull latest changes: %v", err)
 		return fmt.Errorf("failed to pull latest changes: %w", err)
 	}
@@ -153,7 +163,7 @@ func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 		return fmt.Errorf("failed to checkout default branch %s: %w", defaultBranch, err)
 	}
 
-	// Step 4: Pull latest changes
+	// Step 4: Pull latest changes (this should always succeed on default branch)
 	if err := g.gitClient.PullLatest(); err != nil {
 		log.Error("❌ Failed to pull latest changes: %v", err)
 		return fmt.Errorf("failed to pull latest changes: %w", err)
@@ -227,7 +237,9 @@ func (g *GitUseCase) resetAndPullDefaultBranch() error {
 		return fmt.Errorf("failed to checkout default branch %s: %w", defaultBranch, err)
 	}
 
-	// Step 4: Pull latest changes
+	// Step 4: Pull latest changes (should always succeed on default branch)
+	// If we hit the remote branch deleted error here, it means the default branch itself
+	// was deleted which is a critical error
 	if err := g.gitClient.PullLatest(); err != nil {
 		log.Error("❌ Failed to pull latest changes: %v", err)
 		return fmt.Errorf("failed to pull latest changes: %w", err)
@@ -911,4 +923,41 @@ func (g *GitUseCase) BranchExists(branchName string) (bool, error) {
 
 	log.Info("ℹ️ Branch %s does not exist", branchName)
 	return false, nil
+}
+
+// AbandonJobAndCleanup abandons a job due to deleted remote branch
+// This resets to the default branch and deletes the local branch
+func (g *GitUseCase) AbandonJobAndCleanup(jobID, branchName string) error {
+	log.Info("📋 Starting to abandon job %s and cleanup branch %s", jobID, branchName)
+
+	// Remove job from app state first
+	if err := g.appState.RemoveJob(jobID); err != nil {
+		log.Error("❌ Failed to remove job %s from state: %v", jobID, err)
+		return fmt.Errorf("failed to remove job from state: %w", err)
+	}
+
+	// Switch to default branch to clean up state
+	if err := g.resetAndPullDefaultBranch(); err != nil {
+		log.Error("❌ Failed to reset and pull default branch: %v", err)
+		return fmt.Errorf("failed to reset to default branch: %w", err)
+	}
+
+	// Delete the local branch if it exists
+	branchExists, err := g.BranchExists(branchName)
+	if err != nil {
+		log.Error("❌ Failed to check if branch %s exists: %v", branchName, err)
+		return fmt.Errorf("failed to check if branch exists: %w", err)
+	}
+
+	if branchExists {
+		if err := g.gitClient.DeleteLocalBranch(branchName); err != nil {
+			log.Error("❌ Failed to delete local branch %s: %v", branchName, err)
+			return fmt.Errorf("failed to delete local branch: %w", err)
+		}
+		log.Info("🗑️ Deleted local branch: %s", branchName)
+	}
+
+	log.Info("✅ Successfully abandoned job and cleaned up")
+	log.Info("📋 Completed successfully - abandoned job and reset to default branch")
+	return nil
 }

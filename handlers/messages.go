@@ -425,6 +425,35 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 
 	// Pull latest changes before continuing conversation
 	if err := mh.gitUseCase.PullLatestChanges(); err != nil {
+		// Check if error is due to remote branch being deleted
+		if strings.Contains(err.Error(), "remote branch deleted") {
+			log.Warn("⚠️ Remote branch deleted for job %s - abandoning job and cleaning up", payload.JobID)
+
+			// Abandon the job and cleanup
+			abandonErr := mh.gitUseCase.AbandonJobAndCleanup(payload.JobID, jobData.BranchName)
+
+			// Send system message to notify user (try even if cleanup fails)
+			var systemMessage string
+			if abandonErr != nil {
+				systemMessage = fmt.Sprintf("Job failed: Remote branch '%s' was deleted (likely merged), but cleanup failed: %v. Please check repository state.", jobData.BranchName, abandonErr)
+			} else {
+				systemMessage = fmt.Sprintf("Job abandoned: Remote branch '%s' was deleted (likely merged). Please start a new conversation.", jobData.BranchName)
+			}
+
+			systemErr := mh.sendSystemMessage(systemMessage, payload.ProcessedMessageID, payload.JobID)
+			if systemErr != nil {
+				log.Error("❌ Failed to send system message for abandoned job: %v", systemErr)
+			}
+
+			// Return the cleanup error if it occurred, otherwise return abandoned error
+			if abandonErr != nil {
+				log.Error("❌ Failed to abandon job and cleanup: %v", abandonErr)
+				return fmt.Errorf("failed to abandon job: %w", abandonErr)
+			}
+
+			return fmt.Errorf("job abandoned: remote branch deleted")
+		}
+
 		log.Error("❌ Failed to pull latest changes: %v", err)
 		return fmt.Errorf("failed to pull latest changes: %w", err)
 	}
