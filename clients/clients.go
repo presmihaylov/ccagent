@@ -36,3 +36,14 @@ type CodexClient interface {
 	StartNewSession(prompt string, options *CodexOptions) (string, error)
 	ContinueSession(threadID, prompt string, options *CodexOptions) (string, error)
 }
+
+// OpenCodeOptions contains optional parameters for OpenCode CLI interactions
+type OpenCodeOptions struct {
+	Model string // Model in provider/model format (e.g., "anthropic/claude-3-5-sonnet")
+}
+
+// OpenCodeClient defines the interface for OpenCode CLI interactions
+type OpenCodeClient interface {
+	StartNewSession(prompt string, options *OpenCodeOptions) (string, error)
+	ContinueSession(sessionID, prompt string, options *OpenCodeOptions) (string, error)
+}
