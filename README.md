@@ -6,6 +6,8 @@ A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team c
 
 - **Claude Code**: Anthropic's official CLI tool for software engineering (default)
 - **Cursor**: Popular AI-powered code editor integration
+- **Codex**: OpenAI's coding assistant with model selection
+- **OpenCode**: Open-source AI coding agent with multi-provider model support
 
 ### Supported Platforms
 
@@ -95,11 +97,13 @@ By default, ccagent uses Claude Code as the AI assistant with `acceptEdits` perm
 ccagent [OPTIONS]
 
 Options:
-  --agent=[claude|cursor]              AI assistant to use (default: claude)
-  --claude-bypass-permissions          Use bypassPermissions for Claude (sandbox only)
+  --agent=[claude|cursor|codex|opencode]  AI assistant to use (default: claude)
+  --claude-bypass-permissions             Use bypassPermissions for Claude/Codex (sandbox only)
   --cursor-model=[gpt-5|sonnet-4|sonnet-4-thinking]  Model for Cursor agent
-  -v, --version                        Show version information
-  -h, --help                           Show help message
+  --codex-model=MODEL                     Model for Codex agent (default: gpt-5)
+  --opencode-model=PROVIDER/MODEL         Model for OpenCode agent (default: opencode/grok-code)
+  -v, --version                           Show version information
+  -h, --help                              Show help message
 ```
 
 ### Agent-Specific Usage
@@ -118,6 +122,29 @@ ccagent --agent claude --claude-bypass-permissions
 # Use Cursor with specific model
 ccagent --agent cursor --cursor-model sonnet-4
 ```
+
+#### Codex Agent
+```bash
+# Standard mode - requires approval for file edits
+ccagent --agent codex
+
+# Bypass permissions (Recommended in a secure sandbox environment only)
+ccagent --agent codex --claude-bypass-permissions
+
+# Use specific model
+ccagent --agent codex --codex-model gpt-5
+```
+
+#### OpenCode Agent
+```bash
+# OpenCode requires bypass permissions mode
+ccagent --agent opencode --claude-bypass-permissions
+
+# Use specific provider/model
+ccagent --agent opencode --claude-bypass-permissions --opencode-model anthropic/claude-3-5-sonnet
+```
+
+**Note**: OpenCode only supports `bypassPermissions` mode. The `--claude-bypass-permissions` flag is required.
 
 ### Logging
 ccagent automatically creates log files in `~/.config/ccagent/logs/` with timestamp-based naming. Logs are written to both stdout and files for debugging.
@@ -160,11 +187,14 @@ ccagent operates in different permission modes depending on the AI assistant and
 
 ### Secure Mode (Recommended)
 - **Claude Code (default)**: Runs in `acceptEdits` mode, requiring explicit approval for all file modifications
+- **Codex (default)**: Runs in `acceptEdits` mode with sandbox protections
 - **Best Practice**: Use this mode when running ccagent on your local development machine
 
 ### Bypass Permissions Mode
 - **Claude Code with `--claude-bypass-permissions`**: Allows unrestricted system access
+- **Codex with `--claude-bypass-permissions`**: Bypasses approvals and sandbox
 - **Cursor Agent**: **Always runs in bypass mode by default**
+- **OpenCode Agent**: **Only supports bypass mode**
 
 When running in bypass permissions mode, **anyone with access to your Slack workspace or Discord server can execute arbitrary commands on your system with your user privileges**. It's recommended that you use this mode only if you're running the agent in a secure environment like a docker container or a remote, isolated server.
 
@@ -179,4 +209,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
-

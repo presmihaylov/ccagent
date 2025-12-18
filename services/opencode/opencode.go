@@ -180,8 +180,7 @@ func (o *OpenCodeService) StartNewConversationWithDisallowedTools(
 	disallowedTools []string,
 ) (*services.CLIAgentResult, error) {
 	// OpenCode doesn't have a disallowed tools option via CLI
-	// Permissions should be configured in opencode.json
-	log.Info("⚠️ OpenCode doesn't support disallowed tools via CLI - configure in opencode.json instead")
+	log.Info("⚠️ OpenCode doesn't support disallowed tools via CLI")
 	return o.StartNewConversationWithOptions(prompt, nil)
 }
 

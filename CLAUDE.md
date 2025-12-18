@@ -35,14 +35,15 @@ ccagent is a Go-based CLI application that serves as a bridge between AI coding 
 - **Claude Code** (default): Anthropic's CLI tool with configurable permission modes
 - **Cursor**: AI-powered code editor integration
 - **Codex**: OpenAI's coding assistant with model selection
-- **OpenCode**: Open-source AI coding agent with multi-provider model support (use `--opencode-model provider/model`)
+- **OpenCode**: Open-source AI coding agent with multi-provider model support (use `--opencode-model=provider/model`). **Only supports `bypassPermissions` mode**.
 
 ### Key Features
 
 - **Branch Management**: Auto-creates ccagent-prefixed branches for each conversation
-- **Permission Modes**: 
-  - `acceptEdits` (secure, requires approval)
-  - `bypassPermissions` (sandbox only, unrestricted access)
+- **Permission Modes**:
+  - `acceptEdits` (secure, requires approval) - supported by Claude Code and Codex
+  - `bypassPermissions` (sandbox only, unrestricted access) - supported by all agents
+  - Note: OpenCode **only supports `bypassPermissions`** and will fail if `acceptEdits` is requested
 - **Auto-commit**: Automatically commits changes with descriptive messages
 - **PR Management**: Creates and tracks pull requests automatically
 - **Job Lifecycle**: Tracks conversation sessions and cleans up completed jobs
@@ -81,11 +82,11 @@ The release process includes:
 
 ## Security Considerations
 
-- Secure mode (acceptEdits) recommended for local development
+- Secure mode (acceptEdits) recommended for local development (Claude Code, Codex)
 - Bypass permissions mode should only be used in controlled sandbox environments
 - Directory locking prevents concurrent instances
 - All git operations are tracked and logged
-- OpenCode permissions are configured via `opencode.json` (not CLI flags)
+- OpenCode **only supports `bypassPermissions` mode**
 
 ## Log Management
 

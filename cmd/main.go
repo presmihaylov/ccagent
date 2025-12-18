@@ -295,6 +295,15 @@ func main() {
 		)
 	}
 
+	// OpenCode only supports bypassPermissions mode
+	if opts.Agent == "opencode" && permissionMode != "bypassPermissions" {
+		fmt.Fprintf(
+			os.Stderr,
+			"Error: OpenCode only supports bypassPermissions mode. Use --claude-bypass-permissions flag.\n",
+		)
+		os.Exit(1)
+	}
+
 	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.CursorModel, opts.CodexModel, opts.OpenCodeModel)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing CmdRunner: %v\n", err)

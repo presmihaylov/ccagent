@@ -11,8 +11,7 @@ import (
 )
 
 type OpenCodeClient struct {
-	// Note: OpenCode permissions are configured via opencode.json, not CLI flags.
-	// Users should configure permissions in their opencode.json file.
+	// No permissionsMode needed as we only support `bypassPermissions` for now.
 }
 
 func NewOpenCodeClient() *OpenCodeClient {
@@ -25,6 +24,7 @@ func (c *OpenCodeClient) StartNewSession(prompt string, options *clients.OpenCod
 	args := []string{
 		"run",
 		"--format", "json",
+		"--agent", "build", // Always use build mode until `acceptEdits` support is added
 	}
 
 	// Add model from options if provided
@@ -63,6 +63,7 @@ func (c *OpenCodeClient) ContinueSession(sessionID, prompt string, options *clie
 		"run",
 		"--session", sessionID,
 		"--format", "json",
+		"--agent", "build", // Always use build mode until `acceptEdits` support is added
 	}
 
 	// Add model from options if provided
