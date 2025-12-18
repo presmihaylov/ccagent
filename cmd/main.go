@@ -218,7 +218,7 @@ type Options struct {
 	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
 	CursorModel       string `long:"cursor-model" description:"Model to use with Cursor agent (only applies when --agent=cursor)" choice:"gpt-5" choice:"sonnet-4" choice:"sonnet-4-thinking"`
 	CodexModel        string `long:"codex-model" description:"Model to use with Codex agent (only applies when --agent=codex)" default:"gpt-5"`
-	OpenCodeModel     string `long:"opencode-model" description:"Model to use with OpenCode agent in provider/model format (only applies when --agent=opencode)"`
+	OpenCodeModel     string `long:"opencode-model" description:"Model to use with OpenCode agent in provider/model format (only applies when --agent=opencode)" default:"opencode/grok-code"`
 	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
