@@ -1,3 +1,13 @@
+## [v0.0.26] - 2025-12-19
+
+### Bugfixes
+
+- Abandon job when remote branch deleted ([#47](https://github.com/presmihaylov/ccagent/pull/47))
+  - Automatically detects when a remote branch has been deleted
+  - Gracefully abandons jobs that can no longer be completed
+  - Prevents agents from getting stuck on deleted branches
+  - Improves resource utilization by freeing up workers promptly
+
 ## [v0.0.25] - 2025-12-02
 
 ### Improvements
