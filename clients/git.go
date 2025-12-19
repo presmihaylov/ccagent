@@ -217,18 +217,29 @@ func (g *GitClient) PushBranch(branchName string) error {
 func (g *GitClient) CreatePullRequest(title, body, baseBranch string) (string, error) {
 	log.Info("📋 Starting to create pull request: %s", title)
 
-	cmd := exec.Command("gh", "pr", "create", "--title", title, "--body", body, "--base", baseBranch)
+	// Validate and truncate PR title if necessary
+	validationResult := ValidateAndTruncatePRTitle(title, body)
+
+	// If title was truncated, prepend overflow to description
+	finalBody := body
+	if validationResult.DescriptionPrefix != "" {
+		log.Warn("⚠️ PR title exceeded %d characters, truncating to '%s' and moving overflow to description",
+			MaxGitHubPRTitleLength, validationResult.Title)
+		finalBody = validationResult.DescriptionPrefix + body
+	}
+
+	cmd := exec.Command("gh", "pr", "create", "--title", validationResult.Title, "--body", finalBody, "--base", baseBranch)
 	output, err := g.executeWithRetry(cmd, "create pull request")
 
 	if err != nil {
-		log.Error("❌ GitHub PR creation failed for title '%s': %v\nOutput: %s", title, err, string(output))
+		log.Error("❌ GitHub PR creation failed for title '%s': %v\nOutput: %s", validationResult.Title, err, string(output))
 		return "", fmt.Errorf("github pr creation failed: %w\nOutput: %s", err, string(output))
 	}
 
 	// The output contains the PR URL
 	prURL := strings.TrimSpace(string(output))
 
-	log.Info("✅ Successfully created pull request: %s", title)
+	log.Info("✅ Successfully created pull request: %s", validationResult.Title)
 	log.Info("📋 Completed successfully - created pull request")
 	return prURL, nil
 }
@@ -616,7 +627,32 @@ func (g *GitClient) GetPRTitle(branchName string) (string, error) {
 func (g *GitClient) UpdatePRTitle(branchName, newTitle string) error {
 	log.Info("📋 Starting to update PR title for branch: %s", branchName)
 
-	cmd := exec.Command("gh", "pr", "edit", branchName, "--title", newTitle)
+	// Get current description first in case we need to prepend overflow
+	currentDescription, err := g.GetPRDescription(branchName)
+	if err != nil {
+		log.Warn("⚠️ Failed to get current PR description, continuing with title update only: %v", err)
+		currentDescription = ""
+	}
+
+	// Validate and truncate PR title if necessary
+	validationResult := ValidateAndTruncatePRTitle(newTitle, currentDescription)
+
+	// If title was truncated, prepend overflow to description
+	if validationResult.DescriptionPrefix != "" {
+		log.Warn("⚠️ PR title exceeded %d characters, truncating to '%s' and moving overflow to description",
+			MaxGitHubPRTitleLength, validationResult.Title)
+
+		newDescription := validationResult.DescriptionPrefix + currentDescription
+
+		// Update both title and description
+		if err := g.UpdatePRDescription(branchName, newDescription); err != nil {
+			log.Error("❌ Failed to update PR description with overflow text: %v", err)
+			return fmt.Errorf("failed to update PR description with overflow: %w", err)
+		}
+	}
+
+	// Update the title
+	cmd := exec.Command("gh", "pr", "edit", branchName, "--title", validationResult.Title)
 	output, err := g.executeWithRetry(cmd, "update PR title")
 
 	if err != nil {
