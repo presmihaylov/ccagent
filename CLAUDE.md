@@ -2,14 +2,14 @@
 
 ## What is ccagent?
 
-ccagent is a Go-based CLI application that serves as a bridge between AI coding assistants (Claude Code, Cursor) and team collaboration platforms (Slack, Discord) through the Claude Control platform. It enables teams to interact with AI coding assistants directly from their chat platforms while maintaining proper git workflow and branch management.
+ccagent is a Go-based CLI application that serves as a bridge between AI coding assistants (Claude Code, Cursor, Codex, OpenCode) and team collaboration platforms (Slack, Discord) through the Claude Control platform. It enables teams to interact with AI coding assistants directly from their chat platforms while maintaining proper git workflow and branch management.
 
 ## Core Architecture
 
 ### Main Components
 
 1. **CLI Agent Interface** (`services/services.go`)
-   - Abstraction layer for different AI assistants (Claude, Cursor)
+   - Abstraction layer for different AI assistants (Claude, Cursor, Codex, OpenCode)
    - Handles conversation management and session tracking
 
 2. **Socket.IO Client** (`cmd/main.go`)
@@ -34,13 +34,16 @@ ccagent is a Go-based CLI application that serves as a bridge between AI coding 
 
 - **Claude Code** (default): Anthropic's CLI tool with configurable permission modes
 - **Cursor**: AI-powered code editor integration
+- **Codex**: OpenAI's coding assistant with model selection
+- **OpenCode**: Open-source AI coding agent with multi-provider model support (use `--opencode-model=provider/model`). **Only supports `bypassPermissions` mode**.
 
 ### Key Features
 
 - **Branch Management**: Auto-creates ccagent-prefixed branches for each conversation
-- **Permission Modes**: 
-  - `acceptEdits` (secure, requires approval)
-  - `bypassPermissions` (sandbox only, unrestricted access)
+- **Permission Modes**:
+  - `acceptEdits` (secure, requires approval) - supported by Claude Code and Codex
+  - `bypassPermissions` (sandbox only, unrestricted access) - supported by all agents
+  - Note: OpenCode **only supports `bypassPermissions`** and will fail if `acceptEdits` is requested
 - **Auto-commit**: Automatically commits changes with descriptive messages
 - **PR Management**: Creates and tracks pull requests automatically
 - **Job Lifecycle**: Tracks conversation sessions and cleans up completed jobs
@@ -79,10 +82,11 @@ The release process includes:
 
 ## Security Considerations
 
-- Secure mode (acceptEdits) recommended for local development
+- Secure mode (acceptEdits) recommended for local development (Claude Code, Codex)
 - Bypass permissions mode should only be used in controlled sandbox environments
 - Directory locking prevents concurrent instances
 - All git operations are tracked and logged
+- OpenCode **only supports `bypassPermissions` mode**
 
 ## Log Management
 
