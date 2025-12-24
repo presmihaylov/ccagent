@@ -1,3 +1,34 @@
+## [v0.0.27] - 2025-12-24
+
+### Features
+
+- Add support for OpenCode client ([#48](https://github.com/presmihaylov/ccagent/pull/48))
+  - Integrates OpenCode as a new supported AI coding client
+  - Expands agent compatibility with additional coding assistants
+  - Provides seamless integration for OpenCode users
+
+- Add automatic PR title trimming ([#49](https://github.com/presmihaylov/ccagent/pull/49))
+  - Automatically trims PR titles that exceed GitHub's character limit
+  - Prevents PR creation failures due to overly long titles
+  - Improves reliability of automated PR workflows
+
+- Show the correct platform in PR description footer ([#51](https://github.com/presmihaylov/ccagent/pull/51))
+  - Displays the actual platform (Slack, Discord) in PR footers
+  - Improves traceability of PR origins
+  - Enhances multi-platform integration clarity
+
+- Skip token operations for self-hosted ([#52](https://github.com/presmihaylov/ccagent/pull/52))
+  - Skips unnecessary token operations in self-hosted deployments
+  - Reduces overhead for self-managed installations
+  - Improves startup performance for self-hosted agents
+
+### Bugfixes
+
+- Increase API client timeout to 60s ([#50](https://github.com/presmihaylov/ccagent/pull/50))
+  - Extends API client timeout from default to 60 seconds
+  - Prevents timeout errors during slow API responses
+  - Improves reliability for complex operations
+
 ## [v0.0.26] - 2025-12-19
 
 ### Bugfixes
