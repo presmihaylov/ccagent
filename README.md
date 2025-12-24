@@ -99,9 +99,7 @@ ccagent [OPTIONS]
 Options:
   --agent=[claude|cursor|codex|opencode]  AI assistant to use (default: claude)
   --claude-bypass-permissions             Use bypassPermissions for Claude/Codex (sandbox only)
-  --cursor-model=[gpt-5|sonnet-4|sonnet-4-thinking]  Model for Cursor agent
-  --codex-model=MODEL                     Model for Codex agent (default: gpt-5)
-  --opencode-model=PROVIDER/MODEL         Model for OpenCode agent (default: opencode/grok-code)
+  --model=MODEL                           Model to use (agent-specific, see examples below)
   -v, --version                           Show version information
   -h, --help                              Show help message
 ```
@@ -119,8 +117,8 @@ ccagent --agent claude --claude-bypass-permissions
 
 #### Cursor Agent
 ```bash
-# Use Cursor with specific model
-ccagent --agent cursor --cursor-model sonnet-4
+# Use Cursor with specific model (options: gpt-5, sonnet-4, sonnet-4-thinking)
+ccagent --agent cursor --model sonnet-4
 ```
 
 #### Codex Agent
@@ -131,17 +129,17 @@ ccagent --agent codex
 # Bypass permissions (Recommended in a secure sandbox environment only)
 ccagent --agent codex --claude-bypass-permissions
 
-# Use specific model
-ccagent --agent codex --codex-model gpt-5
+# Use specific model (default: gpt-5, accepts any model string)
+ccagent --agent codex --model gpt-5
 ```
 
 #### OpenCode Agent
 ```bash
-# OpenCode requires bypass permissions mode
+# OpenCode requires bypass permissions mode (default model: opencode/grok-code)
 ccagent --agent opencode --claude-bypass-permissions
 
-# Use specific provider/model
-ccagent --agent opencode --claude-bypass-permissions --opencode-model anthropic/claude-3-5-sonnet
+# Use specific provider/model (format: provider/model)
+ccagent --agent opencode --claude-bypass-permissions --model anthropic/claude-3-5-sonnet
 ```
 
 **Note**: OpenCode only supports `bypassPermissions` mode. The `--claude-bypass-permissions` flag is required.
