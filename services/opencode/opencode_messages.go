@@ -58,9 +58,34 @@ func (u UnknownOpenCodeMessage) GetSessionID() string {
 	return u.SessionID
 }
 
+// OpenCodeRawErrorMessage represents a non-JSON error output from OpenCode
+// This happens when opencode itself crashes or encounters a startup error
+type OpenCodeRawErrorMessage struct {
+	RawOutput string
+}
+
+func (e OpenCodeRawErrorMessage) GetType() string {
+	return "raw_error"
+}
+
+func (e OpenCodeRawErrorMessage) GetSessionID() string {
+	return ""
+}
+
 // MapOpenCodeOutputToMessages parses OpenCode command output into structured messages
 func MapOpenCodeOutputToMessages(output string) ([]OpenCodeMessage, error) {
 	var messages []OpenCodeMessage
+
+	// Check if the output looks like it might be a non-JSON error
+	// OpenCode JSON output always starts with a '{' character on the first non-empty line
+	trimmedOutput := strings.TrimSpace(output)
+	if trimmedOutput != "" && !strings.HasPrefix(trimmedOutput, "{") {
+		// This is likely a raw error output (e.g., JavaScript stack trace)
+		// Return it as a raw error message
+		return []OpenCodeMessage{
+			OpenCodeRawErrorMessage{RawOutput: trimmedOutput},
+		}, nil
+	}
 
 	// Use a scanner with a larger buffer to handle long lines
 	scanner := bufio.NewScanner(strings.NewReader(output))
@@ -149,6 +174,15 @@ func ExtractOpenCodeSessionID(messages []OpenCodeMessage) string {
 
 // ExtractOpenCodeResult extracts the result text from OpenCode messages
 func ExtractOpenCodeResult(messages []OpenCodeMessage) (string, error) {
+	// Check for raw error messages first - these indicate opencode crashed or failed to start
+	for _, msg := range messages {
+		if rawErr, ok := msg.(OpenCodeRawErrorMessage); ok {
+			// Extract a meaningful error message from the raw output
+			errorSummary := extractErrorSummary(rawErr.RawOutput)
+			return "", fmt.Errorf("opencode error: %s", errorSummary)
+		}
+	}
+
 	// Collect all text messages and concatenate their content
 	var textParts []string
 
@@ -166,4 +200,40 @@ func ExtractOpenCodeResult(messages []OpenCodeMessage) (string, error) {
 
 	// Join all text parts (in case there are multiple text messages)
 	return strings.Join(textParts, ""), nil
+}
+
+// extractErrorSummary extracts a meaningful error summary from raw opencode error output
+// It looks for common error patterns like "Error:", exception names, etc.
+func extractErrorSummary(rawOutput string) string {
+	lines := strings.Split(rawOutput, "\n")
+
+	// Look for lines containing common error indicators
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		// Look for JavaScript/TypeScript error patterns
+		if strings.Contains(trimmedLine, "Error:") {
+			// Return the error line, but truncate if too long
+			if len(trimmedLine) > 200 {
+				return trimmedLine[:200] + "..."
+			}
+			return trimmedLine
+		}
+	}
+
+	// If no specific error line found, return first non-empty line truncated
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		if trimmedLine != "" {
+			if len(trimmedLine) > 200 {
+				return trimmedLine[:200] + "..."
+			}
+			return trimmedLine
+		}
+	}
+
+	// Fallback
+	if len(rawOutput) > 200 {
+		return rawOutput[:200] + "..."
+	}
+	return rawOutput
 }

@@ -1,6 +1,7 @@
 package opencode
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -54,10 +55,24 @@ func TestMapOpenCodeOutputToMessages(t *testing.T) {
 			expectError:   false,
 		},
 		{
-			name:          "invalid JSON becomes unknown",
+			name:          "raw error output detected as raw_error type",
 			input:         `not json at all`,
 			expectedCount: 1,
-			expectedTypes: []string{"unknown"},
+			expectedTypes: []string{"raw_error"},
+			expectError:   false,
+		},
+		{
+			name: "javascript stack trace detected as raw_error",
+			input: `154 |           stderr: "pipe",
+155 |           stdout: "pipe",
+156 |         })
+RipgrepExtractionFailedError: RipgrepExtractionFailedError
+ data: {
+  filepath: "/home/ccagent/.local/share/opencode/bin/rg",
+  stderr: "tar: unrecognized option: wildcards",
+}`,
+			expectedCount: 1,
+			expectedTypes: []string{"raw_error"},
 			expectError:   false,
 		},
 	}
@@ -136,6 +151,7 @@ func TestExtractOpenCodeResult(t *testing.T) {
 		input          string
 		expectedResult string
 		expectError    bool
+		errorContains  string // substring that should be in the error message
 	}{
 		{
 			name: "extracts text from text message",
@@ -157,18 +173,39 @@ func TestExtractOpenCodeResult(t *testing.T) {
 			input:          `{"type":"step_start","timestamp":1759406013703,"sessionID":"ses_123","part":{}}`,
 			expectedResult: "",
 			expectError:    true,
+			errorContains:  "no text message found",
 		},
 		{
 			name:           "returns error for empty input",
 			input:          "",
 			expectedResult: "",
 			expectError:    true,
+			errorContains:  "no text message found",
 		},
 		{
 			name:           "ignores text message with empty text",
 			input:          `{"type":"text","timestamp":1759406015783,"sessionID":"ses_123","part":{"type":"text","text":""}}`,
 			expectedResult: "",
 			expectError:    true,
+			errorContains:  "no text message found",
+		},
+		{
+			name: "returns opencode error for raw error output",
+			input: `154 |           stderr: "pipe",
+RipgrepExtractionFailedError: RipgrepExtractionFailedError
+ data: {
+  stderr: "tar: unrecognized option: wildcards",
+}`,
+			expectedResult: "",
+			expectError:    true,
+			errorContains:  "opencode error: RipgrepExtractionFailedError: RipgrepExtractionFailedError",
+		},
+		{
+			name:           "returns opencode error with Error: line extracted",
+			input:          `Some prefix\nError: Something went wrong\nStack trace here`,
+			expectedResult: "",
+			expectError:    true,
+			errorContains:  "opencode error:",
 		},
 	}
 
@@ -189,6 +226,12 @@ func TestExtractOpenCodeResult(t *testing.T) {
 			}
 			if result != tt.expectedResult {
 				t.Errorf("Expected result %q, got %q", tt.expectedResult, result)
+			}
+			// Check error message contains expected substring
+			if tt.expectError && tt.errorContains != "" && err != nil {
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorContains, err.Error())
+				}
 			}
 		})
 	}
