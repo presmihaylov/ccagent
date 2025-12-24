@@ -1,3 +1,12 @@
+## [v0.0.28] - 2025-12-24
+
+### Improvements
+
+- Consolidate model flags into --model ([#53](https://github.com/presmihaylov/ccagent/pull/53))
+  - Simplifies CLI by replacing multiple model flags with a single --model flag
+  - Improves developer experience with cleaner command syntax
+  - Reduces flag complexity for model selection
+
 ## [v0.0.27] - 2025-12-24
 
 ### Features
