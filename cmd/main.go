@@ -49,6 +49,7 @@ type CmdRunner struct {
 	agentsApiClient    *clients.AgentsApiClient
 	wsURL              string
 	ccagentAPIKey      string
+	repoConfig         *models.MultiRepoConfig
 
 	// Persistent worker pools reused across reconnects
 	blockingWorkerPool *workerpool.WorkerPool
@@ -117,7 +118,7 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.
 	return nil
 }
 
-func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
+func NewCmdRunner(agentType, permissionMode, model string, repoConfig *models.MultiRepoConfig) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
 	// Validate model compatibility with agent
@@ -162,11 +163,8 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 		return nil, fmt.Errorf("failed to fetch and set token: %w", err)
 	}
 
-	// Get current working directory for Codex client
-	workDir, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get working directory: %w", err)
-	}
+	// Use primary repository path for Codex client (backward compatibility for single-repo mode)
+	workDir := repoConfig.Primary.Path
 
 	// Create the appropriate CLI agent service (now with all dependencies available)
 	cliAgent, err := createCLIAgent(agentType, permissionMode, model, logDir, workDir, agentsApiClient, envManager)
@@ -181,7 +179,8 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 		// Don't exit - this is not critical for agent operation
 	}
 
-	gitClient := clients.NewGitClient()
+	// Use primary repository's git client (single-repo behavior for now)
+	gitClient := repoConfig.Primary.GitClient
 
 	// Determine state file path
 	statePath := filepath.Join(configDir, "state.json")
@@ -198,7 +197,7 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 
 	gitUseCase := usecases.NewGitUseCase(gitClient, cliAgent, appState)
 
-	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender, agentsApiClient)
+	messageHandler := handlers.NewMessageHandler(cliAgent, gitUseCase, appState, envManager, messageSender, agentsApiClient, repoConfig)
 
 	// Create the CmdRunner instance
 	cr := &CmdRunner{
@@ -212,6 +211,7 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 		agentsApiClient:  agentsApiClient,
 		wsURL:            wsURL,
 		ccagentAPIKey:    ccagentAPIKey,
+		repoConfig:       repoConfig,
 	}
 
 	// Initialize dual worker pools that persist for the app lifetime
@@ -275,6 +275,7 @@ type Options struct {
 	Agent             string `long:"agent" description:"CLI agent to use (claude, cursor, codex, or opencode)" choice:"claude" choice:"cursor" choice:"codex" choice:"opencode" default:"claude"`
 	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
 	Model             string `long:"model" description:"Model to use (agent-specific: cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
+	Repos             string `long:"repos" description:"Comma-separated list of repository paths to work in (e.g., /path/to/repo1,/path/to/repo2). If not specified, uses current working directory"`
 	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
@@ -311,27 +312,34 @@ func main() {
 	if opts.Model != "" {
 		log.Info("⚙️  Model: %s", opts.Model)
 	}
-	cwd, err := os.Getwd()
-	if err == nil {
-		log.Info("📁 Working directory: %s", cwd)
-	}
 
-	// Acquire directory lock to prevent multiple instances in same directory
-	dirLock, err := utils.NewDirLock()
+	// Create multi-repo configuration
+	repoConfig, err := models.NewMultiRepoConfig(opts.Repos)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating directory lock: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error initializing repository configuration: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := dirLock.TryLock(); err != nil {
+	// Log repository information
+	if repoConfig.IsSingleRepo() {
+		log.Info("📁 Working directory: %s", repoConfig.Primary.Path)
+	} else {
+		log.Info("📁 Working in %d repositories:", len(repoConfig.Repositories))
+		for i, repo := range repoConfig.Repositories {
+			log.Info("   %d. %s (%s)", i+1, repo.Path, repo.Identifier)
+		}
+	}
+
+	// Acquire directory locks for all repositories
+	if err := repoConfig.TryLockAll(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Ensure lock is released on program exit
+	// Ensure locks are released on program exit
 	defer func() {
-		if unlockErr := dirLock.Unlock(); unlockErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to release directory lock: %v\n", unlockErr)
+		if unlockErr := repoConfig.UnlockAll(); unlockErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to release directory locks: %v\n", unlockErr)
 		}
 	}()
 
@@ -354,7 +362,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.Model)
+	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.Model, repoConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing CmdRunner: %v\n", err)
 		os.Exit(1)
@@ -477,18 +485,15 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	// Disable automatic reconnection - handle reconnection externally with backoff
 	opts.SetReconnection(false)
 
-	// Get repository identifier for header
-	gitClient := clients.NewGitClient()
-	repoIdentifier, err := gitClient.GetRepositoryIdentifier()
-	if err != nil {
-		return fmt.Errorf("failed to get repository identifier: %w", err)
-	}
+	// Get repository identifiers for header
+	repoIdentifiers := cr.repoConfig.GetIdentifiers()
 
 	// Set authentication headers
+	// For multi-repo support, send JSON array of identifiers
 	opts.SetExtraHeaders(map[string][]string{
 		"X-CCAGENT-API-KEY": {apiKey},
 		"X-CCAGENT-ID":      {cr.agentID},
-		"X-CCAGENT-REPO":    {repoIdentifier},
+		"X-CCAGENT-REPOS":   repoIdentifiers, // Send as array
 	})
 
 	manager := socket.NewManager(serverURLStr, opts)
@@ -508,6 +513,7 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	runtimeErrorChan := make(chan error, 1) // Errors after successful connection
 
 	// Connection event handlers
+	var err error
 	err = socketClient.On("connect", func(args ...any) {
 		log.Info("✅ Connected to Socket.IO server, socket ID: %s", socketClient.Id())
 		cr.connectionState.SetConnected(true)

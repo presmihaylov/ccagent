@@ -119,3 +119,28 @@ func (dl *DirLock) Unlock() error {
 func (dl *DirLock) GetLockPath() string {
 	return dl.lockPath
 }
+
+// NewDirLockWithPath creates a new directory lock for a specific path
+func NewDirLockWithPath(dirPath string) *DirLock {
+	// Sanitize the directory path to create a safe filename
+	sanitizedDir := sanitizeDirPath(dirPath)
+
+	// Get system temp directory
+	tempDir := os.TempDir()
+
+	// Create ccagent subdirectory in temp
+	ccagentTempDir := filepath.Join(tempDir, "ccagent")
+	_ = os.MkdirAll(ccagentTempDir, 0755) // Ignore error, will fail on TryLock if can't create
+
+	// Create lock file path using sanitized directory name
+	lockFileName := fmt.Sprintf("%s.lock", sanitizedDir)
+	lockPath := filepath.Join(ccagentTempDir, lockFileName)
+
+	// Create flock instance
+	lockFile := flock.New(lockPath)
+
+	return &DirLock{
+		lockFile: lockFile,
+		lockPath: lockPath,
+	}
+}

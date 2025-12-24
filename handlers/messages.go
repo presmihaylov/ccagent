@@ -23,6 +23,7 @@ type MessageHandler struct {
 	envManager      *env.EnvManager
 	messageSender   *MessageSender
 	agentsApiClient *clients.AgentsApiClient
+	repoConfig      *models.MultiRepoConfig
 }
 
 func NewMessageHandler(
@@ -32,6 +33,7 @@ func NewMessageHandler(
 	envManager *env.EnvManager,
 	messageSender *MessageSender,
 	agentsApiClient *clients.AgentsApiClient,
+	repoConfig *models.MultiRepoConfig,
 ) *MessageHandler {
 	return &MessageHandler{
 		claudeService:   claudeService,
@@ -40,6 +42,7 @@ func NewMessageHandler(
 		envManager:      envManager,
 		messageSender:   messageSender,
 		agentsApiClient: agentsApiClient,
+		repoConfig:      repoConfig,
 	}
 }
 
@@ -266,9 +269,9 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	}
 
 	// Get appropriate system prompt based on agent type and mode
-	systemPrompt := GetClaudeSystemPrompt(payload.Mode)
+	systemPrompt := GetClaudeSystemPrompt(payload.Mode, mh.repoConfig)
 	if mh.claudeService.AgentName() == "cursor" {
-		systemPrompt = GetCursorSystemPrompt(payload.Mode)
+		systemPrompt = GetCursorSystemPrompt(payload.Mode, mh.repoConfig)
 	}
 
 	// Process thread context (previous messages) and attachments
