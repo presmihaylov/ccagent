@@ -55,6 +55,42 @@ type CmdRunner struct {
 	instantWorkerPool  *workerpool.WorkerPool
 }
 
+// validateModelForAgent checks if the specified model is compatible with the chosen agent
+func validateModelForAgent(agentType, model string) error {
+	// If no model specified, it's valid for all agents (they'll use defaults)
+	if model == "" {
+		return nil
+	}
+
+	switch agentType {
+	case "claude":
+		// Claude doesn't use model flags
+		return fmt.Errorf("--model flag is not applicable for claude agent (claude uses the default model)")
+	case "cursor":
+		// Validate Cursor models
+		validCursorModels := map[string]bool{
+			"gpt-5":            true,
+			"sonnet-4":         true,
+			"sonnet-4-thinking": true,
+		}
+		if !validCursorModels[model] {
+			return fmt.Errorf("--model '%s' is not valid for cursor agent (valid options: gpt-5, sonnet-4, sonnet-4-thinking)", model)
+		}
+	case "codex":
+		// Codex accepts any model string (default: gpt-5)
+		// No specific validation needed as it's flexible
+	case "opencode":
+		// OpenCode expects provider/model format (default: opencode/grok-code)
+		if !strings.Contains(model, "/") {
+			return fmt.Errorf("--model '%s' is not valid for opencode agent (expected format: provider/model, e.g., opencode/grok-code)", model)
+		}
+	default:
+		return fmt.Errorf("unknown agent type: %s", agentType)
+	}
+
+	return nil
+}
+
 // fetchAndSetToken fetches the token from API and sets it as environment variable
 func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.EnvManager) error {
 	// Skip token operations for self-hosted installations
@@ -81,8 +117,13 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.
 	return nil
 }
 
-func NewCmdRunner(agentType, permissionMode, cursorModel, codexModel, opencodeModel string) (*CmdRunner, error) {
+func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
+
+	// Validate model compatibility with agent
+	if err := validateModelForAgent(agentType, model); err != nil {
+		return nil, err
+	}
 
 	// Create log directory for agent service
 	configDir, err := env.GetConfigDir()
@@ -128,7 +169,7 @@ func NewCmdRunner(agentType, permissionMode, cursorModel, codexModel, opencodeMo
 	}
 
 	// Create the appropriate CLI agent service (now with all dependencies available)
-	cliAgent, err := createCLIAgent(agentType, permissionMode, cursorModel, codexModel, opencodeModel, logDir, workDir, agentsApiClient, envManager)
+	cliAgent, err := createCLIAgent(agentType, permissionMode, model, logDir, workDir, agentsApiClient, envManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CLI agent: %w", err)
 	}
@@ -196,23 +237,34 @@ func NewCmdRunner(agentType, permissionMode, cursorModel, codexModel, opencodeMo
 
 // createCLIAgent creates the appropriate CLI agent based on the agent type
 func createCLIAgent(
-	agentType, permissionMode, cursorModel, codexModel, opencodeModel, logDir, workDir string,
+	agentType, permissionMode, model, logDir, workDir string,
 	agentsApiClient *clients.AgentsApiClient,
 	envManager *env.EnvManager,
 ) (services.CLIAgent, error) {
+	// Apply default models when not specified
+	if model == "" {
+		switch agentType {
+		case "codex":
+			model = "gpt-5"
+		case "opencode":
+			model = "opencode/grok-code"
+		// cursor and claude don't need defaults (cursor uses empty string, claude doesn't use models)
+		}
+	}
+
 	switch agentType {
 	case "claude":
 		claudeClient := claudeclient.NewClaudeClient(permissionMode)
 		return claudeservice.NewClaudeService(claudeClient, logDir, agentsApiClient, envManager), nil
 	case "cursor":
 		cursorClient := cursorclient.NewCursorClient()
-		return cursorservice.NewCursorService(cursorClient, logDir, cursorModel), nil
+		return cursorservice.NewCursorService(cursorClient, logDir, model), nil
 	case "codex":
 		codexClient := codexclient.NewCodexClient(permissionMode, workDir)
-		return codexservice.NewCodexService(codexClient, logDir, codexModel), nil
+		return codexservice.NewCodexService(codexClient, logDir, model), nil
 	case "opencode":
 		opencodeClient := opencodeclient.NewOpenCodeClient()
-		return opencodeservice.NewOpenCodeService(opencodeClient, logDir, opencodeModel), nil
+		return opencodeservice.NewOpenCodeService(opencodeClient, logDir, model), nil
 	default:
 		return nil, fmt.Errorf("unsupported agent type: %s", agentType)
 	}
@@ -222,9 +274,7 @@ type Options struct {
 	//nolint
 	Agent             string `long:"agent" description:"CLI agent to use (claude, cursor, codex, or opencode)" choice:"claude" choice:"cursor" choice:"codex" choice:"opencode" default:"claude"`
 	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
-	CursorModel       string `long:"cursor-model" description:"Model to use with Cursor agent (only applies when --agent=cursor)" choice:"gpt-5" choice:"sonnet-4" choice:"sonnet-4-thinking"`
-	CodexModel        string `long:"codex-model" description:"Model to use with Codex agent (only applies when --agent=codex)" default:"gpt-5"`
-	OpenCodeModel     string `long:"opencode-model" description:"Model to use with OpenCode agent in provider/model format (only applies when --agent=opencode)" default:"opencode/grok-code"`
+	Model             string `long:"model" description:"Model to use (agent-specific: cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
 	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
@@ -258,14 +308,8 @@ func main() {
 		}
 		return "acceptEdits"
 	}())
-	if opts.Agent == "cursor" && opts.CursorModel != "" {
-		log.Info("⚙️  Cursor model: %s", opts.CursorModel)
-	}
-	if opts.Agent == "codex" && opts.CodexModel != "" {
-		log.Info("⚙️  Codex model: %s", opts.CodexModel)
-	}
-	if opts.Agent == "opencode" && opts.OpenCodeModel != "" {
-		log.Info("⚙️  OpenCode model: %s", opts.OpenCodeModel)
+	if opts.Model != "" {
+		log.Info("⚙️  Model: %s", opts.Model)
 	}
 	cwd, err := os.Getwd()
 	if err == nil {
@@ -310,7 +354,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.CursorModel, opts.CodexModel, opts.OpenCodeModel)
+	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.Model)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing CmdRunner: %v\n", err)
 		os.Exit(1)

@@ -35,7 +35,7 @@ ccagent is a Go-based CLI application that serves as a bridge between AI coding 
 - **Claude Code** (default): Anthropic's CLI tool with configurable permission modes
 - **Cursor**: AI-powered code editor integration
 - **Codex**: OpenAI's coding assistant with model selection
-- **OpenCode**: Open-source AI coding agent with multi-provider model support (use `--opencode-model=provider/model`). **Only supports `bypassPermissions` mode**.
+- **OpenCode**: Open-source AI coding agent with multi-provider model support (use `--model=provider/model`). **Only supports `bypassPermissions` mode**.
 
 ### Key Features
 
