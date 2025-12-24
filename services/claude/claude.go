@@ -461,6 +461,12 @@ func (c *ClaudeService) FetchAndRefreshAgentTokens() error {
 		return nil
 	}
 
+	// Skip token operations for self-hosted installations
+	if c.agentsApiClient.IsSelfHosted() {
+		log.Info("🏠 Self-hosted installation detected, skipping token refresh")
+		return nil
+	}
+
 	log.Info("🔄 Fetching Anthropic token before Claude operation")
 
 	// Fetch current token to check expiration

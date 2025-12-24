@@ -649,6 +649,12 @@ func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage) error {
 }
 
 func (mh *MessageHandler) handleRefreshToken(msg models.BaseMessage) error {
+	// Skip token operations for self-hosted installations
+	if mh.agentsApiClient.IsSelfHosted() {
+		log.Info("🏠 Self-hosted installation detected, skipping token refresh")
+		return nil
+	}
+
 	log.Info("🔄 Starting to handle token refresh")
 
 	// Fetch current token to check expiration

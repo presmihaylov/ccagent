@@ -57,6 +57,12 @@ type CmdRunner struct {
 
 // fetchAndSetToken fetches the token from API and sets it as environment variable
 func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.EnvManager) error {
+	// Skip token operations for self-hosted installations
+	if agentsApiClient.IsSelfHosted() {
+		log.Info("🏠 Self-hosted installation detected, skipping token fetch")
+		return nil
+	}
+
 	log.Info("🔑 Fetching Anthropic token from API...")
 
 	tokenResp, err := agentsApiClient.FetchToken()
@@ -641,6 +647,12 @@ func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.
 }
 
 func (cr *CmdRunner) startTokenMonitoringRoutine(ctx context.Context, blockingWorkerPool *workerpool.WorkerPool) {
+	// Skip token monitoring for self-hosted installations
+	if cr.agentsApiClient.IsSelfHosted() {
+		log.Info("🏠 Self-hosted installation detected, skipping token monitoring routine")
+		return
+	}
+
 	log.Info("🔑 Starting token monitoring routine (checks every 10 minutes)")
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
