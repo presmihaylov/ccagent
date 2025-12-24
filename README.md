@@ -98,7 +98,7 @@ ccagent [OPTIONS]
 
 Options:
   --agent=[claude|cursor|codex|opencode]  AI assistant to use (default: claude)
-  --claude-bypass-permissions             Use bypassPermissions for Claude/Codex (sandbox only)
+  --bypass-permissions                    Use bypassPermissions for Claude/Codex (sandbox only)
   --model=MODEL                           Model to use (agent-specific, see examples below)
   -v, --version                           Show version information
   -h, --help                              Show help message
@@ -112,7 +112,7 @@ Options:
 ccagent --agent claude
 
 # Bypass permissions (Recommended in a secure sandbox environment only)
-ccagent --agent claude --claude-bypass-permissions
+ccagent --agent claude --bypass-permissions
 ```
 
 #### Cursor Agent
@@ -127,7 +127,7 @@ ccagent --agent cursor --model sonnet-4
 ccagent --agent codex
 
 # Bypass permissions (Recommended in a secure sandbox environment only)
-ccagent --agent codex --claude-bypass-permissions
+ccagent --agent codex --bypass-permissions
 
 # Use specific model (default: gpt-5, accepts any model string)
 ccagent --agent codex --model gpt-5
@@ -136,13 +136,13 @@ ccagent --agent codex --model gpt-5
 #### OpenCode Agent
 ```bash
 # OpenCode requires bypass permissions mode (default model: opencode/grok-code)
-ccagent --agent opencode --claude-bypass-permissions
+ccagent --agent opencode --bypass-permissions
 
 # Use specific provider/model (format: provider/model)
-ccagent --agent opencode --claude-bypass-permissions --model anthropic/claude-3-5-sonnet
+ccagent --agent opencode --bypass-permissions --model anthropic/claude-3-5-sonnet
 ```
 
-**Note**: OpenCode only supports `bypassPermissions` mode. The `--claude-bypass-permissions` flag is required.
+**Note**: OpenCode only supports `bypassPermissions` mode. The `--bypass-permissions` flag is required.
 
 ### Logging
 ccagent automatically creates log files in `~/.config/ccagent/logs/` with timestamp-based naming. Logs are written to both stdout and files for debugging.
@@ -189,8 +189,8 @@ ccagent operates in different permission modes depending on the AI assistant and
 - **Best Practice**: Use this mode when running ccagent on your local development machine
 
 ### Bypass Permissions Mode
-- **Claude Code with `--claude-bypass-permissions`**: Allows unrestricted system access
-- **Codex with `--claude-bypass-permissions`**: Bypasses approvals and sandbox
+- **Claude Code with `--bypass-permissions`**: Allows unrestricted system access
+- **Codex with `--bypass-permissions`**: Bypasses approvals and sandbox
 - **Cursor Agent**: **Always runs in bypass mode by default**
 - **OpenCode Agent**: **Only supports bypass mode**
 

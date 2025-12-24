@@ -38,17 +38,17 @@ import (
 )
 
 type CmdRunner struct {
-	messageHandler     *handlers.MessageHandler
-	messageSender      *handlers.MessageSender
-	connectionState    *handlers.ConnectionState
-	gitUseCase         *usecases.GitUseCase
-	appState           *models.AppState
-	rotatingWriter     *log.RotatingWriter
-	envManager         *env.EnvManager
-	agentID            string
-	agentsApiClient    *clients.AgentsApiClient
-	wsURL              string
-	ccagentAPIKey      string
+	messageHandler  *handlers.MessageHandler
+	messageSender   *handlers.MessageSender
+	connectionState *handlers.ConnectionState
+	gitUseCase      *usecases.GitUseCase
+	appState        *models.AppState
+	rotatingWriter  *log.RotatingWriter
+	envManager      *env.EnvManager
+	agentID         string
+	agentsApiClient *clients.AgentsApiClient
+	wsURL           string
+	ccagentAPIKey   string
 
 	// Persistent worker pools reused across reconnects
 	blockingWorkerPool *workerpool.WorkerPool
@@ -69,8 +69,8 @@ func validateModelForAgent(agentType, model string) error {
 	case "cursor":
 		// Validate Cursor models
 		validCursorModels := map[string]bool{
-			"gpt-5":            true,
-			"sonnet-4":         true,
+			"gpt-5":             true,
+			"sonnet-4":          true,
 			"sonnet-4-thinking": true,
 		}
 		if !validCursorModels[model] {
@@ -202,16 +202,16 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 
 	// Create the CmdRunner instance
 	cr := &CmdRunner{
-		messageHandler:   messageHandler,
-		messageSender:    messageSender,
-		connectionState:  connectionState,
-		gitUseCase:       gitUseCase,
-		appState:         appState,
-		envManager:       envManager,
-		agentID:          agentID,
-		agentsApiClient:  agentsApiClient,
-		wsURL:            wsURL,
-		ccagentAPIKey:    ccagentAPIKey,
+		messageHandler:  messageHandler,
+		messageSender:   messageSender,
+		connectionState: connectionState,
+		gitUseCase:      gitUseCase,
+		appState:        appState,
+		envManager:      envManager,
+		agentID:         agentID,
+		agentsApiClient: agentsApiClient,
+		wsURL:           wsURL,
+		ccagentAPIKey:   ccagentAPIKey,
 	}
 
 	// Initialize dual worker pools that persist for the app lifetime
@@ -248,7 +248,7 @@ func createCLIAgent(
 			model = "gpt-5"
 		case "opencode":
 			model = "opencode/grok-code"
-		// cursor and claude don't need defaults (cursor uses empty string, claude doesn't use models)
+			// cursor and claude don't need defaults (cursor uses empty string, claude doesn't use models)
 		}
 	}
 
@@ -272,10 +272,11 @@ func createCLIAgent(
 
 type Options struct {
 	//nolint
-	Agent             string `long:"agent" description:"CLI agent to use (claude, cursor, codex, or opencode)" choice:"claude" choice:"cursor" choice:"codex" choice:"opencode" default:"claude"`
-	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
-	Model             string `long:"model" description:"Model to use (agent-specific: cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
-	Version           bool   `long:"version" short:"v" description:"Show version information"`
+	Agent                       string `long:"agent" description:"CLI agent to use (claude, cursor, codex, or opencode)" choice:"claude" choice:"cursor" choice:"codex" choice:"opencode" default:"claude"`
+	BypassPermissions           bool   `long:"bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
+	DeprecatedBypassPermissions bool   `long:"claude-bypass-permissions" hidden:"true"`
+	Model                       string `long:"model" description:"Model to use (agent-specific: cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
+	Version                     bool   `long:"version" short:"v" description:"Show version information"`
 }
 
 func main() {
@@ -337,19 +338,31 @@ func main() {
 
 	// Determine permission mode based on flag
 	permissionMode := "acceptEdits"
-	if opts.BypassPermissions {
+	bypassPermissionsFlagUsed := opts.BypassPermissions || opts.DeprecatedBypassPermissions
+	if bypassPermissionsFlagUsed {
 		permissionMode = "bypassPermissions"
-		fmt.Fprintf(
-			os.Stderr,
-			"Warning: --claude-bypass-permissions flag should only be used in a controlled, sandbox environment. Otherwise, anyone from Slack will have access to your entire system\n",
-		)
+		if opts.DeprecatedBypassPermissions {
+			fmt.Fprintf(
+				os.Stderr,
+				"Warning: --claude-bypass-permissions is deprecated. Use --bypass-permissions instead.\n",
+			)
+			fmt.Fprintf(
+				os.Stderr,
+				"Warning: --bypass-permissions flag should only be used in a controlled, sandbox environment. Otherwise, anyone from Slack will have access to your entire system\n",
+			)
+		} else {
+			fmt.Fprintf(
+				os.Stderr,
+				"Warning: --bypass-permissions flag should only be used in a controlled, sandbox environment. Otherwise, anyone from Slack will have access to your entire system\n",
+			)
+		}
 	}
 
 	// OpenCode only supports bypassPermissions mode
 	if opts.Agent == "opencode" && permissionMode != "bypassPermissions" {
 		fmt.Fprintf(
 			os.Stderr,
-			"Error: OpenCode only supports bypassPermissions mode. Use --claude-bypass-permissions flag.\n",
+			"Error: OpenCode only supports bypassPermissions mode. Use --bypass-permissions flag.\n",
 		)
 		os.Exit(1)
 	}
