@@ -1,3 +1,12 @@
+## [v0.0.29] - 2025-12-25
+
+### Bugfixes
+
+- Handle non-JSON opencode output as raw error ([#56](https://github.com/presmihaylov/ccagent/pull/56))
+  - Properly handles error responses from OpenCode that aren't valid JSON
+  - Returns raw output as error message for better debugging
+  - Improves reliability when working with OpenCode client
+
 ## [v0.0.28] - 2025-12-24
 
 ### Improvements
