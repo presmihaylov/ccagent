@@ -111,6 +111,9 @@ Options:
 # Standard mode - requires approval for file edits
 ccagent --agent claude
 
+# Use specific model (options: sonnet, haiku, opus, or full model names like claude-sonnet-4-5-20250929)
+ccagent --agent claude --model haiku
+
 # Bypass permissions (Recommended in a secure sandbox environment only)
 ccagent --agent claude --claude-bypass-permissions
 ```

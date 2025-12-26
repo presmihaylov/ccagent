@@ -36,12 +36,18 @@ func TestValidateModelForAgent(t *testing.T) {
 			model:     "",
 			wantErr:   false,
 		},
-		// Claude should reject any model
+		// Claude accepts any model (validated by Claude CLI itself)
 		{
-			name:      "claude with model should fail",
+			name:      "claude with model alias",
 			agentType: "claude",
-			model:     "gpt-5",
-			wantErr:   true,
+			model:     "sonnet",
+			wantErr:   false,
+		},
+		{
+			name:      "claude with full model name",
+			agentType: "claude",
+			model:     "claude-sonnet-4-5-20250929",
+			wantErr:   false,
 		},
 		// Cursor valid models
 		{

@@ -30,6 +30,9 @@ func (c *ClaudeClient) StartNewSession(prompt string, options *clients.ClaudeOpt
 	}
 
 	if options != nil {
+		if options.Model != "" {
+			args = append(args, "--model", options.Model)
+		}
 		if options.SystemPrompt != "" {
 			args = append(args, "--append-system-prompt", options.SystemPrompt)
 		}
@@ -71,6 +74,9 @@ func (c *ClaudeClient) ContinueSession(sessionID, prompt string, options *client
 	}
 
 	if options != nil {
+		if options.Model != "" {
+			args = append(args, "--model", options.Model)
+		}
 		if options.SystemPrompt != "" {
 			args = append(args, "--append-system-prompt", options.SystemPrompt)
 		}

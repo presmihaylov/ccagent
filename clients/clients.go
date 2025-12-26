@@ -4,6 +4,7 @@ package clients
 type ClaudeOptions struct {
 	SystemPrompt    string
 	DisallowedTools []string
+	Model           string // Model alias or full name (e.g., "sonnet", "haiku", "opus", "claude-sonnet-4-5-20250929")
 }
 
 // CursorOptions contains optional parameters for Cursor CLI interactions

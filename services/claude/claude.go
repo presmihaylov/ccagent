@@ -17,6 +17,7 @@ import (
 type ClaudeService struct {
 	claudeClient    clients.ClaudeClient
 	logDir          string
+	model           string
 	agentsApiClient *clients.AgentsApiClient
 	envManager      EnvManager
 }
@@ -29,12 +30,14 @@ type EnvManager interface {
 func NewClaudeService(
 	claudeClient clients.ClaudeClient,
 	logDir string,
+	model string,
 	agentsApiClient *clients.AgentsApiClient,
 	envManager EnvManager,
 ) *ClaudeService {
 	return &ClaudeService{
 		claudeClient:    claudeClient,
 		logDir:          logDir,
+		model:           model,
 		agentsApiClient: agentsApiClient,
 		envManager:      envManager,
 	}
@@ -107,6 +110,22 @@ func (c *ClaudeService) CleanupOldLogs(maxAgeDays int) error {
 	return nil
 }
 
+// mergeOptions merges the service model with provided options
+func (c *ClaudeService) mergeOptions(options *clients.ClaudeOptions) *clients.ClaudeOptions {
+	merged := &clients.ClaudeOptions{}
+
+	if options != nil {
+		*merged = *options
+	}
+
+	// Only set model if not already specified in options and service has a model
+	if merged.Model == "" && c.model != "" {
+		merged.Model = c.model
+	}
+
+	return merged
+}
+
 func (c *ClaudeService) StartNewConversation(prompt string) (*services.CLIAgentResult, error) {
 	return c.StartNewConversationWithOptions(prompt, nil)
 }
@@ -116,7 +135,11 @@ func (c *ClaudeService) StartNewConversationWithOptions(
 	options *clients.ClaudeOptions,
 ) (*services.CLIAgentResult, error) {
 	log.Info("📋 Starting to start new Claude conversation")
-	rawOutput, err := c.claudeClient.StartNewSession(prompt, options)
+
+	// Merge service model with options
+	mergedOptions := c.mergeOptions(options)
+
+	rawOutput, err := c.claudeClient.StartNewSession(prompt, mergedOptions)
 	if err != nil {
 		log.Error("Failed to start new Claude session: %v", err)
 		return nil, c.handleClaudeClientError(err, "failed to start new Claude session")
@@ -185,7 +208,11 @@ func (c *ClaudeService) ContinueConversationWithOptions(
 	options *clients.ClaudeOptions,
 ) (*services.CLIAgentResult, error) {
 	log.Info("📋 Starting to continue Claude conversation: %s", sessionID)
-	rawOutput, err := c.claudeClient.ContinueSession(sessionID, prompt, options)
+
+	// Merge service model with options
+	mergedOptions := c.mergeOptions(options)
+
+	rawOutput, err := c.claudeClient.ContinueSession(sessionID, prompt, mergedOptions)
 	if err != nil {
 		log.Error("Failed to continue Claude session: %v", err)
 		return nil, c.handleClaudeClientError(err, "failed to continue Claude session")

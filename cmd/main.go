@@ -64,8 +64,8 @@ func validateModelForAgent(agentType, model string) error {
 
 	switch agentType {
 	case "claude":
-		// Claude doesn't use model flags
-		return fmt.Errorf("--model flag is not applicable for claude agent (claude uses the default model)")
+		// Claude accepts model aliases (sonnet, haiku, opus) or full model names
+		// No specific validation needed - Claude CLI will handle invalid model names
 	case "cursor":
 		// Validate Cursor models
 		validCursorModels := map[string]bool{
@@ -248,14 +248,14 @@ func createCLIAgent(
 			model = "gpt-5"
 		case "opencode":
 			model = "opencode/grok-code"
-		// cursor and claude don't need defaults (cursor uses empty string, claude doesn't use models)
+		// cursor and claude don't need defaults (cursor and claude use empty string for their defaults)
 		}
 	}
 
 	switch agentType {
 	case "claude":
 		claudeClient := claudeclient.NewClaudeClient(permissionMode)
-		return claudeservice.NewClaudeService(claudeClient, logDir, agentsApiClient, envManager), nil
+		return claudeservice.NewClaudeService(claudeClient, logDir, model, agentsApiClient, envManager), nil
 	case "cursor":
 		cursorClient := cursorclient.NewCursorClient()
 		return cursorservice.NewCursorService(cursorClient, logDir, model), nil
@@ -274,7 +274,7 @@ type Options struct {
 	//nolint
 	Agent             string `long:"agent" description:"CLI agent to use (claude, cursor, codex, or opencode)" choice:"claude" choice:"cursor" choice:"codex" choice:"opencode" default:"claude"`
 	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
-	Model             string `long:"model" description:"Model to use (agent-specific: cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
+	Model             string `long:"model" description:"Model to use (agent-specific: claude: sonnet/haiku/opus or full model name, cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
 	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
