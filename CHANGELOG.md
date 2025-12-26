@@ -1,3 +1,12 @@
+## [v0.0.30] - 2025-12-26
+
+### Features
+
+- Add model flag support for Claude agent ([#57](https://github.com/presmihaylov/ccagent/pull/57))
+  - Enables model selection via --model flag for Claude client
+  - Allows specifying different Claude models (e.g., claude-sonnet-4-5-20250514)
+  - Provides flexibility in choosing model based on task requirements
+
 ## [v0.0.29] - 2025-12-25
 
 ### Bugfixes
