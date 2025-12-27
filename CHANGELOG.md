@@ -1,3 +1,13 @@
+## [v0.0.32] - 2025-12-27
+
+### Features
+
+- Add agent-specific rules processing ([#60](https://github.com/presmihaylov/ccagent/pull/60))
+  - Enables processing of agent-specific CLAUDE.md rules from repository
+  - Supports custom agent behavior configuration per repository
+  - Allows repository owners to define agent-specific instructions and constraints
+  - Enhances flexibility for repository-level agent customization
+
 ## [v0.0.31] - 2025-12-27
 
 ### Features
