@@ -1,9 +1,9 @@
 package utils
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -388,10 +388,10 @@ func TestOpenCodeRulesProcessor_NoRules(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify AGENTS.md was not created
-	agentsmdPath := filepath.Join(tempDir, ".config", "opencode", "AGENTS.md")
-	if _, err := os.Stat(agentsmdPath); !os.IsNotExist(err) {
-		t.Errorf("Expected AGENTS.md not to exist when no rules")
+	// Verify opencode.json was not created when no rules
+	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
+	if _, err := os.Stat(opencodeConfigPath); !os.IsNotExist(err) {
+		t.Errorf("Expected opencode.json not to exist when no rules")
 	}
 }
 
@@ -454,38 +454,26 @@ Write tests for everything.`
 		}
 	}
 
-	// Verify AGENTS.md was created
-	agentsmdPath := filepath.Join(tempDir, ".config", "opencode", "AGENTS.md")
-	content, err := os.ReadFile(agentsmdPath)
+	// Verify opencode.json was created with correct instructions
+	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
+	content, err := os.ReadFile(opencodeConfigPath)
 	if err != nil {
-		t.Fatalf("Expected AGENTS.md to exist, got error: %v", err)
+		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
 	}
 
-	agentsmdContent := string(content)
-
-	// Verify AGENTS.md contains expected content
-	if !strings.Contains(agentsmdContent, "Code Style Guidelines") {
-		t.Errorf("Expected AGENTS.md to contain 'Code Style Guidelines'")
+	var config OpenCodeConfig
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse opencode.json: %v", err)
 	}
 
-	if !strings.Contains(agentsmdContent, "Testing Best Practices") {
-		t.Errorf("Expected AGENTS.md to contain 'Testing Best Practices'")
+	// Verify instructions array contains the glob pattern
+	if len(config.Instructions) != 1 {
+		t.Errorf("Expected 1 instruction, got: %d", len(config.Instructions))
 	}
 
-	if !strings.Contains(agentsmdContent, "./rules/code-style.md") {
-		t.Errorf("Expected AGENTS.md to contain location './rules/code-style.md'")
-	}
-
-	if !strings.Contains(agentsmdContent, "./rules/testing.md") {
-		t.Errorf("Expected AGENTS.md to contain location './rules/testing.md'")
-	}
-
-	if !strings.Contains(agentsmdContent, "Use this to learn coding standards") {
-		t.Errorf("Expected AGENTS.md to contain description")
-	}
-
-	if !strings.Contains(agentsmdContent, "IMPORTANT") {
-		t.Errorf("Expected AGENTS.md to contain IMPORTANT instructions")
+	expectedInstruction := "~/.config/opencode/rules/*.md"
+	if len(config.Instructions) > 0 && config.Instructions[0] != expectedInstruction {
+		t.Errorf("Expected instruction '%s', got: '%s'", expectedInstruction, config.Instructions[0])
 	}
 }
 
@@ -520,26 +508,26 @@ func TestOpenCodeRulesProcessor_WithoutFrontMatter(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify AGENTS.md was created
-	agentsmdPath := filepath.Join(tempDir, ".config", "opencode", "AGENTS.md")
-	content, err := os.ReadFile(agentsmdPath)
+	// Verify rule was copied
+	destPath := filepath.Join(tempDir, ".config", "opencode", "rules", "simple.md")
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		t.Errorf("Expected rule file to be copied")
+	}
+
+	// Verify opencode.json was created
+	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
+	content, err := os.ReadFile(opencodeConfigPath)
 	if err != nil {
-		t.Fatalf("Expected AGENTS.md to exist, got error: %v", err)
+		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
 	}
 
-	agentsmdContent := string(content)
-
-	// Should use filename as title when no front matter
-	if !strings.Contains(agentsmdContent, "simple") {
-		t.Errorf("Expected AGENTS.md to contain 'simple' (from filename)")
+	var config OpenCodeConfig
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse opencode.json: %v", err)
 	}
 
-	if !strings.Contains(agentsmdContent, "./rules/simple.md") {
-		t.Errorf("Expected AGENTS.md to contain location")
-	}
-
-	if !strings.Contains(agentsmdContent, "See file for details") {
-		t.Errorf("Expected default description when no front matter")
+	if len(config.Instructions) != 1 {
+		t.Errorf("Expected 1 instruction, got: %d", len(config.Instructions))
 	}
 }
 
@@ -594,6 +582,59 @@ func TestOpenCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
 	freshDestPath := filepath.Join(opencodeRulesDir, "fresh-rule.md")
 	if _, err := os.Stat(freshDestPath); os.IsNotExist(err) {
 		t.Errorf("Expected fresh rule to exist")
+	}
+}
+
+func TestOpenCodeRulesProcessor_RemovesOldAgentsMd(t *testing.T) {
+	// Create temporary directories
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "workspace")
+	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	opencodeConfigDir := filepath.Join(tempDir, ".config", "opencode")
+
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatalf("Failed to create work directory: %v", err)
+	}
+
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		t.Fatalf("Failed to create rules directory: %v", err)
+	}
+
+	if err := os.MkdirAll(opencodeConfigDir, 0755); err != nil {
+		t.Fatalf("Failed to create opencode config directory: %v", err)
+	}
+
+	// Create an old AGENTS.md file (from previous approach)
+	oldAgentsmdPath := filepath.Join(opencodeConfigDir, "AGENTS.md")
+	if err := os.WriteFile(oldAgentsmdPath, []byte("# Old AGENTS.md"), 0644); err != nil {
+		t.Fatalf("Failed to create old AGENTS.md: %v", err)
+	}
+
+	// Create a fresh rule
+	if err := os.WriteFile(filepath.Join(rulesDir, "rule.md"), []byte("# Rule"), 0644); err != nil {
+		t.Fatalf("Failed to create rule: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Process rules
+	processor := NewOpenCodeRulesProcessor(workDir)
+	if err := processor.ProcessRules(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify old AGENTS.md was removed
+	if _, err := os.Stat(oldAgentsmdPath); !os.IsNotExist(err) {
+		t.Errorf("Expected old AGENTS.md to be removed")
+	}
+
+	// Verify opencode.json was created
+	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
+	if _, err := os.Stat(opencodeConfigPath); os.IsNotExist(err) {
+		t.Errorf("Expected opencode.json to exist")
 	}
 }
 

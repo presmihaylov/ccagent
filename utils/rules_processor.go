@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -192,11 +193,9 @@ type OpenCodeRulesProcessor struct {
 	workDir string
 }
 
-// ruleInfo holds metadata about a rule file for AGENTS.md generation
-type ruleInfo struct {
-	fileName    string
-	title       string
-	description string
+// OpenCodeConfig represents the opencode.json configuration structure
+type OpenCodeConfig struct {
+	Instructions []string `json:"instructions"`
 }
 
 // NewOpenCodeRulesProcessor creates a new OpenCode rules processor
@@ -207,6 +206,9 @@ func NewOpenCodeRulesProcessor(workDir string) *OpenCodeRulesProcessor {
 }
 
 // ProcessRules implements RulesProcessor for OpenCode
+// It copies rule files to ~/.config/opencode/rules/ and creates an opencode.json
+// with an instructions array that references those rule files using absolute paths.
+// This allows OpenCode to automatically load the rules into its context.
 func (p *OpenCodeRulesProcessor) ProcessRules() error {
 	log.Info("📋 Processing rules for OpenCode agent")
 
@@ -242,9 +244,7 @@ func (p *OpenCodeRulesProcessor) ProcessRules() error {
 		return fmt.Errorf("failed to create OpenCode rules directory: %w", err)
 	}
 
-	// Copy each rule file and collect metadata for AGENTS.md
-	var rules []ruleInfo
-
+	// Copy each rule file
 	for _, ruleFile := range ruleFiles {
 		fileName := filepath.Base(ruleFile)
 		destPath := filepath.Join(opencodeRulesDir, fileName)
@@ -261,75 +261,35 @@ func (p *OpenCodeRulesProcessor) ProcessRules() error {
 		if err := os.WriteFile(destPath, content, 0644); err != nil {
 			return fmt.Errorf("failed to write rule file %s: %w", destPath, err)
 		}
-
-		// Parse front matter for AGENTS.md
-		frontMatter, err := ParseFrontMatter(ruleFile)
-		if err != nil {
-			log.Info("⚠️  Failed to parse front matter for %s: %v", fileName, err)
-			// Continue anyway with empty metadata
-			frontMatter = &RuleFrontMatter{}
-		}
-
-		rules = append(rules, ruleInfo{
-			fileName:    fileName,
-			title:       frontMatter.Title,
-			description: frontMatter.Description,
-		})
 	}
 
-	// Generate AGENTS.md
-	agentsmdPath := filepath.Join(opencodeConfigDir, "AGENTS.md")
-	agentsmdContent := p.generateAGENTSmd(rules)
+	// Generate opencode.json with instructions pointing to the rules directory
+	// Using glob pattern with ~ prefix which OpenCode expands to home directory
+	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
 
-	log.Info("📋 Creating AGENTS.md at: %s", agentsmdPath)
+	config := OpenCodeConfig{
+		Instructions: []string{"~/.config/opencode/rules/*.md"},
+	}
 
-	if err := os.WriteFile(agentsmdPath, []byte(agentsmdContent), 0644); err != nil {
-		return fmt.Errorf("failed to write AGENTS.md: %w", err)
+	configJSON, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal opencode.json: %w", err)
+	}
+
+	log.Info("📋 Creating opencode.json at: %s", opencodeConfigPath)
+
+	if err := os.WriteFile(opencodeConfigPath, configJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write opencode.json: %w", err)
+	}
+
+	// Remove old AGENTS.md if it exists (cleanup from previous approach)
+	oldAgentsmdPath := filepath.Join(opencodeConfigDir, "AGENTS.md")
+	if err := os.Remove(oldAgentsmdPath); err != nil && !os.IsNotExist(err) {
+		log.Info("⚠️  Failed to remove old AGENTS.md: %v", err)
 	}
 
 	log.Info("✅ Successfully processed %d rule(s) for OpenCode", len(ruleFiles))
 	return nil
-}
-
-// generateAGENTSmd creates the AGENTS.md content with instructions and rule enumeration
-func (p *OpenCodeRulesProcessor) generateAGENTSmd(rules []ruleInfo) string {
-	var sb strings.Builder
-
-	// Write instructions header
-	sb.WriteString("# Agent Rules and Guidelines\n\n")
-	sb.WriteString("**IMPORTANT**: Before starting any task, carefully examine the rules below to determine which ones are relevant to the work you're about to perform. ")
-	sb.WriteString("Each rule is designed to guide specific aspects of development. ")
-	sb.WriteString("Apply the relevant rules thoughtfully to ensure high-quality results.\n\n")
-	sb.WriteString("**Instructions**:\n")
-	sb.WriteString("1. Read the task description carefully\n")
-	sb.WriteString("2. Review the list of available rules below\n")
-	sb.WriteString("3. Identify which rules apply to your current task\n")
-	sb.WriteString("4. Read the full content of the applicable rules from their file locations\n")
-	sb.WriteString("5. Apply the guidelines from those rules throughout your work\n\n")
-	sb.WriteString("---\n\n")
-	sb.WriteString("## Available Rules\n\n")
-
-	// Enumerate each rule
-	for _, rule := range rules {
-		// Use title if available, otherwise use filename without extension
-		title := rule.title
-		if title == "" {
-			title = strings.TrimSuffix(rule.fileName, filepath.Ext(rule.fileName))
-		}
-
-		sb.WriteString(fmt.Sprintf("### %s\n", title))
-		sb.WriteString(fmt.Sprintf("**Location**: `./rules/%s`\n", rule.fileName))
-
-		if rule.description != "" {
-			sb.WriteString(fmt.Sprintf("**Description**: %s\n", rule.description))
-		} else {
-			sb.WriteString("**Description**: See file for details\n")
-		}
-
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
 }
 
 // NoOpRulesProcessor is a no-op implementation for agents that don't support rules
