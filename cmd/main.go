@@ -153,6 +153,31 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 	return nil
 }
 
+// processAgentRules processes rules from ccagent directory based on agent type
+func processAgentRules(agentType, workDir string) error {
+	log.Info("📋 Processing agent rules for agent type: %s", agentType)
+
+	var processor utils.RulesProcessor
+
+	switch agentType {
+	case "claude":
+		processor = utils.NewClaudeCodeRulesProcessor(workDir)
+	case "opencode":
+		processor = utils.NewOpenCodeRulesProcessor(workDir)
+	case "cursor", "codex":
+		// Cursor and Codex don't support rules processing yet
+		processor = utils.NewNoOpRulesProcessor()
+	default:
+		return fmt.Errorf("unknown agent type: %s", agentType)
+	}
+
+	if err := processor.ProcessRules(); err != nil {
+		return fmt.Errorf("failed to process rules: %w", err)
+	}
+
+	return nil
+}
+
 func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
@@ -207,6 +232,11 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	workDir, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Process rules based on agent type
+	if err := processAgentRules(agentType, workDir); err != nil {
+		return nil, fmt.Errorf("failed to process agent rules: %w", err)
 	}
 
 	// Create the appropriate CLI agent service (now with all dependencies available)
