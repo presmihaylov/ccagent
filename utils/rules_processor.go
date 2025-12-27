@@ -123,6 +123,37 @@ func GetRuleFiles() ([]string, error) {
 	return ruleFiles, nil
 }
 
+// CleanCcagentRulesDir removes all files from the ccagent rules directory
+// This should be called before downloading new rules from the server to ensure
+// stale rules that were deleted on the server are also removed locally.
+func CleanCcagentRulesDir() error {
+	rulesDir, err := GetCcagentRulesDir()
+	if err != nil {
+		return err
+	}
+
+	// Check if rules directory exists
+	if _, err := os.Stat(rulesDir); os.IsNotExist(err) {
+		log.Info("📋 Rules directory does not exist, nothing to clean: %s", rulesDir)
+		return nil
+	}
+
+	log.Info("📋 Cleaning ccagent rules directory: %s", rulesDir)
+
+	// Remove and recreate the directory to ensure a clean state
+	if err := os.RemoveAll(rulesDir); err != nil {
+		return fmt.Errorf("failed to remove rules directory: %w", err)
+	}
+
+	// Recreate empty directory
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		return fmt.Errorf("failed to recreate rules directory: %w", err)
+	}
+
+	log.Info("✅ Successfully cleaned ccagent rules directory")
+	return nil
+}
+
 // ClaudeCodeRulesProcessor handles rules processing for Claude Code
 type ClaudeCodeRulesProcessor struct {
 	workDir string

@@ -218,6 +218,87 @@ func TestGetRuleFiles_NonexistentDirectory(t *testing.T) {
 	}
 }
 
+// Test CleanCcagentRulesDir
+
+func TestCleanCcagentRulesDir_WithExistingRules(t *testing.T) {
+	// Create temporary ccagent rules directory with files
+	tempDir := t.TempDir()
+	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		t.Fatalf("Failed to create rules directory: %v", err)
+	}
+
+	// Create test rule files
+	testFiles := []string{"rule1.md", "rule2.md", "stale-rule.md"}
+	for _, file := range testFiles {
+		filePath := filepath.Join(rulesDir, file)
+		if err := os.WriteFile(filePath, []byte("# Test Rule"), 0644); err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Clean the rules directory
+	if err := CleanCcagentRulesDir(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify directory exists but is empty
+	entries, err := os.ReadDir(rulesDir)
+	if err != nil {
+		t.Fatalf("Failed to read rules directory: %v", err)
+	}
+
+	if len(entries) != 0 {
+		t.Errorf("Expected empty directory, found %d files", len(entries))
+	}
+}
+
+func TestCleanCcagentRulesDir_NonexistentDirectory(t *testing.T) {
+	// Use temporary directory that doesn't have rules directory
+	tempDir := t.TempDir()
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Clean should succeed even if directory doesn't exist
+	if err := CleanCcagentRulesDir(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+}
+
+func TestCleanCcagentRulesDir_RecreatesDirectory(t *testing.T) {
+	// Create temporary ccagent rules directory
+	tempDir := t.TempDir()
+	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		t.Fatalf("Failed to create rules directory: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Clean the rules directory
+	if err := CleanCcagentRulesDir(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify directory still exists (was recreated)
+	if _, err := os.Stat(rulesDir); os.IsNotExist(err) {
+		t.Errorf("Expected rules directory to be recreated")
+	}
+}
+
 // Test ClaudeCodeRulesProcessor
 
 func TestClaudeCodeRulesProcessor_NoRules(t *testing.T) {
