@@ -15,6 +15,20 @@ type AttachmentResponse struct {
 	Data string `json:"data"` // Base64-encoded content
 }
 
+// ArtifactFile represents a file within an artifact
+type ArtifactFile struct {
+	Location     string `json:"location"`
+	AttachmentID string `json:"attachmentId"`
+}
+
+// Artifact represents an agent artifact (rule, guideline, instruction)
+type Artifact struct {
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	Type        string         `json:"type"`
+	Files       []ArtifactFile `json:"files"`
+}
+
 // TokenResponse represents the API response for token operations
 type TokenResponse struct {
 	Token     string    `json:"token"`
@@ -147,3 +161,38 @@ func (c *AgentsApiClient) RefreshToken() (*TokenResponse, error) {
 
 	return &tokenResp, nil
 }
+
+// FetchArtifacts retrieves the list of agent artifacts from the API
+func (c *AgentsApiClient) FetchArtifacts() ([]Artifact, error) {
+	url := fmt.Sprintf("%s/api/agents/artifacts", c.baseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add Bearer token authentication header
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for successful response
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Parse response
+	var artifacts []Artifact
+	if err := json.NewDecoder(resp.Body).Decode(&artifacts); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return artifacts, nil
+}
+

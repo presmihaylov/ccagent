@@ -396,3 +396,200 @@ func TestFormatAttachmentsText_NilList(t *testing.T) {
 		t.Errorf("Expected empty string for nil paths, got: %s", text)
 	}
 }
+
+// Test home directory expansion
+
+func TestExpandHomeDir_WithTilde(t *testing.T) {
+	path := "~/.config/ccagent/rules/test.md"
+	expanded, err := ExpandHomeDir(path)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should not contain ~ anymore
+	if strings.Contains(expanded, "~") {
+		t.Errorf("Expected ~ to be expanded, got: %s", expanded)
+	}
+
+	// Should end with the relative part
+	if !strings.HasSuffix(expanded, ".config/ccagent/rules/test.md") {
+		t.Errorf("Expected path to end with .config/ccagent/rules/test.md, got: %s", expanded)
+	}
+}
+
+func TestExpandHomeDir_WithoutTilde(t *testing.T) {
+	path := "/absolute/path/to/file.md"
+	expanded, err := ExpandHomeDir(path)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should be unchanged
+	if expanded != path {
+		t.Errorf("Expected path to be unchanged, got: %s", expanded)
+	}
+}
+
+func TestExpandHomeDir_TildeOnly(t *testing.T) {
+	path := "~"
+	expanded, err := ExpandHomeDir(path)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should be the home directory
+	homeDir, _ := os.UserHomeDir()
+	if expanded != homeDir {
+		t.Errorf("Expected home directory %s, got: %s", homeDir, expanded)
+	}
+}
+
+// Test artifact fetching and storage
+
+func TestFetchAndStoreArtifact_Success(t *testing.T) {
+	// Create mock API server
+	markdownContent := "# Test Artifact\nThis is a test rule."
+	base64Content := base64.StdEncoding.EncodeToString([]byte(markdownContent))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request has correct headers
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "Bearer test-api-key" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Return base64-encoded content in JSON format (same as FetchAttachment)
+		response := map[string]string{
+			"id":   "test-attachment-id",
+			"data": base64Content,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	// Create agents API client with mock server URL
+	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+
+	// Create temp directory for test
+	tempDir := filepath.Join(os.TempDir(), "ccagent_test_artifacts")
+	defer os.RemoveAll(tempDir)
+
+	location := filepath.Join(tempDir, "test-rule.md")
+
+	// Fetch and store artifact
+	err := FetchAndStoreArtifact(client, "test-attachment-id", location)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify file exists
+	if _, err := os.Stat(location); os.IsNotExist(err) {
+		t.Errorf("Expected file to exist at %s", location)
+	}
+
+	// Verify file content
+	content, err := os.ReadFile(location)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+
+	if string(content) != markdownContent {
+		t.Errorf("Expected content '%s', got '%s'", markdownContent, string(content))
+	}
+}
+
+func TestFetchAndStoreArtifact_WithTilde(t *testing.T) {
+	// Create mock API server
+	markdownContent := "# Test Artifact with Tilde\nThis is a test."
+	base64Content := base64.StdEncoding.EncodeToString([]byte(markdownContent))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]string{
+			"id":   "test-attachment-id",
+			"data": base64Content,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	// Create agents API client
+	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+
+	// Use ~ in path
+	homeDir, _ := os.UserHomeDir()
+	location := "~/ccagent_test_artifact.md"
+
+	// Fetch and store artifact
+	err := FetchAndStoreArtifact(client, "test-attachment-id", location)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify file exists at expanded path
+	expandedPath := filepath.Join(homeDir, "ccagent_test_artifact.md")
+	if _, err := os.Stat(expandedPath); os.IsNotExist(err) {
+		t.Errorf("Expected file to exist at %s", expandedPath)
+	}
+
+	// Cleanup
+	os.Remove(expandedPath)
+}
+
+func TestFetchAndStoreArtifact_APIError(t *testing.T) {
+	// Create mock API server that returns error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Not Found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+
+	tempDir := filepath.Join(os.TempDir(), "ccagent_test_artifacts_error")
+	defer os.RemoveAll(tempDir)
+
+	location := filepath.Join(tempDir, "test-rule.md")
+
+	err := FetchAndStoreArtifact(client, "nonexistent-id", location)
+
+	if err == nil {
+		t.Error("Expected error for API failure, got nil")
+	}
+}
+
+func TestFetchAndStoreArtifact_EmptyContent(t *testing.T) {
+	// Create mock API server that returns empty base64 data
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]string{
+			"id":   "test-id",
+			"data": "", // Empty base64 data
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+
+	tempDir := filepath.Join(os.TempDir(), "ccagent_test_artifacts_empty")
+	defer os.RemoveAll(tempDir)
+
+	location := filepath.Join(tempDir, "test-rule.md")
+
+	err := FetchAndStoreArtifact(client, "test-id", location)
+
+	if err == nil {
+		t.Error("Expected error for empty content, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("Expected 'empty' error, got: %v", err)
+	}
+}

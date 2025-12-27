@@ -117,6 +117,42 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.
 	return nil
 }
 
+// fetchAndStoreArtifacts fetches agent artifacts from API and stores them locally
+func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
+	log.Info("📦 Fetching agent artifacts from API...")
+
+	artifacts, err := agentsApiClient.FetchArtifacts()
+	if err != nil {
+		return fmt.Errorf("failed to fetch artifacts: %w", err)
+	}
+
+	// Handle empty artifacts list
+	if len(artifacts) == 0 {
+		log.Info("📦 No artifacts configured for this agent")
+		return nil
+	}
+
+	log.Info("📦 Found %d artifact(s) to download", len(artifacts))
+
+	// Download and store each artifact file
+	for _, artifact := range artifacts {
+		log.Info("📦 Processing artifact: %s (%s)", artifact.Title, artifact.Description)
+
+		for _, file := range artifact.Files {
+			log.Info("📥 Downloading artifact file to: %s", file.Location)
+
+			if err := utils.FetchAndStoreArtifact(agentsApiClient, file.AttachmentID, file.Location); err != nil {
+				return fmt.Errorf("failed to download artifact file %s: %w", file.Location, err)
+			}
+
+			log.Info("✅ Successfully saved artifact file: %s", file.Location)
+		}
+	}
+
+	log.Info("✅ Successfully downloaded all artifacts")
+	return nil
+}
+
 func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
@@ -160,6 +196,11 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	// Fetch and set Anthropic token BEFORE initializing anything else
 	if err := fetchAndSetToken(agentsApiClient, envManager); err != nil {
 		return nil, fmt.Errorf("failed to fetch and set token: %w", err)
+	}
+
+	// Fetch and store agent artifacts (rules, guidelines, instructions)
+	if err := fetchAndStoreArtifacts(agentsApiClient); err != nil {
+		return nil, fmt.Errorf("failed to fetch and store artifacts: %w", err)
 	}
 
 	// Get current working directory for Codex client
