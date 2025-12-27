@@ -1,3 +1,19 @@
+## [v0.0.31] - 2025-12-27
+
+### Features
+
+- Add agent artifacts API support ([#59](https://github.com/presmihaylov/ccagent/pull/59))
+  - Enables agents to upload and manage artifacts via API
+  - Supports storing and retrieving files generated during agent sessions
+  - Provides foundation for artifact sharing between agents and users
+
+### Improvements
+
+- Increase job inactivity timeout to 25h ([#58](https://github.com/presmihaylov/ccagent/pull/58))
+  - Extends job inactivity timeout from previous limit to 25 hours
+  - Prevents premature job termination for long-running tasks
+  - Improves reliability for complex, time-consuming operations
+
 ## [v0.0.30] - 2025-12-26
 
 ### Features
