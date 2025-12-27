@@ -723,10 +723,10 @@ func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData)
 	var reason string
 	var shouldComplete bool
 
-	// First check if job has been inactive for 24 hours (regardless of PR status)
-	inactivityThreshold := 24 * time.Hour
+	// First check if job has been inactive for 25 hours (regardless of PR status)
+	inactivityThreshold := 25 * time.Hour
 	if time.Since(jobData.UpdatedAt) > inactivityThreshold {
-		log.Info("⏰ Job %s has been inactive for more than 24 hours - marking as complete", jobID)
+		log.Info("⏰ Job %s has been inactive for more than 25 hours - marking as complete", jobID)
 		reason = "Job complete - Thread is inactive"
 		shouldComplete = true
 	} else {
@@ -744,7 +744,7 @@ func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData)
 			log.Info("ℹ️ Job %s has open PR - not marking as complete", jobID)
 			shouldComplete = false
 		case "no_pr":
-			log.Info("ℹ️ Job %s has no PR - not marking as complete (still within 24-hour activity window)", jobID)
+			log.Info("ℹ️ Job %s has no PR - not marking as complete (still within 25-hour activity window)", jobID)
 			shouldComplete = false
 		default:
 			log.Info("ℹ️ Job %s PR status unclear (%s) - keeping active", jobID, prStatus)
