@@ -213,3 +213,59 @@ func FormatAttachmentsText(filePaths []string) string {
 
 	return builder.String()
 }
+
+// ExpandHomeDir expands the ~ character in a file path to the user's home directory
+func ExpandHomeDir(path string) (string, error) {
+	if !strings.HasPrefix(path, "~") {
+		return path, nil
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	// Replace ~ with home directory
+	if path == "~" {
+		return homeDir, nil
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(homeDir, path[2:]), nil
+	}
+
+	return path, nil
+}
+
+// FetchAndStoreArtifact downloads an artifact file and saves it to the specified location
+// The location path may contain ~ which will be expanded to the user's home directory
+func FetchAndStoreArtifact(client *clients.AgentsApiClient, attachmentID string, location string) error {
+	// Expand ~ in location path
+	expandedPath, err := ExpandHomeDir(location)
+	if err != nil {
+		return fmt.Errorf("failed to expand home directory in path %s: %w", location, err)
+	}
+
+	// Fetch raw artifact content
+	content, err := client.FetchAttachmentRaw(attachmentID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch artifact content for attachment %s: %w", attachmentID, err)
+	}
+
+	// Validate content is not empty
+	if content == "" {
+		return fmt.Errorf("artifact content is empty for attachment %s", attachmentID)
+	}
+
+	// Create parent directory if it doesn't exist
+	dir := filepath.Dir(expandedPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
+	}
+
+	// Write content to file
+	if err := os.WriteFile(expandedPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write artifact file to %s: %w", expandedPath, err)
+	}
+
+	return nil
+}
