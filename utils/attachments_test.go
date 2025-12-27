@@ -452,6 +452,8 @@ func TestExpandHomeDir_TildeOnly(t *testing.T) {
 func TestFetchAndStoreArtifact_Success(t *testing.T) {
 	// Create mock API server
 	markdownContent := "# Test Artifact\nThis is a test rule."
+	base64Content := base64.StdEncoding.EncodeToString([]byte(markdownContent))
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request has correct headers
 		authHeader := r.Header.Get("Authorization")
@@ -460,9 +462,13 @@ func TestFetchAndStoreArtifact_Success(t *testing.T) {
 			return
 		}
 
-		// Return raw markdown content
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte(markdownContent))
+		// Return base64-encoded content in JSON format (same as FetchAttachment)
+		response := map[string]string{
+			"id":   "test-attachment-id",
+			"data": base64Content,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -501,9 +507,15 @@ func TestFetchAndStoreArtifact_Success(t *testing.T) {
 func TestFetchAndStoreArtifact_WithTilde(t *testing.T) {
 	// Create mock API server
 	markdownContent := "# Test Artifact with Tilde\nThis is a test."
+	base64Content := base64.StdEncoding.EncodeToString([]byte(markdownContent))
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte(markdownContent))
+		response := map[string]string{
+			"id":   "test-attachment-id",
+			"data": base64Content,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -553,10 +565,14 @@ func TestFetchAndStoreArtifact_APIError(t *testing.T) {
 }
 
 func TestFetchAndStoreArtifact_EmptyContent(t *testing.T) {
-	// Create mock API server that returns empty content
+	// Create mock API server that returns empty base64 data
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte(""))
+		response := map[string]string{
+			"id":   "test-id",
+			"data": "", // Empty base64 data
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 

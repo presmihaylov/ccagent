@@ -245,15 +245,26 @@ func FetchAndStoreArtifact(client *clients.AgentsApiClient, attachmentID string,
 		return fmt.Errorf("failed to expand home directory in path %s: %w", location, err)
 	}
 
-	// Fetch raw artifact content
-	content, err := client.FetchAttachmentRaw(attachmentID)
+	// Fetch attachment using existing mechanism (returns base64-encoded content)
+	attachmentResp, err := client.FetchAttachment(attachmentID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch artifact content for attachment %s: %w", attachmentID, err)
+		return fmt.Errorf("failed to fetch artifact attachment %s: %w", attachmentID, err)
 	}
 
-	// Validate content is not empty
-	if content == "" {
-		return fmt.Errorf("artifact content is empty for attachment %s", attachmentID)
+	// Validate base64 data is not empty
+	if attachmentResp.Data == "" {
+		return fmt.Errorf("artifact attachment data is empty for ID %s", attachmentID)
+	}
+
+	// Decode base64 content
+	content, err := base64.StdEncoding.DecodeString(attachmentResp.Data)
+	if err != nil {
+		return fmt.Errorf("invalid base64 content in artifact attachment %s: %w", attachmentID, err)
+	}
+
+	// Check decoded content is not empty
+	if len(content) == 0 {
+		return fmt.Errorf("decoded artifact content is empty for ID %s", attachmentID)
 	}
 
 	// Create parent directory if it doesn't exist
@@ -263,7 +274,7 @@ func FetchAndStoreArtifact(client *clients.AgentsApiClient, attachmentID string,
 	}
 
 	// Write content to file
-	if err := os.WriteFile(expandedPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(expandedPath, content, 0644); err != nil {
 		return fmt.Errorf("failed to write artifact file to %s: %w", expandedPath, err)
 	}
 

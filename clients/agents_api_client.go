@@ -196,36 +196,3 @@ func (c *AgentsApiClient) FetchArtifacts() ([]Artifact, error) {
 	return artifacts, nil
 }
 
-// FetchAttachmentRaw fetches the raw content of an attachment (markdown file) by ID
-// Returns the raw content as a string (not base64-encoded)
-func (c *AgentsApiClient) FetchAttachmentRaw(attachmentID string) (string, error) {
-	url := fmt.Sprintf("%s/api/agents/attachments/%s", c.baseURL, attachmentID)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Add Bearer token authentication header
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Check for successful response
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	// Read raw content
-	contentBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	return string(contentBytes), nil
-}
