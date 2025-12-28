@@ -1,3 +1,12 @@
+## [v0.0.36] - 2025-12-28
+
+### Bugfixes
+
+- Transform MCP configs for OpenCode compatibility ([#64](https://github.com/presmihaylov/ccagent/pull/64))
+  - Fixes MCP server configuration handling for OpenCode client
+  - Transforms MCP config format to be compatible with OpenCode
+  - Ensures proper MCP server integration across both Claude Code and OpenCode clients
+
 ## [v0.0.35] - 2025-12-28
 
 ### Features
