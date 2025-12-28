@@ -1,3 +1,13 @@
+## [v0.0.35] - 2025-12-28
+
+### Features
+
+- Add MCP server configuration support ([#63](https://github.com/presmihaylov/ccagent/pull/63))
+  - Enables configuration of MCP (Model Context Protocol) servers for agents
+  - Supports defining custom MCP servers in repository configuration
+  - Allows agents to interact with external tools and data sources via MCP
+  - Includes comprehensive test coverage for MCP processor
+
 ## [v0.0.34] - 2025-12-28
 
 ### Improvements
