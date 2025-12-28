@@ -526,15 +526,6 @@ Write tests for everything.`
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify rules were copied
-	opencodeRulesDir := filepath.Join(tempDir, ".config", "opencode", "rules")
-	for _, filename := range []string{"code-style.md", "testing.md"} {
-		destPath := filepath.Join(opencodeRulesDir, filename)
-		if _, err := os.Stat(destPath); os.IsNotExist(err) {
-			t.Errorf("Expected rule file %s to exist", filename)
-		}
-	}
-
 	// Verify opencode.json was created with correct instructions
 	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
 	content, err := os.ReadFile(opencodeConfigPath)
@@ -547,12 +538,12 @@ Write tests for everything.`
 		t.Fatalf("Failed to parse opencode.json: %v", err)
 	}
 
-	// Verify instructions array contains the glob pattern
+	// Verify instructions array contains the glob pattern pointing to ccagent rules
 	if len(config.Instructions) != 1 {
 		t.Errorf("Expected 1 instruction, got: %d", len(config.Instructions))
 	}
 
-	expectedInstruction := "~/.config/opencode/rules/*.md"
+	expectedInstruction := "~/.config/ccagent/rules/*.md"
 	if len(config.Instructions) > 0 && config.Instructions[0] != expectedInstruction {
 		t.Errorf("Expected instruction '%s', got: '%s'", expectedInstruction, config.Instructions[0])
 	}
@@ -589,12 +580,6 @@ func TestOpenCodeRulesProcessor_WithoutFrontMatter(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify rule was copied
-	destPath := filepath.Join(tempDir, ".config", "opencode", "rules", "simple.md")
-	if _, err := os.Stat(destPath); os.IsNotExist(err) {
-		t.Errorf("Expected rule file to be copied")
-	}
-
 	// Verify opencode.json was created
 	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
 	content, err := os.ReadFile(opencodeConfigPath)
@@ -612,7 +597,7 @@ func TestOpenCodeRulesProcessor_WithoutFrontMatter(t *testing.T) {
 	}
 }
 
-func TestOpenCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
+func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 	// Create temporary directories
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "workspace")
@@ -631,10 +616,10 @@ func TestOpenCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
 		t.Fatalf("Failed to create opencode rules directory: %v", err)
 	}
 
-	// Create a stale rule in opencode rules directory
-	staleRulePath := filepath.Join(opencodeRulesDir, "stale-rule.md")
-	if err := os.WriteFile(staleRulePath, []byte("# Stale"), 0644); err != nil {
-		t.Fatalf("Failed to create stale rule: %v", err)
+	// Create an old rule in opencode rules directory (from previous approach)
+	oldRulePath := filepath.Join(opencodeRulesDir, "old-rule.md")
+	if err := os.WriteFile(oldRulePath, []byte("# Old"), 0644); err != nil {
+		t.Fatalf("Failed to create old rule: %v", err)
 	}
 
 	// Create a fresh rule in ccagent rules directory
@@ -654,15 +639,14 @@ func TestOpenCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify stale rule was removed
-	if _, err := os.Stat(staleRulePath); !os.IsNotExist(err) {
-		t.Errorf("Expected stale rule to be removed")
+	// Verify old opencode rules directory was removed
+	if _, err := os.Stat(opencodeRulesDir); !os.IsNotExist(err) {
+		t.Errorf("Expected old opencode rules directory to be removed")
 	}
 
-	// Verify fresh rule exists
-	freshDestPath := filepath.Join(opencodeRulesDir, "fresh-rule.md")
-	if _, err := os.Stat(freshDestPath); os.IsNotExist(err) {
-		t.Errorf("Expected fresh rule to exist")
+	// Verify fresh rule still exists in ccagent rules directory
+	if _, err := os.Stat(freshRulePath); os.IsNotExist(err) {
+		t.Errorf("Expected fresh rule in ccagent directory to still exist")
 	}
 }
 

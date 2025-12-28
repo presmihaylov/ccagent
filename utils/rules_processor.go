@@ -35,7 +35,9 @@ func ParseFrontMatter(filePath string) (*RuleFrontMatter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	frontMatter := &RuleFrontMatter{}
 	scanner := bufio.NewScanner(file)
@@ -186,7 +188,8 @@ func (p *ClaudeCodeRulesProcessor) ProcessRules() error {
 	// Create .claude/rules directory in work directory
 	claudeRulesDir := filepath.Join(p.workDir, ".claude", "rules")
 
-	// Remove existing rules directory to avoid stale rules
+	// Clean up existing rules directory to avoid stale rules
+	log.Info("📋 Cleaning Claude Code rules directory: %s", claudeRulesDir)
 	if err := os.RemoveAll(claudeRulesDir); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove existing rules directory: %w", err)
 	}
@@ -237,9 +240,9 @@ func NewOpenCodeRulesProcessor(workDir string) *OpenCodeRulesProcessor {
 }
 
 // ProcessRules implements RulesProcessor for OpenCode
-// It copies rule files to ~/.config/opencode/rules/ and creates an opencode.json
-// with an instructions array that references those rule files using absolute paths.
-// This allows OpenCode to automatically load the rules into its context.
+// It creates an opencode.json with an instructions array that references the ccagent
+// rules directory directly using a glob pattern. OpenCode will load rules from there
+// without needing to copy files.
 func (p *OpenCodeRulesProcessor) ProcessRules() error {
 	log.Info("📋 Processing rules for OpenCode agent")
 
@@ -263,43 +266,18 @@ func (p *OpenCodeRulesProcessor) ProcessRules() error {
 	}
 
 	opencodeConfigDir := filepath.Join(homeDir, ".config", "opencode")
-	opencodeRulesDir := filepath.Join(opencodeConfigDir, "rules")
 
-	// Remove existing rules directory to avoid stale rules
-	if err := os.RemoveAll(opencodeRulesDir); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove existing rules directory: %w", err)
+	// Ensure OpenCode config directory exists
+	if err := os.MkdirAll(opencodeConfigDir, 0755); err != nil {
+		return fmt.Errorf("failed to create OpenCode config directory: %w", err)
 	}
 
-	// Create fresh rules directory
-	if err := os.MkdirAll(opencodeRulesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create OpenCode rules directory: %w", err)
-	}
-
-	// Copy each rule file
-	for _, ruleFile := range ruleFiles {
-		fileName := filepath.Base(ruleFile)
-		destPath := filepath.Join(opencodeRulesDir, fileName)
-
-		log.Info("📋 Copying rule: %s -> %s", fileName, destPath)
-
-		// Read source file
-		content, err := os.ReadFile(ruleFile)
-		if err != nil {
-			return fmt.Errorf("failed to read rule file %s: %w", ruleFile, err)
-		}
-
-		// Write to destination
-		if err := os.WriteFile(destPath, content, 0644); err != nil {
-			return fmt.Errorf("failed to write rule file %s: %w", destPath, err)
-		}
-	}
-
-	// Generate opencode.json with instructions pointing to the rules directory
+	// Generate opencode.json with instructions pointing to the ccagent rules directory
 	// Using glob pattern with ~ prefix which OpenCode expands to home directory
 	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
 
 	config := OpenCodeConfig{
-		Instructions: []string{"~/.config/opencode/rules/*.md"},
+		Instructions: []string{"~/.config/ccagent/rules/*.md"},
 	}
 
 	configJSON, err := json.MarshalIndent(config, "", "  ")
@@ -317,6 +295,12 @@ func (p *OpenCodeRulesProcessor) ProcessRules() error {
 	oldAgentsmdPath := filepath.Join(opencodeConfigDir, "AGENTS.md")
 	if err := os.Remove(oldAgentsmdPath); err != nil && !os.IsNotExist(err) {
 		log.Info("⚠️  Failed to remove old AGENTS.md: %v", err)
+	}
+
+	// Clean up old OpenCode rules directory if it exists (from previous approach)
+	oldOpencodeRulesDir := filepath.Join(opencodeConfigDir, "rules")
+	if err := os.RemoveAll(oldOpencodeRulesDir); err != nil && !os.IsNotExist(err) {
+		log.Info("⚠️  Failed to remove old OpenCode rules directory: %v", err)
 	}
 
 	log.Info("✅ Successfully processed %d rule(s) for OpenCode", len(ruleFiles))
