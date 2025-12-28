@@ -228,7 +228,8 @@ func NewOpenCodeMCPProcessor(workDir string) *OpenCodeMCPProcessor {
 }
 
 // ProcessMCPConfigs implements MCPProcessor for OpenCode
-// It reads all MCP configs, merges them, and updates ~/.config/opencode/opencode.json
+// It reads all MCP configs, merges them, transforms them to OpenCode format,
+// and updates ~/.config/opencode/opencode.json
 func (p *OpenCodeMCPProcessor) ProcessMCPConfigs() error {
 	log.Info("🔌 Processing MCP configs for OpenCode agent")
 
@@ -244,6 +245,58 @@ func (p *OpenCodeMCPProcessor) ProcessMCPConfigs() error {
 	}
 
 	log.Info("🔌 Found %d MCP server(s) to configure", len(mcpServers))
+
+	// Transform Claude Code MCP format to OpenCode format
+	opencodeMcpServers := make(map[string]interface{})
+	for serverName, serverConfig := range mcpServers {
+		configMap, ok := serverConfig.(map[string]interface{})
+		if !ok {
+			log.Info("⚠️  Skipping invalid MCP server config for %s", serverName)
+			continue
+		}
+
+		opencodeConfig := make(map[string]interface{})
+
+		// Check if this is a remote server (has "url" field)
+		if url, hasURL := configMap["url"]; hasURL {
+			opencodeConfig["type"] = "remote"
+			opencodeConfig["url"] = url
+			if headers, ok := configMap["headers"]; ok {
+				opencodeConfig["headers"] = headers
+			}
+		} else {
+			// Local server - transform command + args to command array
+			opencodeConfig["type"] = "local"
+
+			var commandArray []string
+
+			// Get the command
+			if cmd, ok := configMap["command"].(string); ok {
+				commandArray = append(commandArray, cmd)
+			}
+
+			// Append args to command array
+			if args, ok := configMap["args"].([]interface{}); ok {
+				for _, arg := range args {
+					if argStr, ok := arg.(string); ok {
+						commandArray = append(commandArray, argStr)
+					}
+				}
+			}
+
+			opencodeConfig["command"] = commandArray
+
+			// Transform env -> environment
+			if env, ok := configMap["env"]; ok {
+				opencodeConfig["environment"] = env
+			}
+		}
+
+		// Always enable the server
+		opencodeConfig["enabled"] = true
+
+		opencodeMcpServers[serverName] = opencodeConfig
+	}
 
 	// Get home directory for OpenCode config
 	homeDir, err := os.UserHomeDir()
@@ -272,8 +325,8 @@ func (p *OpenCodeMCPProcessor) ProcessMCPConfigs() error {
 		existingConfig = make(map[string]interface{})
 	}
 
-	// Update mcp key with merged configs
-	existingConfig["mcp"] = mcpServers
+	// Update mcp key with transformed configs
+	existingConfig["mcp"] = opencodeMcpServers
 
 	// Write updated config back
 	configJSON, err := json.MarshalIndent(existingConfig, "", "  ")
@@ -287,7 +340,7 @@ func (p *OpenCodeMCPProcessor) ProcessMCPConfigs() error {
 		return fmt.Errorf("failed to write opencode.json: %w", err)
 	}
 
-	log.Info("✅ Successfully configured %d MCP server(s) for OpenCode", len(mcpServers))
+	log.Info("✅ Successfully configured %d MCP server(s) for OpenCode", len(opencodeMcpServers))
 	return nil
 }
 
