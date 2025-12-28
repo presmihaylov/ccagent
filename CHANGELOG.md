@@ -1,3 +1,12 @@
+## [v0.0.34] - 2025-12-28
+
+### Improvements
+
+- Store Claude Code rules in ~/.claude/rules ([#62](https://github.com/presmihaylov/ccagent/pull/62))
+  - Moves rule storage location to ~/.claude/rules directory
+  - Aligns with Claude Code's standard rules location
+  - Improves compatibility with Claude Code's rules management
+
 ## [v0.0.33] - 2025-12-28
 
 ### Improvements
