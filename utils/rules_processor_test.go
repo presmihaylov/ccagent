@@ -321,8 +321,8 @@ func TestClaudeCodeRulesProcessor_NoRules(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify no .claude/rules directory was created
-	claudeRulesDir := filepath.Join(workDir, ".claude", "rules")
+	// Verify no .claude/rules directory was created in home directory
+	claudeRulesDir := filepath.Join(tempDir, ".claude", "rules")
 	if _, err := os.Stat(claudeRulesDir); !os.IsNotExist(err) {
 		// Directory should not exist if no rules
 		// Actually, it will be created but empty - let's check if it's empty
@@ -371,8 +371,8 @@ func TestClaudeCodeRulesProcessor_WithRules(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify .claude/rules directory was created
-	claudeRulesDir := filepath.Join(workDir, ".claude", "rules")
+	// Verify .claude/rules directory was created in home directory
+	claudeRulesDir := filepath.Join(tempDir, ".claude", "rules")
 	if _, err := os.Stat(claudeRulesDir); os.IsNotExist(err) {
 		t.Fatalf("Expected .claude/rules directory to exist")
 	}
@@ -398,7 +398,7 @@ func TestClaudeCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "workspace")
 	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
-	claudeRulesDir := filepath.Join(workDir, ".claude", "rules")
+	claudeRulesDir := filepath.Join(tempDir, ".claude", "rules")
 
 	if err := os.MkdirAll(workDir, 0755); err != nil {
 		t.Fatalf("Failed to create work directory: %v", err)
@@ -412,7 +412,7 @@ func TestClaudeCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
 		t.Fatalf("Failed to create claude rules directory: %v", err)
 	}
 
-	// Create a stale rule in .claude/rules
+	// Create a stale rule in .claude/rules (in home directory)
 	staleRulePath := filepath.Join(claudeRulesDir, "stale-rule.md")
 	if err := os.WriteFile(staleRulePath, []byte("# Stale"), 0644); err != nil {
 		t.Fatalf("Failed to create stale rule: %v", err)
