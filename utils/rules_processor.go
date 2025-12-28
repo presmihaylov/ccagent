@@ -291,12 +291,6 @@ func (p *OpenCodeRulesProcessor) ProcessRules() error {
 		return fmt.Errorf("failed to write opencode.json: %w", err)
 	}
 
-	// Remove old AGENTS.md if it exists (cleanup from previous approach)
-	oldAgentsmdPath := filepath.Join(opencodeConfigDir, "AGENTS.md")
-	if err := os.Remove(oldAgentsmdPath); err != nil && !os.IsNotExist(err) {
-		log.Info("⚠️  Failed to remove old AGENTS.md: %v", err)
-	}
-
 	// Clean up old OpenCode rules directory if it exists (from previous approach)
 	oldOpencodeRulesDir := filepath.Join(opencodeConfigDir, "rules")
 	if err := os.RemoveAll(oldOpencodeRulesDir); err != nil && !os.IsNotExist(err) {
