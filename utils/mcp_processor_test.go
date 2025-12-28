@@ -887,6 +887,42 @@ func TestOpenCodeMCPProcessor_WithConfigs(t *testing.T) {
 	if _, ok := serversMap["github"]; !ok {
 		t.Errorf("Expected 'github' server to exist in mcp")
 	}
+
+	// Verify OpenCode format transformation
+	githubConfig, ok := serversMap["github"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected github config to be a map")
+	}
+
+	// Verify type field is set to "local"
+	if serverType, ok := githubConfig["type"].(string); !ok || serverType != "local" {
+		t.Errorf("Expected type to be 'local', got: %v", githubConfig["type"])
+	}
+
+	// Verify command is an array with command + args merged
+	command, ok := githubConfig["command"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected command to be an array, got: %T", githubConfig["command"])
+	}
+
+	expectedCommand := []string{"uvx", "mcp-server-github"}
+	if len(command) != len(expectedCommand) {
+		t.Errorf("Expected command array length %d, got: %d", len(expectedCommand), len(command))
+	}
+
+	for i, expected := range expectedCommand {
+		if i >= len(command) {
+			break
+		}
+		if actual, ok := command[i].(string); !ok || actual != expected {
+			t.Errorf("Expected command[%d] to be '%s', got: %v", i, expected, command[i])
+		}
+	}
+
+	// Verify enabled field is set to true
+	if enabled, ok := githubConfig["enabled"].(bool); !ok || !enabled {
+		t.Errorf("Expected enabled to be true, got: %v", githubConfig["enabled"])
+	}
 }
 
 func TestOpenCodeMCPProcessor_WithMultipleMCPConfigs(t *testing.T) {
@@ -1064,6 +1100,499 @@ func TestOpenCodeMCPProcessor_PreservesExistingConfig(t *testing.T) {
 	// Verify mcp was added
 	if _, ok := config["mcp"]; !ok {
 		t.Errorf("Expected mcp key to be added")
+	}
+}
+
+// Test OpenCode MCP Format Transformation
+
+func TestOpenCodeMCPProcessor_LocalServerTransformation(t *testing.T) {
+	// Create temporary directories
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "workspace")
+	mcpDir := filepath.Join(tempDir, ".config", "ccagent", "mcp")
+
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatalf("Failed to create work directory: %v", err)
+	}
+
+	if err := os.MkdirAll(mcpDir, 0755); err != nil {
+		t.Fatalf("Failed to create MCP directory: %v", err)
+	}
+
+	// Create test MCP config with local server (command + args + env)
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"postgres": map[string]interface{}{
+				"command": "npx",
+				"args":    []string{"-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/db"},
+				"env": map[string]interface{}{
+					"DB_HOST": "localhost",
+					"DB_PORT": "5432",
+				},
+			},
+		},
+	}
+
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "postgres.json"), fileJSON, 0644); err != nil {
+		t.Fatalf("Failed to create postgres config: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Process MCP configs
+	processor := NewOpenCodeMCPProcessor(workDir)
+	if err := processor.ProcessMCPConfigs(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Read and verify the output
+	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
+	content, err := os.ReadFile(opencodeConfigPath)
+	if err != nil {
+		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse opencode.json: %v", err)
+	}
+
+	mcpServers, ok := config["mcp"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected mcp to be a map")
+	}
+
+	postgresConfig, ok := mcpServers["postgres"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected postgres config to be a map")
+	}
+
+	// Verify type is "local"
+	if serverType, ok := postgresConfig["type"].(string); !ok || serverType != "local" {
+		t.Errorf("Expected type to be 'local', got: %v", postgresConfig["type"])
+	}
+
+	// Verify command array merges command + args
+	command, ok := postgresConfig["command"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected command to be an array, got: %T", postgresConfig["command"])
+	}
+
+	expectedCommand := []string{"npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/db"}
+	if len(command) != len(expectedCommand) {
+		t.Errorf("Expected command array length %d, got: %d", len(expectedCommand), len(command))
+	}
+
+	for i, expected := range expectedCommand {
+		if i >= len(command) {
+			break
+		}
+		if actual, ok := command[i].(string); !ok || actual != expected {
+			t.Errorf("Expected command[%d] to be '%s', got: %v", i, expected, command[i])
+		}
+	}
+
+	// Verify env was renamed to environment
+	environment, ok := postgresConfig["environment"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected environment to be a map, got: %T", postgresConfig["environment"])
+	}
+
+	if dbHost, ok := environment["DB_HOST"].(string); !ok || dbHost != "localhost" {
+		t.Errorf("Expected DB_HOST to be 'localhost', got: %v", environment["DB_HOST"])
+	}
+
+	if dbPort, ok := environment["DB_PORT"].(string); !ok || dbPort != "5432" {
+		t.Errorf("Expected DB_PORT to be '5432', got: %v", environment["DB_PORT"])
+	}
+
+	// Verify enabled is true
+	if enabled, ok := postgresConfig["enabled"].(bool); !ok || !enabled {
+		t.Errorf("Expected enabled to be true, got: %v", postgresConfig["enabled"])
+	}
+
+	// Verify no "args" or "env" fields remain (should be transformed)
+	if _, hasArgs := postgresConfig["args"]; hasArgs {
+		t.Errorf("Expected 'args' field to be removed after transformation")
+	}
+
+	if _, hasEnv := postgresConfig["env"]; hasEnv {
+		t.Errorf("Expected 'env' field to be removed after transformation")
+	}
+}
+
+func TestOpenCodeMCPProcessor_RemoteServerTransformation(t *testing.T) {
+	// Create temporary directories
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "workspace")
+	mcpDir := filepath.Join(tempDir, ".config", "ccagent", "mcp")
+
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatalf("Failed to create work directory: %v", err)
+	}
+
+	if err := os.MkdirAll(mcpDir, 0755); err != nil {
+		t.Fatalf("Failed to create MCP directory: %v", err)
+	}
+
+	// Create test MCP config with remote server (url + headers)
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"api-server": map[string]interface{}{
+				"url": "https://api.example.com/mcp",
+				"headers": map[string]interface{}{
+					"Authorization": "Bearer token123",
+					"X-API-Key":     "key456",
+				},
+			},
+		},
+	}
+
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "api-server.json"), fileJSON, 0644); err != nil {
+		t.Fatalf("Failed to create api-server config: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Process MCP configs
+	processor := NewOpenCodeMCPProcessor(workDir)
+	if err := processor.ProcessMCPConfigs(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Read and verify the output
+	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
+	content, err := os.ReadFile(opencodeConfigPath)
+	if err != nil {
+		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse opencode.json: %v", err)
+	}
+
+	mcpServers, ok := config["mcp"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected mcp to be a map")
+	}
+
+	apiServerConfig, ok := mcpServers["api-server"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected api-server config to be a map")
+	}
+
+	// Verify type is "remote"
+	if serverType, ok := apiServerConfig["type"].(string); !ok || serverType != "remote" {
+		t.Errorf("Expected type to be 'remote', got: %v", apiServerConfig["type"])
+	}
+
+	// Verify url is preserved
+	if url, ok := apiServerConfig["url"].(string); !ok || url != "https://api.example.com/mcp" {
+		t.Errorf("Expected url to be 'https://api.example.com/mcp', got: %v", apiServerConfig["url"])
+	}
+
+	// Verify headers are preserved
+	headers, ok := apiServerConfig["headers"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected headers to be a map, got: %T", apiServerConfig["headers"])
+	}
+
+	if auth, ok := headers["Authorization"].(string); !ok || auth != "Bearer token123" {
+		t.Errorf("Expected Authorization header, got: %v", headers["Authorization"])
+	}
+
+	if apiKey, ok := headers["X-API-Key"].(string); !ok || apiKey != "key456" {
+		t.Errorf("Expected X-API-Key header, got: %v", headers["X-API-Key"])
+	}
+
+	// Verify enabled is true
+	if enabled, ok := apiServerConfig["enabled"].(bool); !ok || !enabled {
+		t.Errorf("Expected enabled to be true, got: %v", apiServerConfig["enabled"])
+	}
+
+	// Verify no "command" field exists for remote servers
+	if _, hasCommand := apiServerConfig["command"]; hasCommand {
+		t.Errorf("Expected 'command' field not to exist for remote server")
+	}
+}
+
+func TestOpenCodeMCPProcessor_MixedLocalAndRemoteServers(t *testing.T) {
+	// Create temporary directories
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "workspace")
+	mcpDir := filepath.Join(tempDir, ".config", "ccagent", "mcp")
+
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatalf("Failed to create work directory: %v", err)
+	}
+
+	if err := os.MkdirAll(mcpDir, 0755); err != nil {
+		t.Fatalf("Failed to create MCP directory: %v", err)
+	}
+
+	// Create test MCP config with both local and remote servers
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"github": map[string]interface{}{
+				"command": "uvx",
+				"args":    []string{"mcp-server-github"},
+				"env": map[string]interface{}{
+					"GITHUB_TOKEN": "ghp_123",
+				},
+			},
+			"remote-api": map[string]interface{}{
+				"url": "https://remote.example.com",
+				"headers": map[string]interface{}{
+					"X-API-Key": "secret",
+				},
+			},
+		},
+	}
+
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "mixed.json"), fileJSON, 0644); err != nil {
+		t.Fatalf("Failed to create mixed config: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Process MCP configs
+	processor := NewOpenCodeMCPProcessor(workDir)
+	if err := processor.ProcessMCPConfigs(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Read and verify the output
+	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
+	content, err := os.ReadFile(opencodeConfigPath)
+	if err != nil {
+		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse opencode.json: %v", err)
+	}
+
+	mcpServers, ok := config["mcp"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected mcp to be a map")
+	}
+
+	// Verify both servers exist
+	if len(mcpServers) != 2 {
+		t.Errorf("Expected 2 servers, got: %d", len(mcpServers))
+	}
+
+	// Verify local server (github)
+	githubConfig, ok := mcpServers["github"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected github config to be a map")
+	}
+
+	if serverType, ok := githubConfig["type"].(string); !ok || serverType != "local" {
+		t.Errorf("Expected github type to be 'local', got: %v", githubConfig["type"])
+	}
+
+	if command, ok := githubConfig["command"].([]interface{}); !ok || len(command) != 2 {
+		t.Errorf("Expected github command to be array with 2 elements, got: %v", githubConfig["command"])
+	}
+
+	// Verify remote server (remote-api)
+	remoteConfig, ok := mcpServers["remote-api"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected remote-api config to be a map")
+	}
+
+	if serverType, ok := remoteConfig["type"].(string); !ok || serverType != "remote" {
+		t.Errorf("Expected remote-api type to be 'remote', got: %v", remoteConfig["type"])
+	}
+
+	if url, ok := remoteConfig["url"].(string); !ok || url != "https://remote.example.com" {
+		t.Errorf("Expected remote-api url to be 'https://remote.example.com', got: %v", remoteConfig["url"])
+	}
+}
+
+func TestOpenCodeMCPProcessor_LocalServerWithoutEnv(t *testing.T) {
+	// Create temporary directories
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "workspace")
+	mcpDir := filepath.Join(tempDir, ".config", "ccagent", "mcp")
+
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatalf("Failed to create work directory: %v", err)
+	}
+
+	if err := os.MkdirAll(mcpDir, 0755); err != nil {
+		t.Fatalf("Failed to create MCP directory: %v", err)
+	}
+
+	// Create test MCP config with local server without env
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"simple": map[string]interface{}{
+				"command": "node",
+				"args":    []string{"server.js"},
+			},
+		},
+	}
+
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "simple.json"), fileJSON, 0644); err != nil {
+		t.Fatalf("Failed to create simple config: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Process MCP configs
+	processor := NewOpenCodeMCPProcessor(workDir)
+	if err := processor.ProcessMCPConfigs(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Read and verify the output
+	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
+	content, err := os.ReadFile(opencodeConfigPath)
+	if err != nil {
+		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse opencode.json: %v", err)
+	}
+
+	mcpServers, ok := config["mcp"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected mcp to be a map")
+	}
+
+	simpleConfig, ok := mcpServers["simple"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected simple config to be a map")
+	}
+
+	// Verify type is "local"
+	if serverType, ok := simpleConfig["type"].(string); !ok || serverType != "local" {
+		t.Errorf("Expected type to be 'local', got: %v", simpleConfig["type"])
+	}
+
+	// Verify command array
+	command, ok := simpleConfig["command"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected command to be an array, got: %T", simpleConfig["command"])
+	}
+
+	expectedCommand := []string{"node", "server.js"}
+	if len(command) != len(expectedCommand) {
+		t.Errorf("Expected command array length %d, got: %d", len(expectedCommand), len(command))
+	}
+
+	// Verify no environment field (since env wasn't provided)
+	if _, hasEnv := simpleConfig["environment"]; hasEnv {
+		t.Errorf("Expected no 'environment' field when env is not provided")
+	}
+
+	// Verify enabled is true
+	if enabled, ok := simpleConfig["enabled"].(bool); !ok || !enabled {
+		t.Errorf("Expected enabled to be true, got: %v", simpleConfig["enabled"])
+	}
+}
+
+func TestOpenCodeMCPProcessor_RemoteServerWithoutHeaders(t *testing.T) {
+	// Create temporary directories
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "workspace")
+	mcpDir := filepath.Join(tempDir, ".config", "ccagent", "mcp")
+
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatalf("Failed to create work directory: %v", err)
+	}
+
+	if err := os.MkdirAll(mcpDir, 0755); err != nil {
+		t.Fatalf("Failed to create MCP directory: %v", err)
+	}
+
+	// Create test MCP config with remote server without headers
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"public-api": map[string]interface{}{
+				"url": "https://public.example.com",
+			},
+		},
+	}
+
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "public.json"), fileJSON, 0644); err != nil {
+		t.Fatalf("Failed to create public config: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Process MCP configs
+	processor := NewOpenCodeMCPProcessor(workDir)
+	if err := processor.ProcessMCPConfigs(); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Read and verify the output
+	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
+	content, err := os.ReadFile(opencodeConfigPath)
+	if err != nil {
+		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse opencode.json: %v", err)
+	}
+
+	mcpServers, ok := config["mcp"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected mcp to be a map")
+	}
+
+	publicConfig, ok := mcpServers["public-api"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected public-api config to be a map")
+	}
+
+	// Verify type is "remote"
+	if serverType, ok := publicConfig["type"].(string); !ok || serverType != "remote" {
+		t.Errorf("Expected type to be 'remote', got: %v", publicConfig["type"])
+	}
+
+	// Verify url is preserved
+	if url, ok := publicConfig["url"].(string); !ok || url != "https://public.example.com" {
+		t.Errorf("Expected url to be 'https://public.example.com', got: %v", publicConfig["url"])
+	}
+
+	// Verify no headers field (since headers weren't provided)
+	if _, hasHeaders := publicConfig["headers"]; hasHeaders {
+		t.Errorf("Expected no 'headers' field when headers are not provided")
+	}
+
+	// Verify enabled is true
+	if enabled, ok := publicConfig["enabled"].(bool); !ok || !enabled {
+		t.Errorf("Expected enabled to be true, got: %v", publicConfig["enabled"])
 	}
 }
 
