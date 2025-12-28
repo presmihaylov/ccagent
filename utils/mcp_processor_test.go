@@ -210,31 +210,39 @@ func TestMergeMCPConfigs_WithMultipleConfigs(t *testing.T) {
 		t.Fatalf("Failed to create MCP directory: %v", err)
 	}
 
-	// Create test MCP config files
-	githubConfig := map[string]interface{}{
-		"command": "uvx",
-		"args":    []string{"mcp-server-github"},
-		"env": map[string]interface{}{
-			"GITHUB_TOKEN": "token123",
+	// Create test MCP config files with top-level mcpServers key
+	file1Config := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"github": map[string]interface{}{
+				"command": "uvx",
+				"args":    []string{"mcp-server-github"},
+				"env": map[string]interface{}{
+					"GITHUB_TOKEN": "token123",
+				},
+			},
 		},
 	}
 
-	postgresConfig := map[string]interface{}{
-		"command": "docker",
-		"args":    []string{"run", "postgres-mcp"},
-		"env": map[string]interface{}{
-			"DB_URL": "postgres://localhost",
+	file2Config := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"postgres": map[string]interface{}{
+				"command": "docker",
+				"args":    []string{"run", "postgres-mcp"},
+				"env": map[string]interface{}{
+					"DB_URL": "postgres://localhost",
+				},
+			},
 		},
 	}
 
-	githubJSON, _ := json.Marshal(githubConfig)
-	postgresJSON, _ := json.Marshal(postgresConfig)
+	file1JSON, _ := json.Marshal(file1Config)
+	file2JSON, _ := json.Marshal(file2Config)
 
-	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), githubJSON, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), file1JSON, 0644); err != nil {
 		t.Fatalf("Failed to create github config: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(mcpDir, "postgres.json"), postgresJSON, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(mcpDir, "postgres.json"), file2JSON, 0644); err != nil {
 		t.Fatalf("Failed to create postgres config: %v", err)
 	}
 
@@ -261,6 +269,108 @@ func TestMergeMCPConfigs_WithMultipleConfigs(t *testing.T) {
 	// Verify postgres server exists
 	if _, ok := merged["postgres"]; !ok {
 		t.Errorf("Expected 'postgres' server to exist")
+	}
+}
+
+func TestMergeMCPConfigs_WithDuplicateServerNames(t *testing.T) {
+	// Create temporary ccagent MCP directory
+	tempDir := t.TempDir()
+	mcpDir := filepath.Join(tempDir, ".config", "ccagent", "mcp")
+
+	if err := os.MkdirAll(mcpDir, 0755); err != nil {
+		t.Fatalf("Failed to create MCP directory: %v", err)
+	}
+
+	// Create test MCP config files with duplicate server names
+	file1Config := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"shared-server": map[string]interface{}{
+				"command": "server-v1",
+				"args":    []string{},
+			},
+			"unique-server-1": map[string]interface{}{
+				"command": "unique1",
+				"args":    []string{},
+			},
+		},
+	}
+
+	file2Config := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"shared-server": map[string]interface{}{
+				"command": "server-v2",
+				"args":    []string{},
+			},
+			"unique-server-2": map[string]interface{}{
+				"command": "unique2",
+				"args":    []string{},
+			},
+		},
+	}
+
+	file3Config := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"shared-server": map[string]interface{}{
+				"command": "server-v3",
+				"args":    []string{},
+			},
+		},
+	}
+
+	file1JSON, _ := json.Marshal(file1Config)
+	file2JSON, _ := json.Marshal(file2Config)
+	file3JSON, _ := json.Marshal(file3Config)
+
+	if err := os.WriteFile(filepath.Join(mcpDir, "file1.json"), file1JSON, 0644); err != nil {
+		t.Fatalf("Failed to create file1 config: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(mcpDir, "file2.json"), file2JSON, 0644); err != nil {
+		t.Fatalf("Failed to create file2 config: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(mcpDir, "file3.json"), file3JSON, 0644); err != nil {
+		t.Fatalf("Failed to create file3 config: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Merge MCP configs
+	merged, err := MergeMCPConfigs()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Expect 5 servers total: shared-server, shared-server-2, shared-server-3, unique-server-1, unique-server-2
+	if len(merged) != 5 {
+		t.Errorf("Expected 5 servers, got: %d", len(merged))
+	}
+
+	// Verify first instance has original name
+	if _, ok := merged["shared-server"]; !ok {
+		t.Errorf("Expected 'shared-server' to exist")
+	}
+
+	// Verify second instance has suffix -2
+	if _, ok := merged["shared-server-2"]; !ok {
+		t.Errorf("Expected 'shared-server-2' to exist")
+	}
+
+	// Verify third instance has suffix -3
+	if _, ok := merged["shared-server-3"]; !ok {
+		t.Errorf("Expected 'shared-server-3' to exist")
+	}
+
+	// Verify unique servers exist
+	if _, ok := merged["unique-server-1"]; !ok {
+		t.Errorf("Expected 'unique-server-1' to exist")
+	}
+
+	if _, ok := merged["unique-server-2"]; !ok {
+		t.Errorf("Expected 'unique-server-2' to exist")
 	}
 }
 
@@ -307,14 +417,18 @@ func TestClaudeCodeMCPProcessor_WithConfigs(t *testing.T) {
 		t.Fatalf("Failed to create MCP directory: %v", err)
 	}
 
-	// Create test MCP config files
-	githubConfig := map[string]interface{}{
-		"command": "uvx",
-		"args":    []string{"mcp-server-github"},
+	// Create test MCP config file with top-level mcpServers key
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"github": map[string]interface{}{
+				"command": "uvx",
+				"args":    []string{"mcp-server-github"},
+			},
+		},
 	}
 
-	githubJSON, _ := json.Marshal(githubConfig)
-	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), githubJSON, 0644); err != nil {
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), fileJSON, 0644); err != nil {
 		t.Fatalf("Failed to create github config: %v", err)
 	}
 
@@ -383,13 +497,17 @@ func TestClaudeCodeMCPProcessor_PreservesExistingConfig(t *testing.T) {
 		t.Fatalf("Failed to create existing .claude.json: %v", err)
 	}
 
-	// Create test MCP config
-	githubConfig := map[string]interface{}{
-		"command": "uvx",
-		"args":    []string{"mcp-server-github"},
+	// Create test MCP config with top-level mcpServers key
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"github": map[string]interface{}{
+				"command": "uvx",
+				"args":    []string{"mcp-server-github"},
+			},
+		},
 	}
-	githubJSON, _ := json.Marshal(githubConfig)
-	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), githubJSON, 0644); err != nil {
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), fileJSON, 0644); err != nil {
 		t.Fatalf("Failed to create github config: %v", err)
 	}
 
@@ -473,14 +591,18 @@ func TestOpenCodeMCPProcessor_WithConfigs(t *testing.T) {
 		t.Fatalf("Failed to create MCP directory: %v", err)
 	}
 
-	// Create test MCP config files
-	githubConfig := map[string]interface{}{
-		"command": "uvx",
-		"args":    []string{"mcp-server-github"},
+	// Create test MCP config file with top-level mcpServers key
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"github": map[string]interface{}{
+				"command": "uvx",
+				"args":    []string{"mcp-server-github"},
+			},
+		},
 	}
 
-	githubJSON, _ := json.Marshal(githubConfig)
-	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), githubJSON, 0644); err != nil {
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), fileJSON, 0644); err != nil {
 		t.Fatalf("Failed to create github config: %v", err)
 	}
 
@@ -554,13 +676,17 @@ func TestOpenCodeMCPProcessor_PreservesExistingConfig(t *testing.T) {
 		t.Fatalf("Failed to create existing opencode.json: %v", err)
 	}
 
-	// Create test MCP config
-	githubConfig := map[string]interface{}{
-		"command": "uvx",
-		"args":    []string{"mcp-server-github"},
+	// Create test MCP config with top-level mcpServers key
+	fileConfig := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"github": map[string]interface{}{
+				"command": "uvx",
+				"args":    []string{"mcp-server-github"},
+			},
+		},
 	}
-	githubJSON, _ := json.Marshal(githubConfig)
-	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), githubJSON, 0644); err != nil {
+	fileJSON, _ := json.Marshal(fileConfig)
+	if err := os.WriteFile(filepath.Join(mcpDir, "github.json"), fileJSON, 0644); err != nil {
 		t.Fatalf("Failed to create github config: %v", err)
 	}
 

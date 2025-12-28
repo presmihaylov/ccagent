@@ -94,6 +94,8 @@ func CleanCcagentMCPDir() error {
 
 // MergeMCPConfigs reads all MCP JSON files and merges them into a single mcpServers object
 // Returns a map[string]interface{} representing the merged MCP server configurations
+// Each file is expected to have a top-level "mcpServers" key containing server configurations.
+// Duplicate server names across files are handled by adding numeric suffixes (e.g., "server-1", "server-2").
 func MergeMCPConfigs() (map[string]interface{}, error) {
 	mcpFiles, err := GetMCPConfigFiles()
 	if err != nil {
@@ -115,20 +117,33 @@ func MergeMCPConfigs() (map[string]interface{}, error) {
 			return nil, fmt.Errorf("failed to read MCP config file %s: %w", mcpFile, err)
 		}
 
-		// Parse JSON
-		var serverConfig map[string]interface{}
-		if err := json.Unmarshal(content, &serverConfig); err != nil {
+		// Parse JSON - expect top-level mcpServers key
+		var fileConfig struct {
+			MCPServers map[string]interface{} `json:"mcpServers"`
+		}
+		if err := json.Unmarshal(content, &fileConfig); err != nil {
 			return nil, fmt.Errorf("failed to parse MCP config file %s: %w", mcpFile, err)
 		}
 
-		// Merge into the main map
-		// Each file is expected to be a single MCP server config
-		// The key is determined by the filename (without extension)
-		fileName := filepath.Base(mcpFile)
-		serverName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+		// Merge servers from this file into the main map
+		for serverName, serverConfig := range fileConfig.MCPServers {
+			// Handle duplicate server names by adding numeric suffix
+			finalName := serverName
+			suffix := 1
+			for {
+				if _, exists := mergedServers[finalName]; !exists {
+					break
+				}
+				suffix++
+				finalName = fmt.Sprintf("%s-%d", serverName, suffix)
+			}
 
-		// If the JSON has a top-level object, use it; otherwise wrap the content
-		mergedServers[serverName] = serverConfig
+			if finalName != serverName {
+				log.Info("🔌 Duplicate server name '%s' detected, using '%s' instead", serverName, finalName)
+			}
+
+			mergedServers[finalName] = serverConfig
+		}
 	}
 
 	return mergedServers, nil
