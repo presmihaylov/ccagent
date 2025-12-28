@@ -1,3 +1,12 @@
+## [v0.0.33] - 2025-12-28
+
+### Improvements
+
+- Simplify OpenCode rules and add cleanup ([#61](https://github.com/presmihaylov/ccagent/pull/61))
+  - Streamlines OpenCode rules processing for better maintainability
+  - Adds cleanup functionality for temporary rule files
+  - Improves code organization and reduces complexity
+
 ## [v0.0.32] - 2025-12-27
 
 ### Features
