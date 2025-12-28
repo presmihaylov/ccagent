@@ -121,6 +121,12 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.
 func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 	log.Info("📦 Fetching agent artifacts from API...")
 
+	// Clean up existing rules before downloading new ones
+	// This ensures stale rules deleted on the server are removed locally
+	if err := utils.CleanCcagentRulesDir(); err != nil {
+		return fmt.Errorf("failed to clean ccagent rules directory: %w", err)
+	}
+
 	artifacts, err := agentsApiClient.FetchArtifacts()
 	if err != nil {
 		return fmt.Errorf("failed to fetch artifacts: %w", err)

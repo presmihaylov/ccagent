@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,7 +35,9 @@ func ParseFrontMatter(filePath string) (*RuleFrontMatter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	frontMatter := &RuleFrontMatter{}
 	scanner := bufio.NewScanner(file)
@@ -122,6 +125,37 @@ func GetRuleFiles() ([]string, error) {
 	return ruleFiles, nil
 }
 
+// CleanCcagentRulesDir removes all files from the ccagent rules directory
+// This should be called before downloading new rules from the server to ensure
+// stale rules that were deleted on the server are also removed locally.
+func CleanCcagentRulesDir() error {
+	rulesDir, err := GetCcagentRulesDir()
+	if err != nil {
+		return err
+	}
+
+	// Check if rules directory exists
+	if _, err := os.Stat(rulesDir); os.IsNotExist(err) {
+		log.Info("📋 Rules directory does not exist, nothing to clean: %s", rulesDir)
+		return nil
+	}
+
+	log.Info("📋 Cleaning ccagent rules directory: %s", rulesDir)
+
+	// Remove and recreate the directory to ensure a clean state
+	if err := os.RemoveAll(rulesDir); err != nil {
+		return fmt.Errorf("failed to remove rules directory: %w", err)
+	}
+
+	// Recreate empty directory
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		return fmt.Errorf("failed to recreate rules directory: %w", err)
+	}
+
+	log.Info("✅ Successfully cleaned ccagent rules directory")
+	return nil
+}
+
 // ClaudeCodeRulesProcessor handles rules processing for Claude Code
 type ClaudeCodeRulesProcessor struct {
 	workDir string
@@ -154,7 +188,8 @@ func (p *ClaudeCodeRulesProcessor) ProcessRules() error {
 	// Create .claude/rules directory in work directory
 	claudeRulesDir := filepath.Join(p.workDir, ".claude", "rules")
 
-	// Remove existing rules directory to avoid stale rules
+	// Clean up existing rules directory to avoid stale rules
+	log.Info("📋 Cleaning Claude Code rules directory: %s", claudeRulesDir)
 	if err := os.RemoveAll(claudeRulesDir); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove existing rules directory: %w", err)
 	}
@@ -192,11 +227,9 @@ type OpenCodeRulesProcessor struct {
 	workDir string
 }
 
-// ruleInfo holds metadata about a rule file for AGENTS.md generation
-type ruleInfo struct {
-	fileName    string
-	title       string
-	description string
+// OpenCodeConfig represents the opencode.json configuration structure
+type OpenCodeConfig struct {
+	Instructions []string `json:"instructions"`
 }
 
 // NewOpenCodeRulesProcessor creates a new OpenCode rules processor
@@ -207,6 +240,9 @@ func NewOpenCodeRulesProcessor(workDir string) *OpenCodeRulesProcessor {
 }
 
 // ProcessRules implements RulesProcessor for OpenCode
+// It creates an opencode.json with an instructions array that references the ccagent
+// rules directory directly using a glob pattern. OpenCode will load rules from there
+// without needing to copy files.
 func (p *OpenCodeRulesProcessor) ProcessRules() error {
 	log.Info("📋 Processing rules for OpenCode agent")
 
@@ -230,106 +266,39 @@ func (p *OpenCodeRulesProcessor) ProcessRules() error {
 	}
 
 	opencodeConfigDir := filepath.Join(homeDir, ".config", "opencode")
-	opencodeRulesDir := filepath.Join(opencodeConfigDir, "rules")
 
-	// Remove existing rules directory to avoid stale rules
-	if err := os.RemoveAll(opencodeRulesDir); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove existing rules directory: %w", err)
+	// Ensure OpenCode config directory exists
+	if err := os.MkdirAll(opencodeConfigDir, 0755); err != nil {
+		return fmt.Errorf("failed to create OpenCode config directory: %w", err)
 	}
 
-	// Create fresh rules directory
-	if err := os.MkdirAll(opencodeRulesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create OpenCode rules directory: %w", err)
+	// Generate opencode.json with instructions pointing to the ccagent rules directory
+	// Using glob pattern with ~ prefix which OpenCode expands to home directory
+	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
+
+	config := OpenCodeConfig{
+		Instructions: []string{"~/.config/ccagent/rules/*.md"},
 	}
 
-	// Copy each rule file and collect metadata for AGENTS.md
-	var rules []ruleInfo
-
-	for _, ruleFile := range ruleFiles {
-		fileName := filepath.Base(ruleFile)
-		destPath := filepath.Join(opencodeRulesDir, fileName)
-
-		log.Info("📋 Copying rule: %s -> %s", fileName, destPath)
-
-		// Read source file
-		content, err := os.ReadFile(ruleFile)
-		if err != nil {
-			return fmt.Errorf("failed to read rule file %s: %w", ruleFile, err)
-		}
-
-		// Write to destination
-		if err := os.WriteFile(destPath, content, 0644); err != nil {
-			return fmt.Errorf("failed to write rule file %s: %w", destPath, err)
-		}
-
-		// Parse front matter for AGENTS.md
-		frontMatter, err := ParseFrontMatter(ruleFile)
-		if err != nil {
-			log.Info("⚠️  Failed to parse front matter for %s: %v", fileName, err)
-			// Continue anyway with empty metadata
-			frontMatter = &RuleFrontMatter{}
-		}
-
-		rules = append(rules, ruleInfo{
-			fileName:    fileName,
-			title:       frontMatter.Title,
-			description: frontMatter.Description,
-		})
+	configJSON, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal opencode.json: %w", err)
 	}
 
-	// Generate AGENTS.md
-	agentsmdPath := filepath.Join(opencodeConfigDir, "AGENTS.md")
-	agentsmdContent := p.generateAGENTSmd(rules)
+	log.Info("📋 Creating opencode.json at: %s", opencodeConfigPath)
 
-	log.Info("📋 Creating AGENTS.md at: %s", agentsmdPath)
+	if err := os.WriteFile(opencodeConfigPath, configJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write opencode.json: %w", err)
+	}
 
-	if err := os.WriteFile(agentsmdPath, []byte(agentsmdContent), 0644); err != nil {
-		return fmt.Errorf("failed to write AGENTS.md: %w", err)
+	// Clean up old OpenCode rules directory if it exists (from previous approach)
+	oldOpencodeRulesDir := filepath.Join(opencodeConfigDir, "rules")
+	if err := os.RemoveAll(oldOpencodeRulesDir); err != nil && !os.IsNotExist(err) {
+		log.Info("⚠️  Failed to remove old OpenCode rules directory: %v", err)
 	}
 
 	log.Info("✅ Successfully processed %d rule(s) for OpenCode", len(ruleFiles))
 	return nil
-}
-
-// generateAGENTSmd creates the AGENTS.md content with instructions and rule enumeration
-func (p *OpenCodeRulesProcessor) generateAGENTSmd(rules []ruleInfo) string {
-	var sb strings.Builder
-
-	// Write instructions header
-	sb.WriteString("# Agent Rules and Guidelines\n\n")
-	sb.WriteString("**IMPORTANT**: Before starting any task, carefully examine the rules below to determine which ones are relevant to the work you're about to perform. ")
-	sb.WriteString("Each rule is designed to guide specific aspects of development. ")
-	sb.WriteString("Apply the relevant rules thoughtfully to ensure high-quality results.\n\n")
-	sb.WriteString("**Instructions**:\n")
-	sb.WriteString("1. Read the task description carefully\n")
-	sb.WriteString("2. Review the list of available rules below\n")
-	sb.WriteString("3. Identify which rules apply to your current task\n")
-	sb.WriteString("4. Read the full content of the applicable rules from their file locations\n")
-	sb.WriteString("5. Apply the guidelines from those rules throughout your work\n\n")
-	sb.WriteString("---\n\n")
-	sb.WriteString("## Available Rules\n\n")
-
-	// Enumerate each rule
-	for _, rule := range rules {
-		// Use title if available, otherwise use filename without extension
-		title := rule.title
-		if title == "" {
-			title = strings.TrimSuffix(rule.fileName, filepath.Ext(rule.fileName))
-		}
-
-		sb.WriteString(fmt.Sprintf("### %s\n", title))
-		sb.WriteString(fmt.Sprintf("**Location**: `./rules/%s`\n", rule.fileName))
-
-		if rule.description != "" {
-			sb.WriteString(fmt.Sprintf("**Description**: %s\n", rule.description))
-		} else {
-			sb.WriteString("**Description**: See file for details\n")
-		}
-
-		sb.WriteString("\n")
-	}
-
-	return sb.String()
 }
 
 // NoOpRulesProcessor is a no-op implementation for agents that don't support rules
