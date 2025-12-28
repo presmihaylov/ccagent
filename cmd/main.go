@@ -146,12 +146,7 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 
 	// Download and store each artifact file
 	for _, artifact := range artifacts {
-		artifactType := artifact.Type
-		if artifactType == "" {
-			artifactType = "rule" // default to rule for backwards compatibility
-		}
-
-		log.Info("📦 Processing %s artifact: %s (%s)", artifactType, artifact.Title, artifact.Description)
+		log.Info("📦 Processing %s artifact: %s (%s)", artifact.Type, artifact.Title, artifact.Description)
 
 		for _, file := range artifact.Files {
 			log.Info("📥 Downloading artifact file to: %s", file.Location)
