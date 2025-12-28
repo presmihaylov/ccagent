@@ -121,10 +121,14 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.
 func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 	log.Info("📦 Fetching agent artifacts from API...")
 
-	// Clean up existing rules before downloading new ones
-	// This ensures stale rules deleted on the server are removed locally
+	// Clean up existing rules and MCP configs before downloading new ones
+	// This ensures stale items deleted on the server are removed locally
 	if err := utils.CleanCcagentRulesDir(); err != nil {
 		return fmt.Errorf("failed to clean ccagent rules directory: %w", err)
+	}
+
+	if err := utils.CleanCcagentMCPDir(); err != nil {
+		return fmt.Errorf("failed to clean ccagent MCP directory: %w", err)
 	}
 
 	artifacts, err := agentsApiClient.FetchArtifacts()
@@ -142,7 +146,12 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 
 	// Download and store each artifact file
 	for _, artifact := range artifacts {
-		log.Info("📦 Processing artifact: %s (%s)", artifact.Title, artifact.Description)
+		artifactType := artifact.Type
+		if artifactType == "" {
+			artifactType = "rule" // default to rule for backwards compatibility
+		}
+
+		log.Info("📦 Processing %s artifact: %s (%s)", artifactType, artifact.Title, artifact.Description)
 
 		for _, file := range artifact.Files {
 			log.Info("📥 Downloading artifact file to: %s", file.Location)
@@ -179,6 +188,31 @@ func processAgentRules(agentType, workDir string) error {
 
 	if err := processor.ProcessRules(); err != nil {
 		return fmt.Errorf("failed to process rules: %w", err)
+	}
+
+	return nil
+}
+
+// processMCPConfigs processes MCP configs from ccagent directory based on agent type
+func processMCPConfigs(agentType, workDir string) error {
+	log.Info("🔌 Processing MCP configs for agent type: %s", agentType)
+
+	var processor utils.MCPProcessor
+
+	switch agentType {
+	case "claude":
+		processor = utils.NewClaudeCodeMCPProcessor(workDir)
+	case "opencode":
+		processor = utils.NewOpenCodeMCPProcessor(workDir)
+	case "cursor", "codex":
+		// Cursor and Codex don't support MCP configs yet
+		processor = utils.NewNoOpMCPProcessor()
+	default:
+		return fmt.Errorf("unknown agent type: %s", agentType)
+	}
+
+	if err := processor.ProcessMCPConfigs(); err != nil {
+		return fmt.Errorf("failed to process MCP configs: %w", err)
 	}
 
 	return nil
@@ -243,6 +277,11 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	// Process rules based on agent type
 	if err := processAgentRules(agentType, workDir); err != nil {
 		return nil, fmt.Errorf("failed to process agent rules: %w", err)
+	}
+
+	// Process MCP configs based on agent type
+	if err := processMCPConfigs(agentType, workDir); err != nil {
+		return nil, fmt.Errorf("failed to process MCP configs: %w", err)
 	}
 
 	// Create the appropriate CLI agent service (now with all dependencies available)
