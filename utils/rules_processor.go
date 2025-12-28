@@ -157,15 +157,11 @@ func CleanCcagentRulesDir() error {
 }
 
 // ClaudeCodeRulesProcessor handles rules processing for Claude Code
-type ClaudeCodeRulesProcessor struct {
-	workDir string
-}
+type ClaudeCodeRulesProcessor struct{}
 
 // NewClaudeCodeRulesProcessor creates a new Claude Code rules processor
 func NewClaudeCodeRulesProcessor(workDir string) *ClaudeCodeRulesProcessor {
-	return &ClaudeCodeRulesProcessor{
-		workDir: workDir,
-	}
+	return &ClaudeCodeRulesProcessor{}
 }
 
 // ProcessRules implements RulesProcessor for Claude Code
@@ -185,8 +181,14 @@ func (p *ClaudeCodeRulesProcessor) ProcessRules() error {
 
 	log.Info("📋 Found %d rule file(s) to process", len(ruleFiles))
 
-	// Create .claude/rules directory in work directory
-	claudeRulesDir := filepath.Join(p.workDir, ".claude", "rules")
+	// Get home directory for Claude Code rules
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	// Create .claude/rules directory in home directory
+	claudeRulesDir := filepath.Join(homeDir, ".claude", "rules")
 
 	// Clean up existing rules directory to avoid stale rules
 	log.Info("📋 Cleaning Claude Code rules directory: %s", claudeRulesDir)
