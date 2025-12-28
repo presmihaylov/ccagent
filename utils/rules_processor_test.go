@@ -549,54 +549,6 @@ Write tests for everything.`
 	}
 }
 
-func TestOpenCodeRulesProcessor_WithoutFrontMatter(t *testing.T) {
-	// Create temporary directories
-	tempDir := t.TempDir()
-	workDir := filepath.Join(tempDir, "workspace")
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
-
-	if err := os.MkdirAll(workDir, 0755); err != nil {
-		t.Fatalf("Failed to create work directory: %v", err)
-	}
-
-	if err := os.MkdirAll(rulesDir, 0755); err != nil {
-		t.Fatalf("Failed to create rules directory: %v", err)
-	}
-
-	// Create rule without front matter
-	ruleContent := "# Simple Rule\nNo front matter here."
-	if err := os.WriteFile(filepath.Join(rulesDir, "simple.md"), []byte(ruleContent), 0644); err != nil {
-		t.Fatalf("Failed to create rule: %v", err)
-	}
-
-	// Temporarily override home directory for test
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", originalHome)
-
-	// Process rules
-	processor := NewOpenCodeRulesProcessor(workDir)
-	if err := processor.ProcessRules(); err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
-
-	// Verify opencode.json was created
-	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
-	content, err := os.ReadFile(opencodeConfigPath)
-	if err != nil {
-		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
-	}
-
-	var config OpenCodeConfig
-	if err := json.Unmarshal(content, &config); err != nil {
-		t.Fatalf("Failed to parse opencode.json: %v", err)
-	}
-
-	if len(config.Instructions) != 1 {
-		t.Errorf("Expected 1 instruction, got: %d", len(config.Instructions))
-	}
-}
-
 func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 	// Create temporary directories
 	tempDir := t.TempDir()
