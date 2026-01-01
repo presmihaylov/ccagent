@@ -242,6 +242,30 @@ func processSkills(agentType string) error {
 	return nil
 }
 
+// processPermissions configures agent-specific permissions for automated operation
+func processPermissions(agentType, workDir string) error {
+	log.Info("🔓 Processing permissions for agent type: %s", agentType)
+
+	var processor utils.PermissionsProcessor
+
+	switch agentType {
+	case "opencode":
+		// OpenCode requires explicit permission configuration for yolo mode
+		processor = utils.NewOpenCodePermissionsProcessor(workDir)
+	case "claude", "cursor", "codex":
+		// Claude, Cursor, and Codex handle permissions via CLI flags
+		processor = utils.NewNoOpPermissionsProcessor()
+	default:
+		return fmt.Errorf("unknown agent type: %s", agentType)
+	}
+
+	if err := processor.ProcessPermissions(); err != nil {
+		return fmt.Errorf("failed to process permissions: %w", err)
+	}
+
+	return nil
+}
+
 func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
@@ -311,6 +335,11 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	// Process skills based on agent type
 	if err := processSkills(agentType); err != nil {
 		return nil, fmt.Errorf("failed to process skills: %w", err)
+	}
+
+	// Process permissions based on agent type (enables yolo mode for OpenCode)
+	if err := processPermissions(agentType, workDir); err != nil {
+		return nil, fmt.Errorf("failed to process permissions: %w", err)
 	}
 
 	// Create the appropriate CLI agent service (now with all dependencies available)
