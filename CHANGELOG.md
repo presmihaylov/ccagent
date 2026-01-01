@@ -1,3 +1,13 @@
+## [v0.0.37] - 2026-01-01
+
+### Features
+
+- Add skills support for coding agents ([#65](https://github.com/presmihaylov/ccagent/pull/65))
+  - Enables skills loading from repository configuration
+  - Supports custom skill definitions for enhanced agent capabilities
+  - Allows agents to utilize specialized skills during conversations
+  - Improves agent flexibility and extensibility for various use cases
+
 ## [v0.0.36] - 2025-12-28
 
 ### Bugfixes
