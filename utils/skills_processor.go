@@ -29,7 +29,7 @@ func GetCcagentSkillsDir() (string, error) {
 	return filepath.Join(homeDir, ".config", "ccagent", "skills"), nil
 }
 
-// GetSkillFiles returns a list of ZIP files in the ccagent skills directory
+// GetSkillFiles returns a list of skill files (.zip or .skill) in the ccagent skills directory
 func GetSkillFiles() ([]string, error) {
 	skillsDir, err := GetCcagentSkillsDir()
 	if err != nil {
@@ -48,14 +48,15 @@ func GetSkillFiles() ([]string, error) {
 		return nil, fmt.Errorf("failed to read skills directory: %w", err)
 	}
 
-	// Filter ZIP files
+	// Filter skill files (.zip or .skill extensions)
 	var skillFiles []string
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 
-		if strings.HasSuffix(strings.ToLower(entry.Name()), ".zip") {
+		lowerName := strings.ToLower(entry.Name())
+		if strings.HasSuffix(lowerName, ".zip") || strings.HasSuffix(lowerName, ".skill") {
 			skillFiles = append(skillFiles, filepath.Join(skillsDir, entry.Name()))
 		}
 	}
@@ -96,9 +97,11 @@ func CleanCcagentSkillsDir() error {
 
 // ExtractSkillNameFromFilename extracts the skill name from the filename by removing the attachment ID suffix
 // Example: "code-reviewer-a1b2c3.zip" -> "code-reviewer"
+// Example: "code-reviewer-a1b2c3.skill" -> "code-reviewer"
 func ExtractSkillNameFromFilename(filename string) string {
-	// Remove .zip extension
+	// Remove extension (.zip or .skill)
 	name := strings.TrimSuffix(filename, ".zip")
+	name = strings.TrimSuffix(name, ".skill")
 
 	// Find the last hyphen followed by exactly 6 characters (attachment ID)
 	// Walk backwards to find the pattern -{6 chars}

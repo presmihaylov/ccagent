@@ -15,18 +15,33 @@ func TestExtractSkillNameFromFilename(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "standard format with 6-char ID",
+			name:     "standard format with 6-char ID (.zip)",
 			filename: "code-reviewer-a1b2c3.zip",
 			want:     "code-reviewer",
 		},
 		{
-			name:     "multi-part name with 6-char ID",
+			name:     "standard format with 6-char ID (.skill)",
+			filename: "code-reviewer-a1b2c3.skill",
+			want:     "code-reviewer",
+		},
+		{
+			name:     "multi-part name with 6-char ID (.zip)",
 			filename: "pdf-processor-x4y5z6.zip",
 			want:     "pdf-processor",
 		},
 		{
-			name:     "single word name",
+			name:     "multi-part name with 6-char ID (.skill)",
+			filename: "pdf-processor-x4y5z6.skill",
+			want:     "pdf-processor",
+		},
+		{
+			name:     "single word name (.zip)",
 			filename: "formatter-abc123.zip",
+			want:     "formatter",
+		},
+		{
+			name:     "single word name (.skill)",
+			filename: "formatter-abc123.skill",
 			want:     "formatter",
 		},
 		{
@@ -35,8 +50,13 @@ func TestExtractSkillNameFromFilename(t *testing.T) {
 			want:     "skill-v2-beta",
 		},
 		{
-			name:     "no attachment ID suffix",
+			name:     "no attachment ID suffix (.zip)",
 			filename: "my-skill.zip",
+			want:     "my-skill",
+		},
+		{
+			name:     "no attachment ID suffix (.skill)",
+			filename: "my-skill.skill",
 			want:     "my-skill",
 		},
 		{
@@ -302,16 +322,42 @@ func TestGetSkillFiles(t *testing.T) {
 			},
 		},
 		{
-			name: "mixed file types - only ZIP files returned",
+			name: "multiple skill .skill files",
 			setupFiles: map[string]string{
-				"skill1-abc123.zip": "zip content",
-				"readme.md":         "markdown content",
-				"config.json":       "json content",
-				"skill2-def456.ZIP": "zip content with uppercase ext",
+				"code-reviewer-a1b2c3.skill": "skill content 1",
+				"pdf-processor-x4y5z6.skill": "skill content 2",
+			},
+			expectedFiles: []string{
+				"code-reviewer-a1b2c3.skill",
+				"pdf-processor-x4y5z6.skill",
+			},
+		},
+		{
+			name: "mixed .zip and .skill files",
+			setupFiles: map[string]string{
+				"skill1-abc123.zip":   "zip content",
+				"skill2-def456.skill": "skill content",
+				"skill3-ghi789.ZIP":   "uppercase zip",
+				"skill4-jkl012.SKILL": "uppercase skill",
 			},
 			expectedFiles: []string{
 				"skill1-abc123.zip",
-				"skill2-def456.ZIP",
+				"skill2-def456.skill",
+				"skill3-ghi789.ZIP",
+				"skill4-jkl012.SKILL",
+			},
+		},
+		{
+			name: "mixed file types - only skill files returned",
+			setupFiles: map[string]string{
+				"skill1-abc123.zip":   "zip content",
+				"skill2-def456.skill": "skill content",
+				"readme.md":           "markdown content",
+				"config.json":         "json content",
+			},
+			expectedFiles: []string{
+				"skill1-abc123.zip",
+				"skill2-def456.skill",
 			},
 		},
 		{
