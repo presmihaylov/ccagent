@@ -121,7 +121,7 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.
 func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 	log.Info("📦 Fetching agent artifacts from API...")
 
-	// Clean up existing rules and MCP configs before downloading new ones
+	// Clean up existing rules, MCP configs, and skills before downloading new ones
 	// This ensures stale items deleted on the server are removed locally
 	if err := utils.CleanCcagentRulesDir(); err != nil {
 		return fmt.Errorf("failed to clean ccagent rules directory: %w", err)
@@ -129,6 +129,10 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 
 	if err := utils.CleanCcagentMCPDir(); err != nil {
 		return fmt.Errorf("failed to clean ccagent MCP directory: %w", err)
+	}
+
+	if err := utils.CleanCcagentSkillsDir(); err != nil {
+		return fmt.Errorf("failed to clean ccagent skills directory: %w", err)
 	}
 
 	artifacts, err := agentsApiClient.FetchArtifacts()
@@ -213,6 +217,31 @@ func processMCPConfigs(agentType, workDir string) error {
 	return nil
 }
 
+// processSkills processes skills from ccagent directory based on agent type
+func processSkills(agentType string) error {
+	log.Info("🎯 Processing skills for agent type: %s", agentType)
+
+	var processor utils.SkillsProcessor
+
+	switch agentType {
+	case "claude":
+		processor = utils.NewClaudeCodeSkillsProcessor()
+	case "opencode":
+		processor = utils.NewOpenCodeSkillsProcessor()
+	case "cursor", "codex":
+		// Cursor and Codex don't support skills yet
+		processor = utils.NewNoOpSkillsProcessor()
+	default:
+		return fmt.Errorf("unknown agent type: %s", agentType)
+	}
+
+	if err := processor.ProcessSkills(); err != nil {
+		return fmt.Errorf("failed to process skills: %w", err)
+	}
+
+	return nil
+}
+
 func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
@@ -277,6 +306,11 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 	// Process MCP configs based on agent type
 	if err := processMCPConfigs(agentType, workDir); err != nil {
 		return nil, fmt.Errorf("failed to process MCP configs: %w", err)
+	}
+
+	// Process skills based on agent type
+	if err := processSkills(agentType); err != nil {
+		return nil, fmt.Errorf("failed to process skills: %w", err)
 	}
 
 	// Create the appropriate CLI agent service (now with all dependencies available)
