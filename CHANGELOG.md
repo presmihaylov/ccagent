@@ -1,3 +1,12 @@
+## [v0.0.38] - 2026-01-01
+
+### Features
+
+- Add permissions processor to enable yolo mode for OpenCode ([#66](https://github.com/presmihaylov/ccagent/pull/66))
+  - Adds new permissions processor to enable yolo mode for OpenCode client
+  - Allows OpenCode agents to run with fewer confirmation prompts
+  - Improves agent autonomy and workflow efficiency
+
 ## [v0.0.37] - 2026-01-01
 
 ### Features
