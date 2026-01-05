@@ -137,6 +137,20 @@ func (g *GitClient) PullLatest() error {
 func (g *GitClient) ResetHard() error {
 	log.Info("📋 Starting to reset hard to HEAD")
 
+	// Check if repository has any commits first
+	// In a fresh repository with no commits, HEAD doesn't exist and reset will fail
+	hasCommits, err := g.hasCommits()
+	if err != nil {
+		log.Error("❌ Failed to check if repository has commits: %v", err)
+		return fmt.Errorf("failed to check if repository has commits: %w", err)
+	}
+
+	if !hasCommits {
+		log.Info("ℹ️ Repository has no commits yet - skipping reset")
+		log.Info("📋 Completed successfully - skipped reset (empty repository)")
+		return nil
+	}
+
 	cmd := exec.Command("git", "reset", "--hard", "HEAD")
 	output, err := cmd.CombinedOutput()
 
@@ -148,6 +162,18 @@ func (g *GitClient) ResetHard() error {
 	log.Info("✅ Successfully reset hard to HEAD")
 	log.Info("📋 Completed successfully - reset hard")
 	return nil
+}
+
+// hasCommits checks if the repository has any commits
+func (g *GitClient) hasCommits() (bool, error) {
+	// Use git rev-parse --verify HEAD to check if HEAD exists
+	// This will return an error if there are no commits
+	cmd := exec.Command("git", "rev-parse", "--verify", "HEAD")
+	err := cmd.Run()
+
+	// If command succeeds, HEAD exists (repository has commits)
+	// If it fails, HEAD doesn't exist (empty repository)
+	return err == nil, nil
 }
 
 func (g *GitClient) CleanUntracked() error {
