@@ -296,3 +296,260 @@ func TestUnknownOpenCodeMessage_GetSessionID(t *testing.T) {
 		t.Errorf("Expected session ID 'ses_789', got %q", msg.GetSessionID())
 	}
 }
+
+func TestOpenCodeToolUseMessage_GetType(t *testing.T) {
+	msg := OpenCodeToolUseMessage{
+		Type:      "tool_use",
+		SessionID: "ses_tool123",
+	}
+	if msg.GetType() != "tool_use" {
+		t.Errorf("Expected type 'tool_use', got %q", msg.GetType())
+	}
+}
+
+func TestOpenCodeToolUseMessage_GetSessionID(t *testing.T) {
+	msg := OpenCodeToolUseMessage{
+		Type:      "tool_use",
+		SessionID: "ses_tool123",
+	}
+	if msg.GetSessionID() != "ses_tool123" {
+		t.Errorf("Expected session ID 'ses_tool123', got %q", msg.GetSessionID())
+	}
+}
+
+func TestMapOpenCodeOutputToMessages_ToolUse(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedCount int
+		expectedTypes []string
+	}{
+		{
+			name: "parses tool_use messages",
+			input: `{"type":"step_start","timestamp":1767690266336,"sessionID":"ses_123","part":{}}
+{"type":"tool_use","timestamp":1767690268885,"sessionID":"ses_123","part":{"tool":"read","state":{"status":"completed","title":"README.md"}}}
+{"type":"step_finish","timestamp":1767690269077,"sessionID":"ses_123","part":{}}`,
+			expectedCount: 3,
+			expectedTypes: []string{"step_start", "tool_use", "step_finish"},
+		},
+		{
+			name: "parses multiple tool_use messages",
+			input: `{"type":"tool_use","timestamp":1767690268885,"sessionID":"ses_123","part":{"tool":"read","state":{"status":"completed","title":"file1.go"}}}
+{"type":"tool_use","timestamp":1767690315414,"sessionID":"ses_123","part":{"tool":"edit","state":{"status":"completed","title":"file2.go","metadata":{"filediff":{"additions":5,"deletions":2}}}}}`,
+			expectedCount: 2,
+			expectedTypes: []string{"tool_use", "tool_use"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			messages, err := MapOpenCodeOutputToMessages(tt.input)
+			if err != nil {
+				t.Fatalf("Failed to parse messages: %v", err)
+			}
+
+			if len(messages) != tt.expectedCount {
+				t.Errorf("Expected %d messages, got %d", tt.expectedCount, len(messages))
+			}
+
+			for i, expectedType := range tt.expectedTypes {
+				if i < len(messages) && messages[i].GetType() != expectedType {
+					t.Errorf("Message %d: expected type %q, got %q", i, expectedType, messages[i].GetType())
+				}
+			}
+		})
+	}
+}
+
+func TestExtractOpenCodeResult_ToolUseFallback(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedResult string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name: "falls back to edit tool summary when no text",
+			input: `{"type":"step_start","timestamp":1767690266336,"sessionID":"ses_123","part":{}}
+{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_123","part":{"tool":"edit","state":{"status":"completed","title":"README.md","metadata":{"filediff":{"file":"README.md","additions":11,"deletions":1}}}}}
+{"type":"step_finish","timestamp":1767690438338,"sessionID":"ses_123","part":{}}`,
+			expectedResult: "Completed: edited README.md (+11/-1 lines)",
+			expectError:    false,
+		},
+		{
+			name: "falls back to multiple edit tool summaries",
+			input: `{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_123","part":{"tool":"edit","state":{"status":"completed","title":"file1.go","metadata":{"filediff":{"additions":5,"deletions":2}}}}}
+{"type":"tool_use","timestamp":1767690438200,"sessionID":"ses_123","part":{"tool":"edit","state":{"status":"completed","title":"file2.go","metadata":{"filediff":{"additions":10,"deletions":0}}}}}`,
+			expectedResult: "Completed: edited file1.go (+5/-2 lines); edited file2.go (+10/-0 lines)",
+			expectError:    false,
+		},
+		{
+			name: "prefers text over tool summaries",
+			input: `{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_123","part":{"tool":"edit","state":{"status":"completed","title":"README.md","metadata":{"filediff":{"additions":11,"deletions":1}}}}}
+{"type":"text","timestamp":1767690446667,"sessionID":"ses_123","part":{"text":"Done! Updated the README."}}`,
+			expectedResult: "Done! Updated the README.",
+			expectError:    false,
+		},
+		{
+			name: "ignores read tool (not an action)",
+			input: `{"type":"tool_use","timestamp":1767690268885,"sessionID":"ses_123","part":{"tool":"read","state":{"status":"completed","title":"README.md"}}}
+{"type":"step_finish","timestamp":1767690269077,"sessionID":"ses_123","part":{}}`,
+			expectedResult: "",
+			expectError:    true,
+			errorContains:  "no text message found",
+		},
+		{
+			name: "ignores incomplete tool operations",
+			input: `{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_123","part":{"tool":"edit","state":{"status":"pending","title":"README.md"}}}`,
+			expectedResult: "",
+			expectError:    true,
+			errorContains:  "no text message found",
+		},
+		{
+			name: "handles edit without diff stats",
+			input: `{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_123","part":{"tool":"edit","state":{"status":"completed","title":"config.yaml"}}}`,
+			expectedResult: "Completed: edited config.yaml",
+			expectError:    false,
+		},
+		{
+			name: "handles write tool",
+			input: `{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_123","part":{"tool":"write","state":{"status":"completed","title":"newfile.txt"}}}`,
+			expectedResult: "Completed: created newfile.txt",
+			expectError:    false,
+		},
+		{
+			name: "handles bash tool",
+			input: `{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_123","part":{"tool":"bash","state":{"status":"completed"}}}`,
+			expectedResult: "Completed: ran command",
+			expectError:    false,
+		},
+		{
+			name: "handles mixed actionable tools",
+			input: `{"type":"tool_use","timestamp":1767690268885,"sessionID":"ses_123","part":{"tool":"read","state":{"status":"completed","title":"README.md"}}}
+{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_123","part":{"tool":"edit","state":{"status":"completed","title":"README.md","metadata":{"filediff":{"additions":5,"deletions":1}}}}}
+{"type":"tool_use","timestamp":1767690438200,"sessionID":"ses_123","part":{"tool":"bash","state":{"status":"completed"}}}`,
+			expectedResult: "Completed: edited README.md (+5/-1 lines); ran command",
+			expectError:    false,
+		},
+		{
+			name: "real-world scenario: only tool calls with edit",
+			input: `{"type":"step_start","timestamp":1767690266336,"sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","part":{"id":"prt_b928ce6d8001tTFwpz62Mnmpai","sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","messageID":"msg_b928cbe91001IBNq4po6XdSM9r","type":"step-start","snapshot":"4d6ca9cbee79431d34c6d2607f4b985f4c6f3e07"}}
+{"type":"tool_use","timestamp":1767690268885,"sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","part":{"id":"prt_b928cf0b30014EcGz5mOuQlUo0","sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","messageID":"msg_b928cbe91001IBNq4po6XdSM9r","type":"tool","callID":"call_2c9a27fcc3c34004a3f50d17","tool":"read","state":{"status":"completed","input":{"filePath":"/workspace/repo/README.md"},"output":"file content here","title":"README.md"}}}
+{"type":"step_finish","timestamp":1767690269077,"sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","part":{"id":"prt_b928cf171001TMBxIDw1adRV61","sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","messageID":"msg_b928cbe91001IBNq4po6XdSM9r","type":"step-finish","reason":"tool-calls","snapshot":"4d6ca9cbee79431d34c6d2607f4b985f4c6f3e07"}}
+{"type":"step_start","timestamp":1767690418557,"sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","part":{"id":"prt_b928f396d0011YFVcRJs9mkPDh","sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","messageID":"msg_b928da8c2001xqS5wLRBkgyNuc","type":"step-start","snapshot":"4d6ca9cbee79431d34c6d2607f4b985f4c6f3e07"}}
+{"type":"tool_use","timestamp":1767690438167,"sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","part":{"id":"prt_b928f85f8001ySI2243td7LBok","sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","messageID":"msg_b928da8c2001xqS5wLRBkgyNuc","type":"tool","callID":"call_64d7f2e462a6455d98d6e65d","tool":"edit","state":{"status":"completed","input":{"filePath":"/workspace/repo/README.md","oldString":"old content","newString":"new content"},"output":"","title":"README.md","metadata":{"diagnostics":{},"diff":"diff here","filediff":{"file":"/workspace/repo/README.md","before":"old","after":"new","additions":11,"deletions":1}}}}}
+{"type":"step_finish","timestamp":1767690438338,"sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","part":{"id":"prt_b928f86ac001fZJ2Y9GJ2ltUV8","sessionID":"ses_46d78f7a9ffeT6gMzPsEkxfE2B","messageID":"msg_b928da8c2001xqS5wLRBkgyNuc","type":"step-finish","reason":"tool-calls","snapshot":"555b7451190ed0b930805e92777e36b5dfc1efa9"}}`,
+			expectedResult: "Completed: edited README.md (+11/-1 lines)",
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			messages, err := MapOpenCodeOutputToMessages(tt.input)
+			if err != nil {
+				t.Fatalf("Failed to parse messages: %v", err)
+			}
+
+			result, err := ExtractOpenCodeResult(messages)
+
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+			if result != tt.expectedResult {
+				t.Errorf("Expected result %q, got %q", tt.expectedResult, result)
+			}
+			if tt.expectError && tt.errorContains != "" && err != nil {
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorContains, err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestExtractToolSummary(t *testing.T) {
+	tests := []struct {
+		name     string
+		tool     string
+		status   string
+		title    string
+		adds     int
+		dels     int
+		expected string
+	}{
+		{
+			name:     "edit with diff stats",
+			tool:     "edit",
+			status:   "completed",
+			title:    "main.go",
+			adds:     10,
+			dels:     3,
+			expected: "edited main.go (+10/-3 lines)",
+		},
+		{
+			name:     "edit without diff stats",
+			tool:     "edit",
+			status:   "completed",
+			title:    "config.yaml",
+			adds:     0,
+			dels:     0,
+			expected: "edited config.yaml",
+		},
+		{
+			name:     "write creates file",
+			tool:     "write",
+			status:   "completed",
+			title:    "newfile.txt",
+			expected: "created newfile.txt",
+		},
+		{
+			name:     "bash ran command",
+			tool:     "bash",
+			status:   "completed",
+			expected: "ran command",
+		},
+		{
+			name:     "read returns empty (not an action)",
+			tool:     "read",
+			status:   "completed",
+			title:    "file.go",
+			expected: "",
+		},
+		{
+			name:     "grep returns empty (not an action)",
+			tool:     "grep",
+			status:   "completed",
+			expected: "",
+		},
+		{
+			name:     "glob returns empty (not an action)",
+			tool:     "glob",
+			status:   "completed",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := OpenCodeToolUseMessage{
+				Type:      "tool_use",
+				SessionID: "ses_test",
+			}
+			msg.Part.Tool = tt.tool
+			msg.Part.State.Status = tt.status
+			msg.Part.State.Title = tt.title
+			msg.Part.State.Metadata.FileDiff.Additions = tt.adds
+			msg.Part.State.Metadata.FileDiff.Deletions = tt.dels
+
+			result := extractToolSummary(msg)
+			if result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
