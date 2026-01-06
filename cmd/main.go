@@ -658,11 +658,21 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 		return fmt.Errorf("failed to get repository identifier: %w", err)
 	}
 
+	// Determine agent ID value - use env var if set, otherwise use repo identifier
+	agentID := cr.envManager.Get("CCAGENT_AGENT_ID")
+	if agentID == "" {
+		agentID = repoIdentifier
+		log.Info("📋 Using repository identifier as agent ID: %s", agentID)
+	} else {
+		log.Info("📋 Using CCAGENT_AGENT_ID from environment: %s", agentID)
+	}
+
 	// Set authentication headers
 	opts.SetExtraHeaders(map[string][]string{
 		"X-CCAGENT-API-KEY": {apiKey},
 		"X-CCAGENT-ID":      {cr.agentID},
 		"X-CCAGENT-REPO":    {repoIdentifier},
+		"X-AGENT-ID":        {agentID},
 	})
 
 	manager := socket.NewManager(serverURLStr, opts)
