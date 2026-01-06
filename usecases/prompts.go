@@ -22,46 +22,26 @@ YOUR RESPONSE MUST BE THE COMMIT MESSAGE ONLY.`
 }
 
 // PRTitleGenerationPrompt creates a prompt for Claude to generate PR titles
+// Uses XML-style structured sections for better compatibility with smaller models
 func PRTitleGenerationPrompt(branchName string) string {
-	return `Generate a SHORT pull request title for the work we completed in this conversation.
+	return `Generate a pull request title for the changes in this conversation.
 
-Follow these strict rules:
-- Maximum 50 characters (STRICT LIMIT)
-- Use conventional commits format: "type: description"
-- Choose appropriate type: feat, fix, docs, chore, refactor, test, perf, ci, build, style
-- Be concise and specific in description
-- No unnecessary words or phrases
-- Don't mention "Claude", "agent", or implementation details
-- Base the title on what we actually worked on in our conversation
+<format>
+type: short description
+</format>
 
-Type Guidelines:
-- feat: new features or functionality
-- fix: bug fixes
-- docs: documentation changes
-- refactor: code restructuring without behavior change
-- chore: maintenance, dependencies, configuration
-- test: adding or fixing tests
-- perf: performance improvements
-- ci: CI/CD pipeline changes
-- build: build system or external dependencies
-- style: formatting, missing semicolons (no code change)
+<types>
+feat|fix|docs|chore|refactor|test|perf|ci|build|style
+</types>
 
-Examples:
-- "fix: resolve error handling in message processor"
-- "feat: add user authentication middleware" 
-- "docs: update API response format documentation"
-- "chore: bump dependency versions"
+<constraints>
+- Maximum 50 characters total
+- No quotes around the title
+- No explanations or additional text
+- Don't mention "Claude" or "agent"
+</constraints>
 
-CRITICAL: Your response must contain ONLY the PR title text. Do not include:
-- Any explanations or reasoning
-- Quotes around the title
-- "Here is the title:" or similar phrases
-- Any other text whatsoever
-- Do NOT execute any git or gh commands
-- Do NOT create, update, or modify any pull requests
-- Do NOT perform any actions - this is a text-only request
-
-Respond with ONLY the short title text, nothing else.`
+Respond with ONLY the title text, nothing else.`
 }
 
 // PRDescriptionGenerationPrompt creates a prompt for Claude to generate PR descriptions
@@ -133,51 +113,22 @@ Respond with ONLY the PR description in markdown format, nothing else.`
 }
 
 // PRTitleUpdatePrompt creates a prompt for Claude to update existing PR titles
+// Uses XML-style structured sections for better compatibility with smaller models
 func PRTitleUpdatePrompt(currentTitle, branchName string) string {
-	return fmt.Sprintf(`I have an existing pull request with this title:
-CURRENT TITLE: "%s"
+	return fmt.Sprintf(`Review and optionally update this PR title based on our conversation.
 
-Based on our ongoing conversation, review whether this title still accurately reflects the work we've done.
+<current_title>
+%s
+</current_title>
 
-INSTRUCTIONS:
-- Review the current title and what we've worked on in our conversation
-- ONLY update the title if the current title has become obsolete or doesn't accurately reflect the work
-- If the current title still accurately captures the main purpose, return it unchanged
-- If updating, use conventional commits format: "type: description"
-- Choose appropriate type: feat, fix, docs, chore, refactor, test, perf, ci, build, style
-- Maximum 50 characters (STRICT LIMIT)
-- Be concise and specific in description
-- Don't mention "Claude", "agent", or implementation details
-
-Type Guidelines:
-- feat: new features or functionality
-- fix: bug fixes  
-- docs: documentation changes
-- refactor: code restructuring without behavior change
-- chore: maintenance, dependencies, configuration
-- test: adding or fixing tests
-- perf: performance improvements
-- ci: CI/CD pipeline changes
-- build: build system or external dependencies
-- style: formatting, missing semicolons (no code change)
-
-Examples of when to update:
-- Current: "Fix error handling" → New work adds user auth → Updated: "feat: add auth and fix error handling"
-- Current: "Add basic feature" → New work improves performance → Updated: "feat: add feature with performance improvements"
-
-Examples of when NOT to update:
-- Current: "fix: authentication issues" → More auth bug fixes → Keep: "fix: authentication issues"
-- Current: "feat: add user dashboard" → Small UI bug fixes → Keep: "feat: add user dashboard"
-
-CRITICAL: Your response must contain ONLY the PR title text. Do not include:
-- Any explanations or reasoning about your decision
-- Quotes around the title
-- "The title should be:" or similar phrases
-- Commentary about whether you updated it or not
-- Any other text whatsoever
-- Do NOT execute any git or gh commands
-- Do NOT create, update, or modify any pull requests
-- Do NOT perform any actions - this is a text-only request
+<rules>
+- Only update if current title is inaccurate or obsolete
+- Keep unchanged if it still captures the main purpose
+- Format: type: short description
+- Types: feat|fix|docs|chore|refactor|test|perf|ci|build|style
+- Maximum 50 characters
+- No quotes, no explanations
+</rules>
 
 Respond with ONLY the title text (updated or unchanged), nothing else.`, currentTitle)
 }
