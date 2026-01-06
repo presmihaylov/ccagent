@@ -58,6 +58,41 @@ func (u UnknownOpenCodeMessage) GetSessionID() string {
 	return u.SessionID
 }
 
+// OpenCodeToolUseMessage represents a tool_use message from OpenCode
+// This captures tool calls made by the model (read, edit, bash, etc.)
+type OpenCodeToolUseMessage struct {
+	Type      string `json:"type"`
+	SessionID string `json:"sessionID"`
+	Part      struct {
+		Tool  string `json:"tool"`
+		State struct {
+			Status string `json:"status"`
+			Title  string `json:"title"`
+			Input  struct {
+				FilePath  string `json:"filePath"`
+				OldString string `json:"oldString"`
+				NewString string `json:"newString"`
+			} `json:"input"`
+			Metadata struct {
+				Diff     string `json:"diff"`
+				FileDiff struct {
+					File      string `json:"file"`
+					Additions int    `json:"additions"`
+					Deletions int    `json:"deletions"`
+				} `json:"filediff"`
+			} `json:"metadata"`
+		} `json:"state"`
+	} `json:"part"`
+}
+
+func (t OpenCodeToolUseMessage) GetType() string {
+	return t.Type
+}
+
+func (t OpenCodeToolUseMessage) GetSessionID() string {
+	return t.SessionID
+}
+
 // OpenCodeRawErrorMessage represents a non-JSON error output from OpenCode
 // This happens when opencode itself crashes or encounters a startup error
 type OpenCodeRawErrorMessage struct {
@@ -138,6 +173,12 @@ func parseOpenCodeMessage(lineBytes []byte) OpenCodeMessage {
 		if err := json.Unmarshal(lineBytes, &stepMsg); err == nil {
 			return stepMsg
 		}
+
+	case "tool_use":
+		var toolMsg OpenCodeToolUseMessage
+		if err := json.Unmarshal(lineBytes, &toolMsg); err == nil {
+			return toolMsg
+		}
 	}
 
 	// For all other types, extract basic info for unknown message
@@ -185,6 +226,8 @@ func ExtractOpenCodeResult(messages []OpenCodeMessage) (string, error) {
 
 	// Collect all text messages and concatenate their content
 	var textParts []string
+	// Also collect tool use summaries as fallback
+	var toolSummaries []string
 
 	for _, msg := range messages {
 		if textMsg, ok := msg.(OpenCodeTextMessage); ok {
@@ -192,14 +235,74 @@ func ExtractOpenCodeResult(messages []OpenCodeMessage) (string, error) {
 				textParts = append(textParts, textMsg.Part.Text)
 			}
 		}
+		// Collect completed tool operations for fallback summary
+		if toolMsg, ok := msg.(OpenCodeToolUseMessage); ok {
+			if toolMsg.Part.State.Status == "completed" {
+				summary := extractToolSummary(toolMsg)
+				if summary != "" {
+					toolSummaries = append(toolSummaries, summary)
+				}
+			}
+		}
 	}
 
-	if len(textParts) == 0 {
-		return "", fmt.Errorf("no text message found")
+	// Prefer text messages if available
+	if len(textParts) > 0 {
+		return strings.Join(textParts, ""), nil
 	}
 
-	// Join all text parts (in case there are multiple text messages)
-	return strings.Join(textParts, ""), nil
+	// Fall back to tool summaries if no text messages
+	// This handles cases where the model completed work via tool calls
+	// but didn't emit a final text response
+	if len(toolSummaries) > 0 {
+		return "Completed: " + strings.Join(toolSummaries, "; "), nil
+	}
+
+	return "", fmt.Errorf("no text message found")
+}
+
+// extractToolSummary generates a human-readable summary from a tool use message
+func extractToolSummary(toolMsg OpenCodeToolUseMessage) string {
+	tool := toolMsg.Part.Tool
+	state := toolMsg.Part.State
+
+	switch tool {
+	case "edit":
+		// For edit operations, show file and diff stats
+		title := state.Title
+		if title == "" {
+			title = state.Input.FilePath
+		}
+		if title == "" {
+			return ""
+		}
+
+		additions := state.Metadata.FileDiff.Additions
+		deletions := state.Metadata.FileDiff.Deletions
+
+		if additions > 0 || deletions > 0 {
+			return fmt.Sprintf("edited %s (+%d/-%d lines)", title, additions, deletions)
+		}
+		return fmt.Sprintf("edited %s", title)
+
+	case "write":
+		// For write operations, show file created
+		title := state.Title
+		if title == "" {
+			title = state.Input.FilePath
+		}
+		if title != "" {
+			return fmt.Sprintf("created %s", title)
+		}
+
+	case "bash":
+		// For bash operations, just note that a command was run
+		return "ran command"
+	}
+
+	// For other tools (read, glob, grep, etc.), we don't include them
+	// as they are informational rather than actions
+	return ""
 }
 
 // extractErrorSummary extracts a meaningful error summary from raw opencode error output
