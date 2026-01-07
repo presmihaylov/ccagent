@@ -265,10 +265,13 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		// Don't fail - message will be deduplicated during recovery
 	}
 
+	// Get repository context
+	repoContext := mh.appState.GetRepositoryContext()
+
 	// Get appropriate system prompt based on agent type and mode
-	systemPrompt := GetClaudeSystemPrompt(payload.Mode)
+	systemPrompt := GetClaudeSystemPrompt(payload.Mode, repoContext)
 	if mh.claudeService.AgentName() == "cursor" {
-		systemPrompt = GetCursorSystemPrompt(payload.Mode)
+		systemPrompt = GetCursorSystemPrompt(payload.Mode, repoContext)
 	}
 
 	// Process thread context (previous messages) and attachments

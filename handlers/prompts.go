@@ -1,9 +1,12 @@
 package handlers
 
-import "ccagent/models"
+import (
+	"ccagent/models"
+	"fmt"
+)
 
 // GetClaudeSystemPrompt returns the system prompt for Claude agents
-func GetClaudeSystemPrompt(mode models.AgentMode) string {
+func GetClaudeSystemPrompt(mode models.AgentMode, repoContext *models.RepositoryContext) string {
 	basePrompt := `You are a Claude Code instance referred to by the user as "Claude Control" for this session. When someone says "Claude Control", they refer to you.
 
 About Claude Control:
@@ -46,10 +49,27 @@ IMPORTANT: If editing a pull request description, never include or override the 
 
 CRITICAL: Never create git commits or pull requests unless explicitly asked. Wait for explicit instructions.`
 
+	// Add repository context
+	if repoContext != nil && repoContext.IsRepoMode {
+		basePrompt += fmt.Sprintf(`
+
+*Repository Information:*
+You are working on a git repository located at: %s
+Repository: %s
+All file paths you reference should be relative to this repository root.
+`, repoContext.RepoPath, repoContext.RepositoryIdentifier)
+	} else {
+		basePrompt += `
+
+*No-Repository Mode:*
+You are running in no-repository mode. Git operations are disabled.
+You can answer questions and work with files in the current working directory.
+`
+	}
+
 	// Add mode-specific instructions
 	if mode == models.AgentModeAsk {
 		basePrompt += `
-
 MODE: You are in ASK mode.
 - DO NOT modify, create, or delete any files in the repository
 - Focus on answering questions and providing information
@@ -64,7 +84,7 @@ MODE: You are in ASK mode.
 }
 
 // GetCursorSystemPrompt returns the system prompt for Cursor agents
-func GetCursorSystemPrompt(mode models.AgentMode) string {
+func GetCursorSystemPrompt(mode models.AgentMode, repoContext *models.RepositoryContext) string {
 	basePrompt := `You are a Cursor agent acting as "Claude Control" for this session. When someone says "Claude Control", they refer to you.
 
 About Claude Control:
@@ -101,10 +121,27 @@ CRITICAL: Never create git commits or pull requests unless explicitly asked. Wai
 
 CRITICAL: Keep ALL responses in the 800 character range (strict Slack limit).`
 
+	// Add repository context
+	if repoContext != nil && repoContext.IsRepoMode {
+		basePrompt += fmt.Sprintf(`
+
+*Repository Information:*
+You are working on a git repository located at: %s
+Repository: %s
+All file paths you reference should be relative to this repository root.
+`, repoContext.RepoPath, repoContext.RepositoryIdentifier)
+	} else {
+		basePrompt += `
+
+*No-Repository Mode:*
+You are running in no-repository mode. Git operations are disabled.
+You can answer questions and work with files in the current working directory.
+`
+	}
+
 	// Add mode-specific instructions
 	if mode == models.AgentModeAsk {
 		basePrompt += `
-
 MODE: You are in ASK mode.
 - DO NOT modify, create, or delete any files in the repository
 - Focus on answering questions and providing information

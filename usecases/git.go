@@ -116,6 +116,19 @@ func (g *GitUseCase) ValidateGitEnvironment() error {
 		return fmt.Errorf("remote repository access validation failed: %w", err)
 	}
 
+	// Get and store repository identifier
+	repoIdentifier, err := g.gitClient.GetRepositoryIdentifier()
+	if err != nil {
+		log.Error("❌ Failed to get repository identifier: %v", err)
+		return fmt.Errorf("failed to get repository identifier: %w", err)
+	}
+
+	// Update repository context with identifier
+	repoCtx := g.appState.GetRepositoryContext()
+	repoCtx.RepositoryIdentifier = repoIdentifier
+	g.appState.SetRepositoryContext(repoCtx)
+	log.Info("📦 Repository identifier: %s", repoIdentifier)
+
 	log.Info("✅ Git environment validation passed")
 	log.Info("📋 Completed successfully - validated Git environment")
 	return nil
@@ -147,6 +160,13 @@ func (g *GitUseCase) PullLatestChanges() error {
 
 func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 	log.Info("📋 Starting to switch to job branch: %s", branchName)
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping branch switch")
+		return nil
+	}
 
 	// Step 1: Reset hard current branch to discard uncommitted changes
 	if err := g.gitClient.ResetHard(); err != nil {
@@ -191,6 +211,13 @@ func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 
 func (g *GitUseCase) PrepareForNewConversation(conversationHint string) (string, error) {
 	log.Info("📋 Starting to prepare for new conversation")
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping branch creation")
+		return "", nil // Return empty branch name in no-repo mode
+	}
 
 	// Generate random branch name
 	branchName, err := g.generateRandomBranchName()
@@ -261,6 +288,13 @@ func (g *GitUseCase) resetAndPullDefaultBranch() error {
 
 func (g *GitUseCase) AutoCommitChangesIfNeeded(threadLink, sessionID string) (*AutoCommitResult, error) {
 	log.Info("📋 Starting to auto-commit changes if needed")
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping auto-commit")
+		return &AutoCommitResult{}, nil
+	}
 
 	// Get current branch first (needed for both cases)
 	currentBranch, err := g.gitClient.GetCurrentBranch()
@@ -691,6 +725,13 @@ func (g *GitUseCase) CheckPRStatusByID(prID string) (string, error) {
 
 func (g *GitUseCase) CleanupStaleBranches() error {
 	log.Info("📋 Starting to cleanup stale ccagent branches")
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping branch cleanup")
+		return nil
+	}
 
 	// Get all local branches
 	localBranches, err := g.gitClient.GetLocalBranches()

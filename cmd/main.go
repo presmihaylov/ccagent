@@ -49,6 +49,8 @@ type CmdRunner struct {
 	agentsApiClient    *clients.AgentsApiClient
 	wsURL              string
 	ccagentAPIKey      string
+	dirLock            *utils.DirLock
+	repoLock           *utils.RepoLock
 
 	// Persistent worker pools reused across reconnects
 	blockingWorkerPool *workerpool.WorkerPool
@@ -266,7 +268,7 @@ func processPermissions(agentType, workDir string) error {
 	return nil
 }
 
-func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
+func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
 	// Validate model compatibility with agent
@@ -366,6 +368,51 @@ func NewCmdRunner(agentType, permissionMode, model string) (*CmdRunner, error) {
 		return nil, fmt.Errorf("failed to restore app state: %w", err)
 	}
 
+	// Handle repository path and create repository context
+	var repoContext *models.RepositoryContext
+	var absRepoPath string
+
+	if repoPath != "" {
+		// Resolve repository path to absolute path
+		if filepath.IsAbs(repoPath) {
+			absRepoPath = repoPath
+		} else {
+			// Make relative path absolute based on current working directory
+			cwd, err := os.Getwd()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get current working directory: %w", err)
+			}
+			absRepoPath = filepath.Join(cwd, repoPath)
+		}
+
+		// Validate repository path exists
+		if _, err := os.Stat(absRepoPath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("repository path does not exist: %s", absRepoPath)
+		}
+
+		log.Info("📦 Repository mode enabled: %s", absRepoPath)
+
+		// Repository identifier will be set during git validation
+		repoContext = &models.RepositoryContext{
+			RepoPath:   absRepoPath,
+			IsRepoMode: true,
+		}
+	} else {
+		log.Info("📦 No-repo mode enabled - git operations disabled")
+		repoContext = &models.RepositoryContext{
+			IsRepoMode: false,
+		}
+	}
+
+	// Set repository context in app state
+	appState.SetRepositoryContext(repoContext)
+
+	// Configure gitClient to use repository path from app state
+	gitClient.SetRepoPathProvider(func() string {
+		ctx := appState.GetRepositoryContext()
+		return ctx.RepoPath
+	})
+
 	// Initialize ConnectionState and MessageSender
 	connectionState := handlers.NewConnectionState()
 	messageSender := handlers.NewMessageSender(connectionState)
@@ -449,6 +496,7 @@ type Options struct {
 	Agent             string `long:"agent" description:"CLI agent to use (claude, cursor, codex, or opencode)" choice:"claude" choice:"cursor" choice:"codex" choice:"opencode" default:"claude"`
 	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
 	Model             string `long:"model" description:"Model to use (agent-specific: claude: sonnet/haiku/opus or full model name, cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
+	Repo              string `long:"repo" description:"Path to git repository (absolute or relative). If not provided, ccagent runs in no-repo mode with git operations disabled"`
 	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
@@ -528,11 +576,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.Model)
+	cmdRunner, err := NewCmdRunner(opts.Agent, permissionMode, opts.Model, opts.Repo)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing CmdRunner: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Store locks in cmdRunner for cleanup
+	cmdRunner.dirLock = dirLock
 
 	// Setup program-wide logging from start
 	logPath, err := cmdRunner.setupProgramLogging()
@@ -542,18 +593,47 @@ func main() {
 	}
 	log.Info("📝 Logging to: %s", logPath)
 
-	// Validate Git environment before starting
-	err = cmdRunner.gitUseCase.ValidateGitEnvironment()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Git environment validation failed: %v\n", err)
-		os.Exit(1)
+	// If in repo mode, acquire repository lock
+	repoCtx := cmdRunner.appState.GetRepositoryContext()
+	if repoCtx.IsRepoMode {
+		repoLock, err := utils.NewRepoLock(repoCtx.RepoPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating repository lock: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := repoLock.TryLock(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		cmdRunner.repoLock = repoLock
+		log.Info("🔒 Acquired repository lock on %s", repoCtx.RepoPath)
+
+		// Ensure repo lock is released on program exit
+		defer func() {
+			if unlockErr := repoLock.Unlock(); unlockErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to release repository lock: %v\n", unlockErr)
+			}
+		}()
 	}
 
-	// Cleanup stale ccagent branches
-	err = cmdRunner.gitUseCase.CleanupStaleBranches()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to cleanup stale branches: %v\n", err)
-		// Don't exit - this is not critical for agent operation
+	// Validate Git environment before starting (only if in repo mode)
+	if repoCtx.IsRepoMode {
+		err = cmdRunner.gitUseCase.ValidateGitEnvironment()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Git environment validation failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Cleanup stale ccagent branches (only if in repo mode)
+	if repoCtx.IsRepoMode {
+		err = cmdRunner.gitUseCase.CleanupStaleBranches()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to cleanup stale branches: %v\n", err)
+			// Don't exit - this is not critical for agent operation
+		}
 	}
 
 	log.Info("🌐 WebSocket URL: %s", cmdRunner.wsURL)
