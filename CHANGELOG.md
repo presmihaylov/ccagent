@@ -1,3 +1,29 @@
+## [v0.0.39] - 2026-01-07
+
+### Features
+
+- Add X-AGENT-ID header with environment variable support ([#70](https://github.com/presmihaylov/ccagent/pull/70))
+  - Adds X-AGENT-ID header to API requests for agent identification
+  - Supports CCAGENT_AGENT_ID environment variable for custom agent IDs
+  - Improves agent tracing and debugging capabilities
+
+### Bugfixes
+
+- Extract results from tool_use messages when no text response ([#68](https://github.com/presmihaylov/ccagent/pull/68))
+  - Fixes handling of API responses that contain only tool_use blocks
+  - Properly extracts results from tool_use message content
+  - Improves reliability of agent response processing
+
+- Simplify PR title prompts for smaller model compatibility ([#69](https://github.com/presmihaylov/ccagent/pull/69))
+  - Streamlines PR title generation prompts for better compatibility
+  - Improves support for smaller language models
+  - Reduces prompt complexity while maintaining quality
+
+- Handle empty repository on startup gracefully ([#67](https://github.com/presmihaylov/ccagent/pull/67))
+  - Fixes crash when starting agent on empty repositories
+  - Adds graceful handling of repositories without commits
+  - Improves agent startup reliability
+
 ## [v0.0.38] - 2026-01-01
 
 ### Features
