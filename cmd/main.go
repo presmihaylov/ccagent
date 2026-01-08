@@ -50,7 +50,7 @@ type CmdRunner struct {
 	wsURL              string
 	ccagentAPIKey      string
 	dirLock            *utils.DirLock
-	repoLock           *utils.RepoLock
+	repoLock           *utils.DirLock
 
 	// Persistent worker pools reused across reconnects
 	blockingWorkerPool *workerpool.WorkerPool
@@ -539,7 +539,7 @@ func main() {
 	}
 
 	// Acquire directory lock to prevent multiple instances in same directory
-	dirLock, err := utils.NewDirLock()
+	dirLock, err := utils.NewDirLock("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating directory lock: %v\n", err)
 		os.Exit(1)
@@ -596,7 +596,7 @@ func main() {
 	// If in repo mode, acquire repository lock
 	repoCtx := cmdRunner.appState.GetRepositoryContext()
 	if repoCtx.IsRepoMode {
-		repoLock, err := utils.NewRepoLock(repoCtx.RepoPath)
+		repoLock, err := utils.NewDirLock(repoCtx.RepoPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating repository lock: %v\n", err)
 			os.Exit(1)

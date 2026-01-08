@@ -31,7 +31,7 @@ func TestSanitizeDirPath(t *testing.T) {
 }
 
 func TestNewDirLock(t *testing.T) {
-	lock, err := NewDirLock()
+	lock, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("NewDirLock() failed: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestNewDirLock(t *testing.T) {
 }
 
 func TestDirLockTryLockAndUnlock(t *testing.T) {
-	lock1, err := NewDirLock()
+	lock1, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("NewDirLock() failed: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestDirLockTryLockAndUnlock(t *testing.T) {
 	}
 
 	// Second lock from same directory should fail
-	lock2, err := NewDirLock()
+	lock2, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("Second NewDirLock() failed: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestDirLockTryLockAndUnlock(t *testing.T) {
 	}
 
 	// Third lock should now succeed after first was unlocked
-	lock3, err := NewDirLock()
+	lock3, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("Third NewDirLock() failed: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestDirLockTryLockAndUnlock(t *testing.T) {
 }
 
 func TestDirLockUnlockIdempotent(t *testing.T) {
-	lock, err := NewDirLock()
+	lock, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("NewDirLock() failed: %v", err)
 	}

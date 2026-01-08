@@ -47,16 +47,22 @@ func sanitizeDirPath(dirPath string) string {
 	return sanitized
 }
 
-// NewDirLock creates a new directory lock based on the current working directory
-func NewDirLock() (*DirLock, error) {
-	// Get current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current working directory: %w", err)
+// NewDirLock creates a new directory lock for the specified path.
+// If path is empty, it uses the current working directory.
+func NewDirLock(path string) (*DirLock, error) {
+	lockDir := path
+
+	// If no path provided, use current working directory
+	if lockDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current working directory: %w", err)
+		}
+		lockDir = cwd
 	}
 
 	// Sanitize the directory path to create a safe filename
-	sanitizedDir := sanitizeDirPath(cwd)
+	sanitizedDir := sanitizeDirPath(lockDir)
 
 	// Get system temp directory
 	tempDir := os.TempDir()
@@ -89,7 +95,7 @@ func (dl *DirLock) TryLock() error {
 	}
 
 	if !locked {
-		return fmt.Errorf("another ccagent instance is already running in this directory")
+		return fmt.Errorf("another ccagent instance is already running in this path")
 	}
 
 	return nil
