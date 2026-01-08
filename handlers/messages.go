@@ -416,15 +416,20 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		return fmt.Errorf("no active Claude session found for job %s", payload.JobID)
 	}
 
-	// Assert that BranchName is never empty
-	utils.AssertInvariant(jobData.BranchName != "", "BranchName must not be empty for job "+payload.JobID)
+	// Get repository context to check if we're in repo mode
+	repoContext := mh.appState.GetRepositoryContext()
 
-	// Switch to the job's branch before continuing the conversation
-	if err := mh.gitUseCase.SwitchToJobBranch(jobData.BranchName); err != nil {
-		log.Error("❌ Failed to switch to job branch %s: %v", jobData.BranchName, err)
-		return fmt.Errorf("failed to switch to job branch %s: %w", jobData.BranchName, err)
+	// Assert that BranchName is never empty (only in repo mode)
+	if repoContext.IsRepoMode {
+		utils.AssertInvariant(jobData.BranchName != "", "BranchName must not be empty for job "+payload.JobID)
+
+		// Switch to the job's branch before continuing the conversation
+		if err := mh.gitUseCase.SwitchToJobBranch(jobData.BranchName); err != nil {
+			log.Error("❌ Failed to switch to job branch %s: %v", jobData.BranchName, err)
+			return fmt.Errorf("failed to switch to job branch %s: %w", jobData.BranchName, err)
+		}
+		log.Info("✅ Successfully switched to job branch: %s", jobData.BranchName)
 	}
-	log.Info("✅ Successfully switched to job branch: %s", jobData.BranchName)
 
 	// Pull latest changes before continuing conversation
 	if err := mh.gitUseCase.PullLatestChanges(); err != nil {

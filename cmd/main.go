@@ -373,7 +373,7 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	var absRepoPath string
 
 	if repoPath != "" {
-		// Resolve repository path to absolute path
+		// Explicit --repo flag provided: use that path
 		if filepath.IsAbs(repoPath) {
 			absRepoPath = repoPath
 		} else {
@@ -390,7 +390,7 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 			return nil, fmt.Errorf("repository path does not exist: %s", absRepoPath)
 		}
 
-		log.Info("📦 Repository mode enabled: %s", absRepoPath)
+		log.Info("📦 Repository mode enabled (explicit): %s", absRepoPath)
 
 		// Repository identifier will be set during git validation
 		repoContext = &models.RepositoryContext{
@@ -398,9 +398,27 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 			IsRepoMode: true,
 		}
 	} else {
-		log.Info("📦 No-repo mode enabled - git operations disabled")
-		repoContext = &models.RepositoryContext{
-			IsRepoMode: false,
+		// No --repo flag: check if current directory is a git repository
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current working directory: %w", err)
+		}
+
+		// Check if cwd is a git repository root
+		if gitClient.IsGitRepositoryRoot() == nil {
+			// Current directory is a git repo root - enable repo mode automatically
+			absRepoPath = cwd
+			log.Info("📦 Repository mode enabled (auto-detected): %s", absRepoPath)
+			repoContext = &models.RepositoryContext{
+				RepoPath:   absRepoPath,
+				IsRepoMode: true,
+			}
+		} else {
+			// Not a git repository - enable no-repo mode
+			log.Info("📦 No-repo mode enabled - not in a git repository")
+			repoContext = &models.RepositoryContext{
+				IsRepoMode: false,
+			}
 		}
 	}
 
@@ -593,9 +611,10 @@ func main() {
 	}
 	log.Info("📝 Logging to: %s", logPath)
 
-	// If in repo mode, acquire repository lock
+	// If in repo mode and repo path differs from cwd, acquire separate repository lock
+	// (If repo path == cwd, the dirLock already covers it)
 	repoCtx := cmdRunner.appState.GetRepositoryContext()
-	if repoCtx.IsRepoMode {
+	if repoCtx.IsRepoMode && repoCtx.RepoPath != cwd {
 		repoLock, err := utils.NewDirLock(repoCtx.RepoPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating repository lock: %v\n", err)
@@ -728,18 +747,19 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	// Disable automatic reconnection - handle reconnection externally with backoff
 	opts.SetReconnection(false)
 
-	// Get repository identifier for header
-	gitClient := clients.NewGitClient()
-	repoIdentifier, err := gitClient.GetRepositoryIdentifier()
-	if err != nil {
-		return fmt.Errorf("failed to get repository identifier: %w", err)
-	}
+	// Get repository identifier from app state (set during git validation, or empty in no-repo mode)
+	repoContext := cr.appState.GetRepositoryContext()
+	repoIdentifier := repoContext.RepositoryIdentifier
 
 	// Determine agent ID value - use env var if set, otherwise use repo identifier
 	agentID := cr.envManager.Get("CCAGENT_AGENT_ID")
 	if agentID == "" {
-		agentID = repoIdentifier
-		log.Info("📋 Using repository identifier as agent ID: %s", agentID)
+		if repoIdentifier != "" {
+			agentID = repoIdentifier
+			log.Info("📋 Using repository identifier as agent ID: %s", agentID)
+		} else {
+			return fmt.Errorf("CCAGENT_AGENT_ID environment variable is required in no-repo mode")
+		}
 	} else {
 		log.Info("📋 Using CCAGENT_AGENT_ID from environment: %s", agentID)
 	}
@@ -769,6 +789,7 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	runtimeErrorChan := make(chan error, 1) // Errors after successful connection
 
 	// Connection event handlers
+	var err error
 	err = socketClient.On("connect", func(args ...any) {
 		log.Info("✅ Connected to Socket.IO server, socket ID: %s", socketClient.Id())
 		cr.connectionState.SetConnected(true)
