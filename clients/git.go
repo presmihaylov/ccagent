@@ -406,7 +406,7 @@ func (g *GitClient) IsGitRepository() error {
 }
 
 func (g *GitClient) IsGitRepositoryRoot() error {
-	log.Info("📋 Starting to check if current directory is the Git repository root")
+	log.Info("📋 Starting to check if target directory is the Git repository root")
 
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	g.setWorkDir(cmd)
@@ -419,23 +419,28 @@ func (g *GitClient) IsGitRepositoryRoot() error {
 
 	gitRoot := strings.TrimSpace(string(output))
 
-	// Get current working directory
-	currentDir, err := os.Getwd()
-	if err != nil {
-		log.Error("❌ Failed to get current working directory: %v", err)
-		return fmt.Errorf("failed to get current working directory: %w", err)
+	// Get the target directory to compare against git root
+	// If repo path is configured, use that; otherwise use current working directory
+	targetDir := g.getRepoPath()
+	if targetDir == "" {
+		var err error
+		targetDir, err = os.Getwd()
+		if err != nil {
+			log.Error("❌ Failed to get current working directory: %v", err)
+			return fmt.Errorf("failed to get current working directory: %w", err)
+		}
 	}
 
-	if gitRoot != currentDir {
-		log.Error("❌ Not at Git repository root. Current: %s, Git root: %s", currentDir, gitRoot)
+	if gitRoot != targetDir {
+		log.Error("❌ Not at Git repository root. Target: %s, Git root: %s", targetDir, gitRoot)
 		return fmt.Errorf(
-			"ccagent must be run from the Git repository root directory. Current: %s, Git root: %s",
-			currentDir,
+			"ccagent must be run from the Git repository root directory. Target: %s, Git root: %s",
+			targetDir,
 			gitRoot,
 		)
 	}
 
-	log.Info("✅ Current directory is the Git repository root")
+	log.Info("✅ Target directory is the Git repository root")
 	log.Info("📋 Completed successfully - validated Git repository root")
 	return nil
 }

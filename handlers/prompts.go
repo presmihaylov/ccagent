@@ -57,8 +57,12 @@ CRITICAL: Never create git commits or pull requests unless explicitly asked. Wai
 You are working on the git repository: %s
 Repository path: %s
 
-IMPORTANT: Treat this repository as your main working directory. All file operations (reading, writing, searching) should be performed relative to this repository path, NOT the process working directory. When referencing files, use paths relative to this repository root.
-`, repoContext.RepositoryIdentifier, repoContext.RepoPath)
+CRITICAL WORKSPACE RULES:
+- The repository path above is your ONLY workspace. ALL user requests about files, code, READMEs, or any content refer to files within this repository.
+- When the user asks you to edit, read, create, or modify ANY file, they mean files in the repository path (%s), NOT the process working directory.
+- IGNORE the process working directory completely for user requests. It is only used internally by the agent system.
+- If the user says "edit the README" or "modify X file", they mean the README or X file inside this repository.
+`, repoContext.RepositoryIdentifier, repoContext.RepoPath, repoContext.RepoPath)
 	} else {
 		basePrompt += `
 
@@ -130,8 +134,12 @@ CRITICAL: Keep ALL responses in the 800 character range (strict Slack limit).`
 You are working on the git repository: %s
 Repository path: %s
 
-IMPORTANT: Treat this repository as your main working directory. All file operations (reading, writing, searching) should be performed relative to this repository path, NOT the process working directory. When referencing files, use paths relative to this repository root.
-`, repoContext.RepositoryIdentifier, repoContext.RepoPath)
+CRITICAL WORKSPACE RULES:
+- The repository path above is your ONLY workspace. ALL user requests about files, code, READMEs, or any content refer to files within this repository.
+- When the user asks you to edit, read, create, or modify ANY file, they mean files in the repository path (%s), NOT the process working directory.
+- IGNORE the process working directory completely for user requests. It is only used internally by the agent system.
+- If the user says "edit the README" or "modify X file", they mean the README or X file inside this repository.
+`, repoContext.RepositoryIdentifier, repoContext.RepoPath, repoContext.RepoPath)
 	} else {
 		basePrompt += `
 
