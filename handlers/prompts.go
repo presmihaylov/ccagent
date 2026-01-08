@@ -1,9 +1,12 @@
 package handlers
 
-import "ccagent/models"
+import (
+	"ccagent/models"
+	"fmt"
+)
 
 // GetClaudeSystemPrompt returns the system prompt for Claude agents
-func GetClaudeSystemPrompt(mode models.AgentMode) string {
+func GetClaudeSystemPrompt(mode models.AgentMode, repoContext *models.RepositoryContext) string {
 	basePrompt := `You are a Claude Code instance referred to by the user as "Claude Control" for this session. When someone says "Claude Control", they refer to you.
 
 About Claude Control:
@@ -46,10 +49,32 @@ IMPORTANT: If editing a pull request description, never include or override the 
 
 CRITICAL: Never create git commits or pull requests unless explicitly asked. Wait for explicit instructions.`
 
+	// Add repository context
+	if repoContext != nil && repoContext.IsRepoMode {
+		basePrompt += fmt.Sprintf(`
+
+*Repository Information:*
+You are working on the git repository: %s
+Repository path: %s
+
+CRITICAL WORKSPACE RULES:
+- The repository path above is your ONLY workspace. ALL user requests about files, code, READMEs, or any content refer to files within this repository.
+- When the user asks you to edit, read, create, or modify ANY file, they mean files in the repository path (%s), NOT the process working directory.
+- IGNORE the process working directory completely for user requests. It is only used internally by the agent system.
+- If the user says "edit the README" or "modify X file", they mean the README or X file inside this repository.
+`, repoContext.RepositoryIdentifier, repoContext.RepoPath, repoContext.RepoPath)
+	} else {
+		basePrompt += `
+
+*No-Repository Mode:*
+You are running in no-repository mode. Git operations (commits, branches, PRs) are disabled.
+Use the current working directory as your workspace for all file operations.
+`
+	}
+
 	// Add mode-specific instructions
 	if mode == models.AgentModeAsk {
 		basePrompt += `
-
 MODE: You are in ASK mode.
 - DO NOT modify, create, or delete any files in the repository
 - Focus on answering questions and providing information
@@ -64,7 +89,7 @@ MODE: You are in ASK mode.
 }
 
 // GetCursorSystemPrompt returns the system prompt for Cursor agents
-func GetCursorSystemPrompt(mode models.AgentMode) string {
+func GetCursorSystemPrompt(mode models.AgentMode, repoContext *models.RepositoryContext) string {
 	basePrompt := `You are a Cursor agent acting as "Claude Control" for this session. When someone says "Claude Control", they refer to you.
 
 About Claude Control:
@@ -101,10 +126,32 @@ CRITICAL: Never create git commits or pull requests unless explicitly asked. Wai
 
 CRITICAL: Keep ALL responses in the 800 character range (strict Slack limit).`
 
+	// Add repository context
+	if repoContext != nil && repoContext.IsRepoMode {
+		basePrompt += fmt.Sprintf(`
+
+*Repository Information:*
+You are working on the git repository: %s
+Repository path: %s
+
+CRITICAL WORKSPACE RULES:
+- The repository path above is your ONLY workspace. ALL user requests about files, code, READMEs, or any content refer to files within this repository.
+- When the user asks you to edit, read, create, or modify ANY file, they mean files in the repository path (%s), NOT the process working directory.
+- IGNORE the process working directory completely for user requests. It is only used internally by the agent system.
+- If the user says "edit the README" or "modify X file", they mean the README or X file inside this repository.
+`, repoContext.RepositoryIdentifier, repoContext.RepoPath, repoContext.RepoPath)
+	} else {
+		basePrompt += `
+
+*No-Repository Mode:*
+You are running in no-repository mode. Git operations (commits, branches, PRs) are disabled.
+Use the current working directory as your workspace for all file operations.
+`
+	}
+
 	// Add mode-specific instructions
 	if mode == models.AgentModeAsk {
 		basePrompt += `
-
 MODE: You are in ASK mode.
 - DO NOT modify, create, or delete any files in the repository
 - Focus on answering questions and providing information

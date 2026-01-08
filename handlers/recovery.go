@@ -40,6 +40,9 @@ func RecoverJobs(
 
 	// Phase 1: Recover in-progress jobs
 
+	// Get repository context to check if we're in repo mode
+	repoContext := appState.GetRepositoryContext()
+
 	for jobID, jobData := range allJobs {
 		// Only process jobs that were in_progress
 		if jobData.Status != models.JobStatusInProgress {
@@ -58,20 +61,22 @@ func RecoverJobs(
 			continue
 		}
 
-		// Validate branch exists
-		branchExists, err := gitUseCase.BranchExists(jobData.BranchName)
-		if err != nil {
-			log.Error("❌ Failed to check if branch %s exists for job %s: %v", jobData.BranchName, jobID, err)
-			continue
-		}
-		if !branchExists {
-			log.Warn("⚠️ Branch %s for job %s no longer exists, removing job", jobData.BranchName, jobID)
-			if err := appState.RemoveJob(jobID); err != nil {
-				log.Error("❌ Failed to remove job with missing branch %s: %v", jobID, err)
-			} else {
-				removedJobsCount++
+		// Validate branch exists (only in repo mode)
+		if repoContext.IsRepoMode {
+			branchExists, err := gitUseCase.BranchExists(jobData.BranchName)
+			if err != nil {
+				log.Error("❌ Failed to check if branch %s exists for job %s: %v", jobData.BranchName, jobID, err)
+				continue
 			}
-			continue
+			if !branchExists {
+				log.Warn("⚠️ Branch %s for job %s no longer exists, removing job", jobData.BranchName, jobID)
+				if err := appState.RemoveJob(jobID); err != nil {
+					log.Error("❌ Failed to remove job with missing branch %s: %v", jobID, err)
+				} else {
+					removedJobsCount++
+				}
+				continue
+			}
 		}
 
 		// Determine message type based on ClaudeSessionID

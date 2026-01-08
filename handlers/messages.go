@@ -265,10 +265,13 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		// Don't fail - message will be deduplicated during recovery
 	}
 
+	// Get repository context
+	repoContext := mh.appState.GetRepositoryContext()
+
 	// Get appropriate system prompt based on agent type and mode
-	systemPrompt := GetClaudeSystemPrompt(payload.Mode)
+	systemPrompt := GetClaudeSystemPrompt(payload.Mode, repoContext)
 	if mh.claudeService.AgentName() == "cursor" {
-		systemPrompt = GetCursorSystemPrompt(payload.Mode)
+		systemPrompt = GetCursorSystemPrompt(payload.Mode, repoContext)
 	}
 
 	// Process thread context (previous messages) and attachments
@@ -413,15 +416,20 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		return fmt.Errorf("no active Claude session found for job %s", payload.JobID)
 	}
 
-	// Assert that BranchName is never empty
-	utils.AssertInvariant(jobData.BranchName != "", "BranchName must not be empty for job "+payload.JobID)
+	// Get repository context to check if we're in repo mode
+	repoContext := mh.appState.GetRepositoryContext()
 
-	// Switch to the job's branch before continuing the conversation
-	if err := mh.gitUseCase.SwitchToJobBranch(jobData.BranchName); err != nil {
-		log.Error("❌ Failed to switch to job branch %s: %v", jobData.BranchName, err)
-		return fmt.Errorf("failed to switch to job branch %s: %w", jobData.BranchName, err)
+	// Assert that BranchName is never empty (only in repo mode)
+	if repoContext.IsRepoMode {
+		utils.AssertInvariant(jobData.BranchName != "", "BranchName must not be empty for job "+payload.JobID)
+
+		// Switch to the job's branch before continuing the conversation
+		if err := mh.gitUseCase.SwitchToJobBranch(jobData.BranchName); err != nil {
+			log.Error("❌ Failed to switch to job branch %s: %v", jobData.BranchName, err)
+			return fmt.Errorf("failed to switch to job branch %s: %w", jobData.BranchName, err)
+		}
+		log.Info("✅ Successfully switched to job branch: %s", jobData.BranchName)
 	}
-	log.Info("✅ Successfully switched to job branch: %s", jobData.BranchName)
 
 	// Pull latest changes before continuing conversation
 	if err := mh.gitUseCase.PullLatestChanges(); err != nil {

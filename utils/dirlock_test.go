@@ -31,7 +31,7 @@ func TestSanitizeDirPath(t *testing.T) {
 }
 
 func TestNewDirLock(t *testing.T) {
-	lock, err := NewDirLock()
+	lock, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("NewDirLock() failed: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestNewDirLock(t *testing.T) {
 }
 
 func TestDirLockTryLockAndUnlock(t *testing.T) {
-	lock1, err := NewDirLock()
+	lock1, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("NewDirLock() failed: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestDirLockTryLockAndUnlock(t *testing.T) {
 	}
 
 	// Second lock from same directory should fail
-	lock2, err := NewDirLock()
+	lock2, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("Second NewDirLock() failed: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestDirLockTryLockAndUnlock(t *testing.T) {
 	}
 
 	// Third lock should now succeed after first was unlocked
-	lock3, err := NewDirLock()
+	lock3, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("Third NewDirLock() failed: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestDirLockTryLockAndUnlock(t *testing.T) {
 }
 
 func TestDirLockUnlockIdempotent(t *testing.T) {
-	lock, err := NewDirLock()
+	lock, err := NewDirLock("")
 	if err != nil {
 		t.Fatalf("NewDirLock() failed: %v", err)
 	}
@@ -130,5 +130,82 @@ func TestDirLockUnlockIdempotent(t *testing.T) {
 	err = lock.Unlock()
 	if err != nil {
 		t.Errorf("Second Unlock() should not fail: %v", err)
+	}
+}
+
+func TestNewDirLockWithExplicitPath(t *testing.T) {
+	// Create a temp directory to use as the lock path
+	tempDir, err := os.MkdirTemp("", "dirlock-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	lock, err := NewDirLock(tempDir)
+	if err != nil {
+		t.Fatalf("NewDirLock(tempDir) failed: %v", err)
+	}
+
+	// Verify lock path is based on the provided path, not cwd
+	lockPath := lock.GetLockPath()
+	sanitizedTempDir := sanitizeDirPath(tempDir)
+	if !strings.Contains(lockPath, sanitizedTempDir) {
+		t.Errorf("Lock path should contain sanitized temp dir path: got %s, expected to contain %s", lockPath, sanitizedTempDir)
+	}
+
+	// Verify locking works
+	err = lock.TryLock()
+	if err != nil {
+		t.Fatalf("TryLock() should succeed: %v", err)
+	}
+
+	// Clean up
+	if err := lock.Unlock(); err != nil {
+		t.Errorf("Failed to unlock: %v", err)
+	}
+}
+
+func TestDirLockDifferentPathsAreIndependent(t *testing.T) {
+	// Create two temp directories
+	tempDir1, err := os.MkdirTemp("", "dirlock-test1-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory 1: %v", err)
+	}
+	defer os.RemoveAll(tempDir1)
+
+	tempDir2, err := os.MkdirTemp("", "dirlock-test2-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory 2: %v", err)
+	}
+	defer os.RemoveAll(tempDir2)
+
+	// Create locks for both paths
+	lock1, err := NewDirLock(tempDir1)
+	if err != nil {
+		t.Fatalf("NewDirLock(tempDir1) failed: %v", err)
+	}
+
+	lock2, err := NewDirLock(tempDir2)
+	if err != nil {
+		t.Fatalf("NewDirLock(tempDir2) failed: %v", err)
+	}
+
+	// Both locks should succeed since they're for different paths
+	err = lock1.TryLock()
+	if err != nil {
+		t.Fatalf("First lock TryLock() should succeed: %v", err)
+	}
+
+	err = lock2.TryLock()
+	if err != nil {
+		t.Errorf("Second lock TryLock() should succeed for different path: %v", err)
+	}
+
+	// Clean up
+	if err := lock1.Unlock(); err != nil {
+		t.Errorf("Failed to unlock lock1: %v", err)
+	}
+	if err := lock2.Unlock(); err != nil {
+		t.Errorf("Failed to unlock lock2: %v", err)
 	}
 }

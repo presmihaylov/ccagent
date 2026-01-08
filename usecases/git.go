@@ -58,6 +58,13 @@ func getPlatformFromLink(link string) string {
 }
 
 func (g *GitUseCase) GithubTokenUpdateHook() {
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Debug("No-repo mode: Skipping GitHub token update hook")
+		return
+	}
+
 	// Get the GitHub token from environment
 	ghToken := os.Getenv("GH_TOKEN")
 	if ghToken == "" {
@@ -116,6 +123,19 @@ func (g *GitUseCase) ValidateGitEnvironment() error {
 		return fmt.Errorf("remote repository access validation failed: %w", err)
 	}
 
+	// Get and store repository identifier
+	repoIdentifier, err := g.gitClient.GetRepositoryIdentifier()
+	if err != nil {
+		log.Error("❌ Failed to get repository identifier: %v", err)
+		return fmt.Errorf("failed to get repository identifier: %w", err)
+	}
+
+	// Update repository context with identifier
+	repoCtx := g.appState.GetRepositoryContext()
+	repoCtx.RepositoryIdentifier = repoIdentifier
+	g.appState.SetRepositoryContext(repoCtx)
+	log.Info("📦 Repository identifier: %s", repoIdentifier)
+
 	log.Info("✅ Git environment validation passed")
 	log.Info("📋 Completed successfully - validated Git environment")
 	return nil
@@ -126,6 +146,13 @@ func (g *GitUseCase) ValidateGitEnvironment() error {
 // by abandoning the job and switching to the default branch
 func (g *GitUseCase) PullLatestChanges() error {
 	log.Info("📋 Starting to pull latest changes")
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping pull latest changes")
+		return nil
+	}
 
 	if err := g.gitClient.PullLatest(); err != nil {
 		// Check if error is due to remote branch being deleted
@@ -147,6 +174,13 @@ func (g *GitUseCase) PullLatestChanges() error {
 
 func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 	log.Info("📋 Starting to switch to job branch: %s", branchName)
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping branch switch")
+		return nil
+	}
 
 	// Step 1: Reset hard current branch to discard uncommitted changes
 	if err := g.gitClient.ResetHard(); err != nil {
@@ -191,6 +225,13 @@ func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 
 func (g *GitUseCase) PrepareForNewConversation(conversationHint string) (string, error) {
 	log.Info("📋 Starting to prepare for new conversation")
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping branch creation")
+		return "", nil // Return empty branch name in no-repo mode
+	}
 
 	// Generate random branch name
 	branchName, err := g.generateRandomBranchName()
@@ -261,6 +302,13 @@ func (g *GitUseCase) resetAndPullDefaultBranch() error {
 
 func (g *GitUseCase) AutoCommitChangesIfNeeded(threadLink, sessionID string) (*AutoCommitResult, error) {
 	log.Info("📋 Starting to auto-commit changes if needed")
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping auto-commit")
+		return &AutoCommitResult{}, nil
+	}
 
 	// Get current branch first (needed for both cases)
 	currentBranch, err := g.gitClient.GetCurrentBranch()
@@ -528,6 +576,13 @@ func (g *GitUseCase) generatePRBodyWithClaude(sessionID, branchName, threadLink 
 func (g *GitUseCase) ValidateAndRestorePRDescriptionFooter(threadLink string) error {
 	log.Info("📋 Starting to validate and restore PR description footer")
 
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping PR description footer validation")
+		return nil
+	}
+
 	// Get current branch
 	currentBranch, err := g.gitClient.GetCurrentBranch()
 	if err != nil {
@@ -652,6 +707,13 @@ func (g *GitUseCase) ValidateAndRestorePRDescriptionFooter(threadLink string) er
 func (g *GitUseCase) CheckPRStatus(branchName string) (string, error) {
 	log.Info("📋 Starting to check PR status for branch: %s", branchName)
 
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping PR status check")
+		return "no_pr", nil
+	}
+
 	// First check if a PR exists for this branch
 	hasExistingPR, err := g.gitClient.HasExistingPR(branchName)
 	if err != nil {
@@ -678,6 +740,13 @@ func (g *GitUseCase) CheckPRStatus(branchName string) (string, error) {
 func (g *GitUseCase) CheckPRStatusByID(prID string) (string, error) {
 	log.Info("📋 Starting to check PR status by ID: %s", prID)
 
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping PR status check by ID")
+		return "no_pr", nil
+	}
+
 	// Get PR status directly by PR ID using GitHub CLI
 	prStatus, err := g.gitClient.GetPRStateByID(prID)
 	if err != nil {
@@ -691,6 +760,13 @@ func (g *GitUseCase) CheckPRStatusByID(prID string) (string, error) {
 
 func (g *GitUseCase) CleanupStaleBranches() error {
 	log.Info("📋 Starting to cleanup stale ccagent branches")
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping branch cleanup")
+		return nil
+	}
 
 	// Get all local branches
 	localBranches, err := g.gitClient.GetLocalBranches()
@@ -918,6 +994,13 @@ func (g *GitUseCase) removeFooterFromDescription(description string) string {
 func (g *GitUseCase) BranchExists(branchName string) (bool, error) {
 	log.Info("📋 Checking if branch %s exists", branchName)
 
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Branch check returns false (no branches)")
+		return false, nil
+	}
+
 	// Get all local branches
 	localBranches, err := g.gitClient.GetLocalBranches()
 	if err != nil {
@@ -942,10 +1025,17 @@ func (g *GitUseCase) BranchExists(branchName string) (bool, error) {
 func (g *GitUseCase) AbandonJobAndCleanup(jobID, branchName string) error {
 	log.Info("📋 Starting to abandon job %s and cleanup branch %s", jobID, branchName)
 
-	// Remove job from app state first
+	// Remove job from app state first (always do this, even in no-repo mode)
 	if err := g.appState.RemoveJob(jobID); err != nil {
 		log.Error("❌ Failed to remove job %s from state: %v", jobID, err)
 		return fmt.Errorf("failed to remove job from state: %w", err)
+	}
+
+	// Check if we're in repo mode - skip git operations if not
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping branch cleanup for abandoned job")
+		return nil
 	}
 
 	// Switch to default branch to clean up state

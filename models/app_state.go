@@ -9,6 +9,16 @@ import (
 	"time"
 )
 
+// RepositoryContext encapsulates information about the git repository being worked on
+type RepositoryContext struct {
+	// RepoPath is the absolute path to the git repository (empty if no-repo mode)
+	RepoPath string
+	// IsRepoMode indicates whether ccagent is operating in repository mode
+	IsRepoMode bool
+	// RepositoryIdentifier is the owner/repo-name format identifier (e.g., "anthropics/ccagent")
+	RepositoryIdentifier string
+}
+
 // JobStatus represents the current state of a job
 type JobStatus string
 
@@ -62,6 +72,7 @@ type AppState struct {
 	jobs           map[string]*JobData
 	queuedMessages map[string]*QueuedMessage
 	statePath      string
+	repoContext    *RepositoryContext
 	mutex          sync.RWMutex
 }
 
@@ -72,6 +83,28 @@ func NewAppState(agentID string, statePath string) *AppState {
 		jobs:           make(map[string]*JobData),
 		queuedMessages: make(map[string]*QueuedMessage),
 		statePath:      statePath,
+		repoContext:    &RepositoryContext{}, // Initialize with empty context
+	}
+}
+
+// SetRepositoryContext sets the repository context for this app state
+func (a *AppState) SetRepositoryContext(ctx *RepositoryContext) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	a.repoContext = ctx
+}
+
+// GetRepositoryContext returns a copy of the repository context
+func (a *AppState) GetRepositoryContext() *RepositoryContext {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+	if a.repoContext == nil {
+		return &RepositoryContext{}
+	}
+	return &RepositoryContext{
+		RepoPath:             a.repoContext.RepoPath,
+		IsRepoMode:           a.repoContext.IsRepoMode,
+		RepositoryIdentifier: a.repoContext.RepositoryIdentifier,
 	}
 }
 

@@ -13,10 +13,26 @@ import (
 	"github.com/cenkalti/backoff/v4"
 )
 
-type GitClient struct{}
+type GitClient struct {
+	getRepoPath func() string // Function to get repository path (allows lazy evaluation)
+}
 
 func NewGitClient() *GitClient {
-	return &GitClient{}
+	return &GitClient{
+		getRepoPath: func() string { return "" }, // Default: no repo path
+	}
+}
+
+// SetRepoPathProvider sets the function that provides the repository path
+func (g *GitClient) SetRepoPathProvider(provider func() string) {
+	g.getRepoPath = provider
+}
+
+// setWorkDir sets the working directory for a git command if a repo path is configured
+func (g *GitClient) setWorkDir(cmd *exec.Cmd) {
+	if repoPath := g.getRepoPath(); repoPath != "" {
+		cmd.Dir = repoPath
+	}
 }
 
 // isRecoverableGHError checks if an error is a recoverable GitHub API error that should be retried
@@ -56,13 +72,17 @@ func (g *GitClient) executeWithRetry(cmd *exec.Cmd, operationName string) ([]byt
 	retryBackoff.MaxElapsedTime = 2 * time.Minute
 	retryBackoff.Multiplier = 2
 
+	// Preserve original working directory for retries
+	originalDir := cmd.Dir
+
 	retryOperation := func() error {
 		output, err = cmd.CombinedOutput()
 
 		if err != nil && isRecoverableGHError(err, string(output)) {
 			log.Info("⏳ GitHub API recoverable error detected for %s, retrying...", operationName)
-			// Reset command for retry
+			// Reset command for retry, preserving working directory
 			cmd = exec.Command(cmd.Args[0], cmd.Args[1:]...)
+			cmd.Dir = originalDir
 			return err // This will trigger a retry
 		}
 
@@ -85,6 +105,7 @@ func (g *GitClient) CheckoutBranch(branchName string) error {
 	log.Info("📋 Starting to checkout branch: %s", branchName)
 
 	cmd := exec.Command("git", "checkout", branchName)
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -101,6 +122,7 @@ func (g *GitClient) PullLatest() error {
 	log.Info("📋 Starting to pull latest changes")
 
 	cmd := exec.Command("git", "pull")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -152,6 +174,7 @@ func (g *GitClient) ResetHard() error {
 	}
 
 	cmd := exec.Command("git", "reset", "--hard", "HEAD")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -169,6 +192,7 @@ func (g *GitClient) hasCommits() (bool, error) {
 	// Use git rev-parse --verify HEAD to check if HEAD exists
 	// This will return an error if there are no commits
 	cmd := exec.Command("git", "rev-parse", "--verify", "HEAD")
+	g.setWorkDir(cmd)
 	err := cmd.Run()
 
 	// If command succeeds, HEAD exists (repository has commits)
@@ -180,6 +204,7 @@ func (g *GitClient) CleanUntracked() error {
 	log.Info("📋 Starting to clean untracked files")
 
 	cmd := exec.Command("git", "clean", "-fd")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -196,6 +221,7 @@ func (g *GitClient) AddAll() error {
 	log.Info("📋 Starting to add all changes")
 
 	cmd := exec.Command("git", "add", ".")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -212,6 +238,7 @@ func (g *GitClient) Commit(message string) error {
 	log.Info("📋 Starting to commit with message: %s", message)
 
 	cmd := exec.Command("git", "commit", "-m", message)
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -228,6 +255,7 @@ func (g *GitClient) PushBranch(branchName string) error {
 	log.Info("📋 Starting to push branch: %s", branchName)
 
 	cmd := exec.Command("git", "push", "-u", "origin", branchName)
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -255,6 +283,7 @@ func (g *GitClient) CreatePullRequest(title, body, baseBranch string) (string, e
 	}
 
 	cmd := exec.Command("gh", "pr", "create", "--title", validationResult.Title, "--body", finalBody, "--base", baseBranch)
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "create pull request")
 
 	if err != nil {
@@ -274,6 +303,7 @@ func (g *GitClient) GetPRURL(branchName string) (string, error) {
 	log.Info("📋 Starting to get PR URL for branch: %s", branchName)
 
 	cmd := exec.Command("gh", "pr", "view", branchName, "--json", "url", "--jq", ".url")
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "get PR URL")
 
 	if err != nil {
@@ -292,6 +322,7 @@ func (g *GitClient) GetCurrentBranch() (string, error) {
 	log.Info("📋 Starting to get current branch")
 
 	cmd := exec.Command("git", "branch", "--show-current")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -310,6 +341,7 @@ func (g *GitClient) GetDefaultBranch() (string, error) {
 
 	// Run git remote show origin to get HEAD branch information
 	cmd := exec.Command("git", "remote", "show", "origin")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Error("❌ Failed to run git remote show origin: %v\nOutput: %s", err, string(output))
@@ -343,6 +375,7 @@ func (g *GitClient) CreateAndCheckoutBranch(branchName string) error {
 	log.Info("📋 Starting to create and checkout branch: %s", branchName)
 
 	cmd := exec.Command("git", "checkout", "-b", branchName)
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -359,6 +392,7 @@ func (g *GitClient) IsGitRepository() error {
 	log.Info("📋 Starting to check if current directory is a Git repository")
 
 	cmd := exec.Command("git", "rev-parse", "--git-dir")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -372,9 +406,10 @@ func (g *GitClient) IsGitRepository() error {
 }
 
 func (g *GitClient) IsGitRepositoryRoot() error {
-	log.Info("📋 Starting to check if current directory is the Git repository root")
+	log.Info("📋 Starting to check if target directory is the Git repository root")
 
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -384,23 +419,28 @@ func (g *GitClient) IsGitRepositoryRoot() error {
 
 	gitRoot := strings.TrimSpace(string(output))
 
-	// Get current working directory
-	currentDir, err := os.Getwd()
-	if err != nil {
-		log.Error("❌ Failed to get current working directory: %v", err)
-		return fmt.Errorf("failed to get current working directory: %w", err)
+	// Get the target directory to compare against git root
+	// If repo path is configured, use that; otherwise use current working directory
+	targetDir := g.getRepoPath()
+	if targetDir == "" {
+		var err error
+		targetDir, err = os.Getwd()
+		if err != nil {
+			log.Error("❌ Failed to get current working directory: %v", err)
+			return fmt.Errorf("failed to get current working directory: %w", err)
+		}
 	}
 
-	if gitRoot != currentDir {
-		log.Error("❌ Not at Git repository root. Current: %s, Git root: %s", currentDir, gitRoot)
+	if gitRoot != targetDir {
+		log.Error("❌ Not at Git repository root. Target: %s, Git root: %s", targetDir, gitRoot)
 		return fmt.Errorf(
-			"ccagent must be run from the Git repository root directory. Current: %s, Git root: %s",
-			currentDir,
+			"ccagent must be run from the Git repository root directory. Target: %s, Git root: %s",
+			targetDir,
 			gitRoot,
 		)
 	}
 
-	log.Info("✅ Current directory is the Git repository root")
+	log.Info("✅ Target directory is the Git repository root")
 	log.Info("📋 Completed successfully - validated Git repository root")
 	return nil
 }
@@ -409,6 +449,7 @@ func (g *GitClient) HasRemoteRepository() error {
 	log.Info("📋 Starting to check for remote repository")
 
 	cmd := exec.Command("git", "remote", "-v")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -432,6 +473,7 @@ func (g *GitClient) IsGitHubCLIAvailable() error {
 
 	// Check if gh command exists
 	cmd := exec.Command("gh", "--version")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -441,6 +483,7 @@ func (g *GitClient) IsGitHubCLIAvailable() error {
 
 	// Check if gh is authenticated
 	cmd = exec.Command("gh", "auth", "status")
+	g.setWorkDir(cmd)
 	output, err = cmd.CombinedOutput()
 
 	if err != nil {
@@ -458,6 +501,7 @@ func (g *GitClient) HasUncommittedChanges() (bool, error) {
 
 	// Check for staged and unstaged changes
 	cmd := exec.Command("git", "status", "--porcelain")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -484,6 +528,7 @@ func (g *GitClient) HasExistingPR(branchName string) (bool, error) {
 
 	// Use GitHub CLI to list PRs for the current branch
 	cmd := exec.Command("gh", "pr", "list", "--head", branchName, "--json", "number")
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "check existing PR")
 
 	if err != nil {
@@ -509,6 +554,7 @@ func (g *GitClient) GetLatestCommitHash() (string, error) {
 	log.Info("📋 Starting to get latest commit hash")
 
 	cmd := exec.Command("git", "rev-parse", "HEAD")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -527,6 +573,7 @@ func (g *GitClient) getRawRemoteURL() (string, error) {
 	log.Info("📋 Starting to get raw remote URL")
 
 	cmd := exec.Command("git", "remote", "get-url", "origin")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -544,6 +591,7 @@ func (g *GitClient) GetRemoteURL() (string, error) {
 	log.Info("📋 Starting to get remote URL")
 
 	cmd := exec.Command("git", "remote", "get-url", "origin")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -604,6 +652,7 @@ func (g *GitClient) GetPRDescription(branchName string) (string, error) {
 	log.Info("📋 Starting to get PR description for branch: %s", branchName)
 
 	cmd := exec.Command("gh", "pr", "view", branchName, "--json", "body", "--jq", ".body")
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "get PR description")
 
 	if err != nil {
@@ -621,6 +670,7 @@ func (g *GitClient) UpdatePRDescription(branchName, newDescription string) error
 	log.Info("📋 Starting to update PR description for branch: %s", branchName)
 
 	cmd := exec.Command("gh", "pr", "edit", branchName, "--body", newDescription)
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "update PR description")
 
 	if err != nil {
@@ -637,6 +687,7 @@ func (g *GitClient) GetPRTitle(branchName string) (string, error) {
 	log.Info("📋 Starting to get PR title for branch: %s", branchName)
 
 	cmd := exec.Command("gh", "pr", "view", branchName, "--json", "title", "--jq", ".title")
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "get PR title")
 
 	if err != nil {
@@ -679,6 +730,7 @@ func (g *GitClient) UpdatePRTitle(branchName, newTitle string) error {
 
 	// Update the title
 	cmd := exec.Command("gh", "pr", "edit", branchName, "--title", validationResult.Title)
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "update PR title")
 
 	if err != nil {
@@ -695,6 +747,7 @@ func (g *GitClient) GetPRState(branchName string) (string, error) {
 	log.Info("📋 Starting to get PR state for branch: %s", branchName)
 
 	cmd := exec.Command("gh", "pr", "view", branchName, "--json", "state", "--jq", ".state")
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "get PR state")
 
 	if err != nil {
@@ -726,6 +779,7 @@ func (g *GitClient) GetPRStateByID(prID string) (string, error) {
 	log.Info("📋 Starting to get PR state by ID: %s", prID)
 
 	cmd := exec.Command("gh", "pr", "view", prID, "--json", "state", "--jq", ".state")
+	g.setWorkDir(cmd)
 	output, err := g.executeWithRetry(cmd, "get PR state by ID")
 
 	if err != nil {
@@ -743,6 +797,7 @@ func (g *GitClient) GetLocalBranches() ([]string, error) {
 	log.Info("📋 Starting to get local branches")
 
 	cmd := exec.Command("git", "branch", "--format=%(refname:short)")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -775,6 +830,7 @@ func (g *GitClient) DeleteLocalBranch(branchName string) error {
 	log.Info("📋 Starting to delete local branch: %s", branchName)
 
 	cmd := exec.Command("git", "branch", "-D", branchName)
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -804,6 +860,7 @@ func (g *GitClient) ValidateRemoteAccess() error {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "origin", "HEAD")
+	g.setWorkDir(cmd)
 
 	// Set environment variables to prevent credential prompting
 	cmd.Env = append(os.Environ(),
@@ -945,6 +1002,7 @@ func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
 
 	// Get current remote URL
 	cmd := exec.Command("git", "remote", "get-url", "origin")
+	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Error("❌ Failed to get current remote URL: %v\nOutput: %s", err, string(output))
@@ -971,6 +1029,7 @@ func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
 
 	// Update the remote URL
 	cmd = exec.Command("git", "remote", "set-url", "origin", newURL)
+	g.setWorkDir(cmd)
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		log.Error("❌ Failed to update remote URL: %v\nOutput: %s", err, string(output))
