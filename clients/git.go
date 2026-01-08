@@ -331,6 +331,15 @@ func (g *GitClient) GetCurrentBranch() (string, error) {
 	}
 
 	branch := strings.TrimSpace(string(output))
+
+	// When in detached HEAD state, git branch --show-current returns an empty string
+	// without an error. We need to detect this and return an error since many operations
+	// (like git push) require a valid branch name.
+	if branch == "" {
+		log.Error("❌ Repository is in detached HEAD state (no branch checked out)")
+		return "", fmt.Errorf("repository is in detached HEAD state: no branch is currently checked out. This can happen after checking out a specific commit. Please checkout a branch first")
+	}
+
 	log.Info("✅ Current branch: %s", branch)
 	log.Info("📋 Completed successfully - got current branch")
 	return branch, nil
