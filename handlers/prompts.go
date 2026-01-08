@@ -54,16 +54,17 @@ CRITICAL: Never create git commits or pull requests unless explicitly asked. Wai
 		basePrompt += fmt.Sprintf(`
 
 *Repository Information:*
-You are working on a git repository located at: %s
-Repository: %s
-All file paths you reference should be relative to this repository root.
-`, repoContext.RepoPath, repoContext.RepositoryIdentifier)
+You are working on the git repository: %s
+Repository path: %s
+
+IMPORTANT: Treat this repository as your main working directory. All file operations (reading, writing, searching) should be performed relative to this repository path, NOT the process working directory. When referencing files, use paths relative to this repository root.
+`, repoContext.RepositoryIdentifier, repoContext.RepoPath)
 	} else {
 		basePrompt += `
 
 *No-Repository Mode:*
-You are running in no-repository mode. Git operations are disabled.
-You can answer questions and work with files in the current working directory.
+You are running in no-repository mode. Git operations (commits, branches, PRs) are disabled.
+Use the current working directory as your workspace for all file operations.
 `
 	}
 
@@ -126,16 +127,17 @@ CRITICAL: Keep ALL responses in the 800 character range (strict Slack limit).`
 		basePrompt += fmt.Sprintf(`
 
 *Repository Information:*
-You are working on a git repository located at: %s
-Repository: %s
-All file paths you reference should be relative to this repository root.
-`, repoContext.RepoPath, repoContext.RepositoryIdentifier)
+You are working on the git repository: %s
+Repository path: %s
+
+IMPORTANT: Treat this repository as your main working directory. All file operations (reading, writing, searching) should be performed relative to this repository path, NOT the process working directory. When referencing files, use paths relative to this repository root.
+`, repoContext.RepositoryIdentifier, repoContext.RepoPath)
 	} else {
 		basePrompt += `
 
 *No-Repository Mode:*
-You are running in no-repository mode. Git operations are disabled.
-You can answer questions and work with files in the current working directory.
+You are running in no-repository mode. Git operations (commits, branches, PRs) are disabled.
+Use the current working directory as your workspace for all file operations.
 `
 	}
 
