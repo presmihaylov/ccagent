@@ -1,3 +1,13 @@
+## [v0.0.40] - 2026-01-08
+
+### Features
+
+- Add --repo flag to decouple repo from PWD ([#71](https://github.com/presmihaylov/ccagent/pull/71))
+  - Enables specifying repository path via --repo flag
+  - Decouples repository location from current working directory
+  - Improves flexibility for running agents from any directory
+  - Useful for scripts and automation that manage multiple repositories
+
 ## [v0.0.39] - 2026-01-07
 
 ### Features
