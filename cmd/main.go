@@ -618,17 +618,14 @@ func main() {
 		}()
 	}
 
-	// Validate Git environment before starting (only if in repo mode)
+	// Validate Git environment and cleanup stale branches (only if in repo mode)
 	if repoCtx.IsRepoMode {
 		err = cmdRunner.gitUseCase.ValidateGitEnvironment()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Git environment validation failed: %v\n", err)
 			os.Exit(1)
 		}
-	}
 
-	// Cleanup stale ccagent branches (only if in repo mode)
-	if repoCtx.IsRepoMode {
 		err = cmdRunner.gitUseCase.CleanupStaleBranches()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to cleanup stale branches: %v\n", err)
