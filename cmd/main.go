@@ -268,6 +268,61 @@ func processPermissions(agentType, workDir string) error {
 	return nil
 }
 
+// resolveRepositoryContext determines the repository mode and path based on the --repo flag
+// and current working directory. Returns a RepositoryContext indicating:
+// - Repo mode with explicit path (--repo flag provided)
+// - Repo mode with auto-detected path (cwd is a git root)
+// - No-repo mode (cwd is not a git repository)
+func resolveRepositoryContext(repoPath string, gitClient *clients.GitClient) (*models.RepositoryContext, error) {
+	if repoPath != "" {
+		return resolveExplicitRepoPath(repoPath)
+	}
+	return resolveAutoDetectedRepoContext(gitClient)
+}
+
+func resolveExplicitRepoPath(repoPath string) (*models.RepositoryContext, error) {
+	var absRepoPath string
+	if filepath.IsAbs(repoPath) {
+		absRepoPath = repoPath
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current working directory: %w", err)
+		}
+		absRepoPath = filepath.Join(cwd, repoPath)
+	}
+
+	if _, err := os.Stat(absRepoPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("repository path does not exist: %s", absRepoPath)
+	}
+
+	log.Info("📦 Repository mode enabled (explicit): %s", absRepoPath)
+	return &models.RepositoryContext{
+		RepoPath:   absRepoPath,
+		IsRepoMode: true,
+	}, nil
+}
+
+func resolveAutoDetectedRepoContext(gitClient *clients.GitClient) (*models.RepositoryContext, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	if gitClient.IsGitRepositoryRoot() == nil {
+		log.Info("📦 Repository mode enabled (auto-detected): %s", cwd)
+		return &models.RepositoryContext{
+			RepoPath:   cwd,
+			IsRepoMode: true,
+		}, nil
+	}
+
+	log.Info("📦 No-repo mode enabled - not in a git repository")
+	return &models.RepositoryContext{
+		IsRepoMode: false,
+	}, nil
+}
+
 func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner, error) {
 	log.Info("📋 Starting to initialize CmdRunner with agent: %s", agentType)
 
@@ -369,57 +424,9 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	}
 
 	// Handle repository path and create repository context
-	var repoContext *models.RepositoryContext
-	var absRepoPath string
-
-	if repoPath != "" {
-		// Explicit --repo flag provided: use that path
-		if filepath.IsAbs(repoPath) {
-			absRepoPath = repoPath
-		} else {
-			// Make relative path absolute based on current working directory
-			cwd, err := os.Getwd()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get current working directory: %w", err)
-			}
-			absRepoPath = filepath.Join(cwd, repoPath)
-		}
-
-		// Validate repository path exists
-		if _, err := os.Stat(absRepoPath); os.IsNotExist(err) {
-			return nil, fmt.Errorf("repository path does not exist: %s", absRepoPath)
-		}
-
-		log.Info("📦 Repository mode enabled (explicit): %s", absRepoPath)
-
-		// Repository identifier will be set during git validation
-		repoContext = &models.RepositoryContext{
-			RepoPath:   absRepoPath,
-			IsRepoMode: true,
-		}
-	} else {
-		// No --repo flag: check if current directory is a git repository
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get current working directory: %w", err)
-		}
-
-		// Check if cwd is a git repository root
-		if gitClient.IsGitRepositoryRoot() == nil {
-			// Current directory is a git repo root - enable repo mode automatically
-			absRepoPath = cwd
-			log.Info("📦 Repository mode enabled (auto-detected): %s", absRepoPath)
-			repoContext = &models.RepositoryContext{
-				RepoPath:   absRepoPath,
-				IsRepoMode: true,
-			}
-		} else {
-			// Not a git repository - enable no-repo mode
-			log.Info("📦 No-repo mode enabled - not in a git repository")
-			repoContext = &models.RepositoryContext{
-				IsRepoMode: false,
-			}
-		}
+	repoContext, err := resolveRepositoryContext(repoPath, gitClient)
+	if err != nil {
+		return nil, err
 	}
 
 	// Set repository context in app state
