@@ -72,13 +72,17 @@ func (g *GitClient) executeWithRetry(cmd *exec.Cmd, operationName string) ([]byt
 	retryBackoff.MaxElapsedTime = 2 * time.Minute
 	retryBackoff.Multiplier = 2
 
+	// Preserve original working directory for retries
+	originalDir := cmd.Dir
+
 	retryOperation := func() error {
 		output, err = cmd.CombinedOutput()
 
 		if err != nil && isRecoverableGHError(err, string(output)) {
 			log.Info("⏳ GitHub API recoverable error detected for %s, retrying...", operationName)
-			// Reset command for retry
+			// Reset command for retry, preserving working directory
 			cmd = exec.Command(cmd.Args[0], cmd.Args[1:]...)
+			cmd.Dir = originalDir
 			return err // This will trigger a retry
 		}
 
@@ -851,6 +855,7 @@ func (g *GitClient) ValidateRemoteAccess() error {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "origin", "HEAD")
+	g.setWorkDir(cmd)
 
 	// Set environment variables to prevent credential prompting
 	cmd.Env = append(os.Environ(),
@@ -1019,6 +1024,7 @@ func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
 
 	// Update the remote URL
 	cmd = exec.Command("git", "remote", "set-url", "origin", newURL)
+	g.setWorkDir(cmd)
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		log.Error("❌ Failed to update remote URL: %v\nOutput: %s", err, string(output))
