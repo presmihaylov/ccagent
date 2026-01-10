@@ -213,9 +213,48 @@ func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 	}
 
 	// Step 5: Checkout target branch
-	if err := g.gitClient.CheckoutBranch(branchName); err != nil {
-		log.Error("❌ Failed to checkout target branch %s: %v", branchName, err)
-		return fmt.Errorf("failed to checkout target branch %s: %w", branchName, err)
+	// First check if the branch exists locally
+	localBranches, err := g.gitClient.GetLocalBranches()
+	if err != nil {
+		log.Error("❌ Failed to get local branches: %v", err)
+		return fmt.Errorf("failed to get local branches: %w", err)
+	}
+
+	branchExistsLocally := false
+	for _, branch := range localBranches {
+		if branch == branchName {
+			branchExistsLocally = true
+			break
+		}
+	}
+
+	if branchExistsLocally {
+		// Branch exists locally, checkout normally
+		if err := g.gitClient.CheckoutBranch(branchName); err != nil {
+			log.Error("❌ Failed to checkout local branch %s: %v", branchName, err)
+			return fmt.Errorf("failed to checkout target branch %s: %w", branchName, err)
+		}
+	} else {
+		// Branch doesn't exist locally, check if it exists on remote
+		log.Info("ℹ️ Branch %s not found locally, checking remote", branchName)
+
+		remoteExists, err := g.gitClient.RemoteBranchExists(branchName)
+		if err != nil {
+			log.Error("❌ Failed to check if remote branch exists %s: %v", branchName, err)
+			return fmt.Errorf("failed to check if remote branch exists %s: %w", branchName, err)
+		}
+
+		if !remoteExists {
+			log.Error("❌ Branch %s not found locally or on remote", branchName)
+			return fmt.Errorf("branch %s not found locally or on remote", branchName)
+		}
+
+		// Branch exists on remote, fetch and checkout
+		log.Info("✅ Branch %s found on remote, fetching and checking out", branchName)
+		if err := g.gitClient.CheckoutRemoteBranch(branchName); err != nil {
+			log.Error("❌ Failed to checkout remote branch %s: %v", branchName, err)
+			return fmt.Errorf("failed to checkout target branch %s: %w", branchName, err)
+		}
 	}
 
 	log.Info("✅ Successfully switched to job branch: %s", branchName)
