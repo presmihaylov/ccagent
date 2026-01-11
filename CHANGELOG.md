@@ -1,3 +1,17 @@
+## [v0.0.41] - 2026-01-11
+
+### Bugfixes
+
+- Increase buffer size to 4MB for handling large tool outputs
+  - Fixes issues with processing large responses from Claude Code
+  - Prevents buffer overflow errors during heavy tool usage
+  - Improves reliability for complex operations with verbose output
+
+- Handle detached HEAD state in GetCurrentBranch ([#72](https://github.com/presmihaylov/ccagent/pull/72))
+  - Properly handles repositories in detached HEAD state
+  - Prevents errors when working with specific commits instead of branches
+  - Improves robustness of branch detection logic
+
 ## [v0.0.40] - 2026-01-08
 
 ### Features
