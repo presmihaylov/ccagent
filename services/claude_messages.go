@@ -159,8 +159,9 @@ func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
 
 	// Use a scanner with a larger buffer to handle long lines
 	scanner := bufio.NewScanner(strings.NewReader(output))
-	// Set a 2MB buffer for safety (after image stripping, most lines should be < 100KB)
-	const maxBufferSize = 1 * 1024 * 1024 // 2MB
+	// Set a 4MB buffer to handle large tool_result outputs (e.g., grep results, file reads)
+	// Tool results can exceed 1-2MB when reading large files or searching codebases
+	const maxBufferSize = 4 * 1024 * 1024 // 4MB
 	scanner.Buffer(make([]byte, 0, maxBufferSize), maxBufferSize)
 
 	for scanner.Scan() {
