@@ -896,7 +896,7 @@ func TestClaudeService_ActualParseError(t *testing.T) {
 	// We'll use a string that causes the scanner to fail somehow
 	// After checking the code, the scanner is pretty robust, so let's create a scenario
 	// where we can force an error by creating extremely long content that exceeds buffer limits
-	longLine := strings.Repeat("x", 2*1024*1024) // 2MB line, exceeds the 1MB buffer
+	longLine := strings.Repeat("x", 5*1024*1024) // 5MB line, exceeds the 4MB buffer
 	mockClient := &services.MockClaudeClient{
 		StartNewSessionFunc: func(prompt string, options *clients.ClaudeOptions) (string, error) {
 			if prompt == "test" {
