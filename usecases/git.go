@@ -212,10 +212,47 @@ func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 		return fmt.Errorf("failed to pull latest changes: %w", err)
 	}
 
-	// Step 5: Checkout target branch
-	if err := g.gitClient.CheckoutBranch(branchName); err != nil {
-		log.Error("❌ Failed to checkout target branch %s: %v", branchName, err)
-		return fmt.Errorf("failed to checkout target branch %s: %w", branchName, err)
+	// Step 5: Check if branch exists locally, if not try to fetch from remote
+	branchExistsLocally, err := g.gitClient.BranchExistsLocally(branchName)
+	if err != nil {
+		log.Error("❌ Failed to check if branch exists locally: %v", err)
+		return fmt.Errorf("failed to check if branch exists locally: %w", err)
+	}
+
+	if !branchExistsLocally {
+		log.Info("ℹ️ Branch %s doesn't exist locally, attempting to fetch from remote", branchName)
+
+		// Check if branch exists on remote
+		branchExistsOnRemote, err := g.gitClient.BranchExistsOnRemote(branchName)
+		if err != nil {
+			log.Error("❌ Failed to check if branch exists on remote: %v", err)
+			return fmt.Errorf("failed to check if branch exists on remote: %w", err)
+		}
+
+		if !branchExistsOnRemote {
+			log.Error("❌ Branch %s doesn't exist locally or on remote", branchName)
+			return fmt.Errorf("branch %s doesn't exist locally or on remote - it may have been deleted after a container restart", branchName)
+		}
+
+		// Fetch the branch from remote
+		if err := g.gitClient.FetchBranch(branchName); err != nil {
+			log.Error("❌ Failed to fetch branch %s from remote: %v", branchName, err)
+			return fmt.Errorf("failed to fetch branch %s from remote: %w", branchName, err)
+		}
+
+		// Checkout the remote branch (creates local tracking branch)
+		if err := g.gitClient.CheckoutRemoteBranch(branchName); err != nil {
+			log.Error("❌ Failed to checkout remote branch %s: %v", branchName, err)
+			return fmt.Errorf("failed to checkout remote branch %s: %w", branchName, err)
+		}
+
+		log.Info("✅ Successfully fetched and checked out branch from remote: %s", branchName)
+	} else {
+		// Step 6: Checkout target branch (exists locally)
+		if err := g.gitClient.CheckoutBranch(branchName); err != nil {
+			log.Error("❌ Failed to checkout target branch %s: %v", branchName, err)
+			return fmt.Errorf("failed to checkout target branch %s: %w", branchName, err)
+		}
 	}
 
 	log.Info("✅ Successfully switched to job branch: %s", branchName)
@@ -252,6 +289,14 @@ func (g *GitUseCase) PrepareForNewConversation(conversationHint string) (string,
 	if err := g.gitClient.CreateAndCheckoutBranch(branchName); err != nil {
 		log.Error("❌ Failed to create and checkout new branch %s: %v", branchName, err)
 		return "", fmt.Errorf("failed to create and checkout new branch %s: %w", branchName, err)
+	}
+
+	// Push the branch to remote immediately to ensure it survives container restarts
+	if err := g.gitClient.PushBranch(branchName); err != nil {
+		// Log warning but don't fail - the branch is created locally and we can retry push later
+		log.Warn("⚠️ Failed to push new branch to remote (will retry on next commit): %v", err)
+	} else {
+		log.Info("✅ Successfully pushed new branch to remote: %s", branchName)
 	}
 
 	log.Info("✅ Successfully prepared for new conversation on branch: %s", branchName)
@@ -1061,5 +1106,52 @@ func (g *GitUseCase) AbandonJobAndCleanup(jobID, branchName string) error {
 
 	log.Info("✅ Successfully abandoned job and cleaned up")
 	log.Info("📋 Completed successfully - abandoned job and reset to default branch")
+	return nil
+}
+
+// CleanupRemoteBranchIfNoPR deletes a remote branch if no PR exists for it
+// This is called when a job is completed without a PR being created
+func (g *GitUseCase) CleanupRemoteBranchIfNoPR(branchName string) error {
+	log.Info("📋 Starting to cleanup remote branch if no PR exists: %s", branchName)
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping remote branch cleanup")
+		return nil
+	}
+
+	// Double-check that no PR exists (defensive check)
+	hasPR, err := g.gitClient.HasExistingPR(branchName)
+	if err != nil {
+		log.Error("❌ Failed to check if PR exists for branch %s: %v", branchName, err)
+		return fmt.Errorf("failed to check if PR exists: %w", err)
+	}
+
+	if hasPR {
+		log.Info("ℹ️ PR exists for branch %s, skipping remote cleanup (GitHub will handle on merge)", branchName)
+		return nil
+	}
+
+	// Check if branch exists on remote before trying to delete
+	existsOnRemote, err := g.gitClient.BranchExistsOnRemote(branchName)
+	if err != nil {
+		log.Error("❌ Failed to check if branch %s exists on remote: %v", branchName, err)
+		return fmt.Errorf("failed to check if branch exists on remote: %w", err)
+	}
+
+	if !existsOnRemote {
+		log.Info("ℹ️ Branch %s doesn't exist on remote, nothing to cleanup", branchName)
+		return nil
+	}
+
+	// Delete the remote branch
+	if err := g.gitClient.DeleteRemoteBranch(branchName); err != nil {
+		log.Error("❌ Failed to delete remote branch %s: %v", branchName, err)
+		return fmt.Errorf("failed to delete remote branch: %w", err)
+	}
+
+	log.Info("✅ Successfully cleaned up remote branch: %s", branchName)
+	log.Info("📋 Completed successfully - cleaned up remote branch")
 	return nil
 }

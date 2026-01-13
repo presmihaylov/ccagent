@@ -852,6 +852,98 @@ func (g *GitClient) DeleteLocalBranch(branchName string) error {
 	return nil
 }
 
+func (g *GitClient) DeleteRemoteBranch(branchName string) error {
+	log.Info("📋 Starting to delete remote branch: %s", branchName)
+
+	cmd := exec.Command("git", "push", "origin", "--delete", branchName)
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to delete remote branch %s: %v\nOutput: %s", branchName, err, string(output))
+		return fmt.Errorf("failed to delete remote branch %s: %w\nOutput: %s", branchName, err, string(output))
+	}
+
+	log.Info("✅ Successfully deleted remote branch: %s", branchName)
+	log.Info("📋 Completed successfully - deleted remote branch")
+	return nil
+}
+
+func (g *GitClient) FetchBranch(branchName string) error {
+	log.Info("📋 Starting to fetch branch from remote: %s", branchName)
+
+	// Fetch the specific branch from origin
+	cmd := exec.Command("git", "fetch", "origin", branchName)
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to fetch branch %s from remote: %v\nOutput: %s", branchName, err, string(output))
+		return fmt.Errorf("failed to fetch branch %s from remote: %w\nOutput: %s", branchName, err, string(output))
+	}
+
+	log.Info("✅ Successfully fetched branch from remote: %s", branchName)
+	log.Info("📋 Completed successfully - fetched branch from remote")
+	return nil
+}
+
+func (g *GitClient) BranchExistsLocally(branchName string) (bool, error) {
+	log.Info("📋 Starting to check if branch exists locally: %s", branchName)
+
+	cmd := exec.Command("git", "rev-parse", "--verify", branchName)
+	g.setWorkDir(cmd)
+	_, err := cmd.CombinedOutput()
+
+	if err != nil {
+		// Branch doesn't exist locally
+		log.Info("ℹ️ Branch does not exist locally: %s", branchName)
+		return false, nil
+	}
+
+	log.Info("✅ Branch exists locally: %s", branchName)
+	return true, nil
+}
+
+func (g *GitClient) BranchExistsOnRemote(branchName string) (bool, error) {
+	log.Info("📋 Starting to check if branch exists on remote: %s", branchName)
+
+	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branchName)
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to check remote branch %s: %v\nOutput: %s", branchName, err, string(output))
+		return false, fmt.Errorf("failed to check remote branch %s: %w\nOutput: %s", branchName, err, string(output))
+	}
+
+	// If output is empty, branch doesn't exist on remote
+	exists := strings.TrimSpace(string(output)) != ""
+	if exists {
+		log.Info("✅ Branch exists on remote: %s", branchName)
+	} else {
+		log.Info("ℹ️ Branch does not exist on remote: %s", branchName)
+	}
+	return exists, nil
+}
+
+func (g *GitClient) CheckoutRemoteBranch(branchName string) error {
+	log.Info("📋 Starting to checkout remote branch: %s", branchName)
+
+	// Create local branch from remote tracking branch
+	cmd := exec.Command("git", "checkout", "-b", branchName, "origin/"+branchName)
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to checkout remote branch %s: %v\nOutput: %s", branchName, err, string(output))
+		return fmt.Errorf("failed to checkout remote branch %s: %w\nOutput: %s", branchName, err, string(output))
+	}
+
+	log.Info("✅ Successfully checked out remote branch: %s", branchName)
+	log.Info("📋 Completed successfully - checked out remote branch")
+	return nil
+}
+
 func (g *GitClient) ValidateRemoteAccess() error {
 	log.Info("📋 Starting to validate remote repository access")
 

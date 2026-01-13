@@ -766,6 +766,16 @@ func (mh *MessageHandler) checkJobIdleness(jobID string, jobData models.JobData)
 			return fmt.Errorf("failed to send job complete message: %w", err)
 		}
 
+		// Clean up remote branch if no PR exists (PR branches are cleaned by GitHub on merge)
+		if prStatus == "no_pr" && jobData.BranchName != "" {
+			if err := mh.gitUseCase.CleanupRemoteBranchIfNoPR(jobData.BranchName); err != nil {
+				// Log warning but don't fail job completion
+				log.Warn("⚠️ Failed to cleanup remote branch %s: %v", jobData.BranchName, err)
+			} else {
+				log.Info("🗑️ Cleaned up remote branch %s (no PR exists)", jobData.BranchName)
+			}
+		}
+
 		// Remove job from app state since it's complete
 		if err := mh.appState.RemoveJob(jobID); err != nil {
 			log.Error("❌ Failed to remove job from app state: %v", err)
