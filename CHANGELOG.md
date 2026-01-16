@@ -1,3 +1,17 @@
+## [v0.0.42] - 2026-01-16
+
+### Bugfixes
+
+- Fix checkout remote branch on container redeploy ([#73](https://github.com/presmihaylov/ccagent/pull/73))
+  - Properly checks out the remote branch when containers are redeployed
+  - Ensures agents start on the correct branch after container restart
+  - Improves reliability for container orchestration workflows
+
+- Fix parsing failure for large tool_result outputs ([#75](https://github.com/presmihaylov/ccagent/pull/75))
+  - Resolves parsing issues when tool results contain very large outputs
+  - Improves handling of buffer sizes for tool result processing
+  - Enhances stability for operations with verbose tool outputs
+
 ## [v0.0.41] - 2026-01-11
 
 ### Bugfixes
