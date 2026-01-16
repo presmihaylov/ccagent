@@ -256,8 +256,11 @@ func (c *ClaudeService) ContinueConversationWithOptions(
 }
 
 func (c *ClaudeService) extractSessionID(messages []services.ClaudeMessage) string {
-	if len(messages) > 0 {
-		sessionID := messages[0].GetSessionID()
+	// Iterate through all messages to find a valid session ID.
+	// The first message may be an UnknownClaudeMessage (e.g., from non-JSON output
+	// like Terms of Service notices) with an empty session ID.
+	for _, msg := range messages {
+		sessionID := msg.GetSessionID()
 		if sessionID != "" {
 			return sessionID
 		}
