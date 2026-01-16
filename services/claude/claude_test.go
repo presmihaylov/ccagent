@@ -446,6 +446,53 @@ func TestClaudeService_extractSessionID(t *testing.T) {
 			},
 			expected: "session_123",
 		},
+		{
+			name: "TOS notice before valid message - session ID in second message",
+			messages: []services.ClaudeMessage{
+				// First message is UnknownClaudeMessage from non-JSON TOS notice line
+				services.UnknownClaudeMessage{
+					Type:      "unknown",
+					SessionID: "", // Empty session ID from unparseable line
+				},
+				// Second message is valid system init with session ID
+				services.SystemMessage{
+					Type:      "system",
+					Subtype:   "init",
+					SessionID: "11c13793-624f-4a38-8f57-ac96d0b7869a",
+				},
+			},
+			expected: "11c13793-624f-4a38-8f57-ac96d0b7869a",
+		},
+		{
+			name: "multiple unknown messages before valid session ID",
+			messages: []services.ClaudeMessage{
+				services.UnknownClaudeMessage{Type: "unknown", SessionID: ""},
+				services.UnknownClaudeMessage{Type: "unknown", SessionID: ""},
+				services.AssistantMessage{
+					Type: "assistant",
+					Message: struct {
+						ID         string            `json:"id"`
+						Type       string            `json:"type"`
+						Content    []json.RawMessage `json:"content"`
+						StopReason string            `json:"stop_reason"`
+					}{
+						ID:      "msg_456",
+						Type:    "message",
+						Content: []json.RawMessage{},
+					},
+					SessionID: "valid-session-456",
+				},
+			},
+			expected: "valid-session-456",
+		},
+		{
+			name: "all messages have empty session ID",
+			messages: []services.ClaudeMessage{
+				services.UnknownClaudeMessage{Type: "unknown", SessionID: ""},
+				services.UnknownClaudeMessage{Type: "unknown", SessionID: ""},
+			},
+			expected: "unknown",
+		},
 	}
 
 	for _, tt := range tests {
