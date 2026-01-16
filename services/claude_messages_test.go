@@ -513,3 +513,360 @@ func TestProductionLogParsingWithImageStripping(t *testing.T) {
 
 	t.Logf("Successfully parsed %d messages after image stripping", len(messages))
 }
+
+func TestStripLargeToolResultContent(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectStripped bool
+		description    string
+	}{
+		{
+			name:           "small tool_result content unchanged",
+			input:          `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"small output"}]}}`,
+			expectStripped: false,
+			description:    "Content under 100KB should not be modified",
+		},
+		{
+			name:           "large tool_result content truncated",
+			input:          `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"` + strings.Repeat("x", 150*1024) + `"}]}}`,
+			expectStripped: true,
+			description:    "Content over 100KB should be truncated",
+		},
+		{
+			name:           "non-tool_result content unchanged",
+			input:          `{"type":"assistant","message":{"content":[{"type":"text","text":"` + strings.Repeat("y", 150*1024) + `"}]}}`,
+			expectStripped: false,
+			description:    "Non-tool_result content should not be affected",
+		},
+		{
+			name:           "empty input",
+			input:          "",
+			expectStripped: false,
+			description:    "Empty input should return empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripLargeToolResultContent(tt.input)
+
+			if tt.expectStripped {
+				if !strings.Contains(result, "[CONTENT_TRUNCATED_") {
+					t.Errorf("%s: expected content to be truncated but it wasn't", tt.description)
+				}
+				if len(result) >= len(tt.input) {
+					t.Errorf("%s: expected result to be smaller than input", tt.description)
+				}
+			} else {
+				if tt.input != "" && result != tt.input {
+					t.Errorf("%s: expected content to remain unchanged", tt.description)
+				}
+			}
+		})
+	}
+}
+
+func TestLargeToolResultParsing(t *testing.T) {
+	// This test verifies that the parser can handle output containing very large tool_result
+	// content that would previously exceed the 4MB buffer limit.
+	//
+	// Real-world scenario: Claude reads a large file or runs grep that returns 17-85MB of output.
+	// The tool_result JSON line would exceed bufio.Scanner's buffer and cause parsing to fail.
+	// With stripLargeToolResultContent, the content is truncated before parsing.
+
+	// Create a simulated large output with a tool_result containing >4MB of content
+	// Use escaped newlines (\n) since this is JSON content within a single line
+	largeContent := strings.Repeat("Line of grep output matching pattern in file.go:123\\n", 100000)
+
+	input := `{"type":"system","subtype":"init","session_id":"test-session-001"}
+{"type":"assistant","message":{"id":"msg_001","type":"message","content":[{"type":"text","text":"Let me search the codebase."}]},"session_id":"test-session-001"}
+{"type":"assistant","message":{"id":"msg_001","type":"message","content":[{"type":"tool_use","id":"toolu_001","name":"Grep","input":{"pattern":"error"}}]},"session_id":"test-session-001"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"` + largeContent + `"}]},"session_id":"test-session-001"}
+{"type":"assistant","message":{"id":"msg_002","type":"message","content":[{"type":"text","text":"Found many matches. Here's the analysis."}]},"session_id":"test-session-001"}
+{"type":"result","subtype":"success","is_error":false,"result":"Found many matches. Here's the analysis.","session_id":"test-session-001"}`
+
+	t.Logf("Test input size: %d bytes (%.2f MB)", len(input), float64(len(input))/(1024*1024))
+
+	messages, err := MapClaudeOutputToMessages(input)
+	if err != nil {
+		t.Fatalf("Failed to parse output with large tool_result: %v", err)
+	}
+
+	// Should successfully parse all messages
+	if len(messages) != 6 {
+		t.Errorf("Expected 6 messages, got %d", len(messages))
+	}
+
+	// Verify we can extract the final result
+	var resultMsg ResultMessage
+	var foundResult bool
+	for _, msg := range messages {
+		if r, ok := msg.(ResultMessage); ok {
+			resultMsg = r
+			foundResult = true
+		}
+	}
+
+	if !foundResult {
+		t.Error("Expected to find a result message")
+	}
+
+	if resultMsg.Result != "Found many matches. Here's the analysis." {
+		t.Errorf("Unexpected result: %s", resultMsg.Result)
+	}
+
+	t.Logf("Successfully parsed %d messages from large output", len(messages))
+}
+
+func TestVeryLargeToolResultContent(t *testing.T) {
+	// Test with content size similar to the real failure case (>80MB becomes >4MB after truncation)
+	// We simulate this by creating content that would be ~5MB before truncation
+
+	// Create 5MB of content (simulating a real tool result)
+	largeContent := strings.Repeat("a", 5*1024*1024)
+
+	input := `{"type":"system","subtype":"init","session_id":"test-001"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"` + largeContent + `"}]},"session_id":"test-001"}
+{"type":"result","subtype":"success","result":"Done","session_id":"test-001"}`
+
+	t.Logf("Original input size: %.2f MB", float64(len(input))/(1024*1024))
+
+	messages, err := MapClaudeOutputToMessages(input)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	if len(messages) != 3 {
+		t.Errorf("Expected 3 messages, got %d", len(messages))
+	}
+
+	// Verify result message is extractable
+	if resultMsg, ok := messages[2].(ResultMessage); ok {
+		if resultMsg.Result != "Done" {
+			t.Errorf("Expected result 'Done', got '%s'", resultMsg.Result)
+		}
+	} else {
+		t.Errorf("Expected ResultMessage, got %T", messages[2])
+	}
+}
+
+func TestErrorDuringExecutionWithValidResponse(t *testing.T) {
+	// This test verifies that when Claude exits with status 1 due to an internal error
+	// (like EISDIR), but has already produced a valid response, we can still extract
+	// the assistant's response from the output.
+	//
+	// This simulates the real-world scenario where:
+	// 1. Claude starts a session and produces valid responses
+	// 2. An internal error occurs (e.g., trying to read a directory as a file)
+	// 3. Claude exits with status 1
+	// 4. The output contains both valid assistant messages AND an error result
+	logFilePath := "fixtures/error_during_execution_with_response.json"
+
+	content, err := os.ReadFile(logFilePath)
+	if err != nil {
+		t.Skipf("Fixture file not found at %s: %v", logFilePath, err)
+		return
+	}
+
+	messages, err := MapClaudeOutputToMessages(string(content))
+	if err != nil {
+		t.Fatalf("Failed to parse fixture: %v", err)
+	}
+
+	// Should parse all messages successfully
+	if len(messages) == 0 {
+		t.Fatal("Expected to parse some messages")
+	}
+
+	t.Logf("Parsed %d messages from fixture", len(messages))
+
+	// Find the result message
+	var resultMsg ResultMessage
+	var foundResult bool
+	for _, msg := range messages {
+		if r, ok := msg.(ResultMessage); ok {
+			resultMsg = r
+			foundResult = true
+			break
+		}
+	}
+
+	if !foundResult {
+		t.Fatal("Expected to find a result message")
+	}
+
+	// Verify the result message has the error_during_execution subtype
+	if resultMsg.Subtype != "error_during_execution" {
+		t.Errorf("Expected subtype 'error_during_execution', got '%s'", resultMsg.Subtype)
+	}
+
+	// Verify is_error is true
+	if !resultMsg.IsError {
+		t.Error("Expected is_error to be true")
+	}
+
+	// Find assistant messages with text content (not just tool_use)
+	var assistantTextMessages []string
+	for _, msg := range messages {
+		if aMsg, ok := msg.(AssistantMessage); ok {
+			for _, contentRaw := range aMsg.Message.Content {
+				var contentItem struct {
+					Type string `json:"type"`
+					Text string `json:"text,omitempty"`
+				}
+				if err := json.Unmarshal(contentRaw, &contentItem); err == nil {
+					if contentItem.Type == "text" && contentItem.Text != "" {
+						assistantTextMessages = append(assistantTextMessages, contentItem.Text)
+					}
+				}
+			}
+		}
+	}
+
+	if len(assistantTextMessages) == 0 {
+		t.Error("Expected to find assistant messages with text content")
+	} else {
+		t.Logf("Found %d assistant text messages", len(assistantTextMessages))
+		// The last assistant text should contain the actual response
+		lastAssistantText := assistantTextMessages[len(assistantTextMessages)-1]
+		if !strings.Contains(lastAssistantText, "validation") {
+			t.Errorf("Expected assistant text to contain 'validation', got: %s", lastAssistantText)
+		}
+	}
+}
+
+func TestStripLargeToolUseResultContent(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectStripped bool
+		truncMarker    string
+		description    string
+	}{
+		{
+			name:           "small stdout unchanged",
+			input:          `{"type":"user","tool_use_result":{"stdout":"small output","stderr":"","interrupted":false}}`,
+			expectStripped: false,
+			description:    "stdout under 100KB should not be modified",
+		},
+		{
+			name:           "large stdout truncated",
+			input:          `{"type":"user","tool_use_result":{"stdout":"` + strings.Repeat("x", 150*1024) + `","stderr":"","interrupted":false}}`,
+			expectStripped: true,
+			truncMarker:    "[STDOUT_TRUNCATED_",
+			description:    "stdout over 100KB should be truncated",
+		},
+		{
+			name:           "large stderr truncated",
+			input:          `{"type":"user","tool_use_result":{"stdout":"","stderr":"` + strings.Repeat("e", 150*1024) + `","interrupted":false}}`,
+			expectStripped: true,
+			truncMarker:    "[STDERR_TRUNCATED_",
+			description:    "stderr over 100KB should be truncated",
+		},
+		{
+			name:           "both stdout and stderr truncated",
+			input:          `{"type":"user","tool_use_result":{"stdout":"` + strings.Repeat("o", 150*1024) + `","stderr":"` + strings.Repeat("e", 150*1024) + `","interrupted":false}}`,
+			expectStripped: true,
+			truncMarker:    "[STDOUT_TRUNCATED_",
+			description:    "Both stdout and stderr over 100KB should be truncated",
+		},
+		{
+			name:           "empty input",
+			input:          "",
+			expectStripped: false,
+			description:    "Empty input should return empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripLargeToolUseResultContent(tt.input)
+
+			if tt.expectStripped {
+				if !strings.Contains(result, tt.truncMarker) {
+					t.Errorf("%s: expected content to be truncated with marker %s but it wasn't", tt.description, tt.truncMarker)
+				}
+				if len(result) >= len(tt.input) {
+					t.Errorf("%s: expected result to be smaller than input", tt.description)
+				}
+			} else {
+				if tt.input != "" && result != tt.input {
+					t.Errorf("%s: expected content to remain unchanged", tt.description)
+				}
+			}
+		})
+	}
+}
+
+func TestToolResultWithEscapedQuotes(t *testing.T) {
+	// This test verifies that tool_result content with escaped quotes is properly handled.
+	// The bug was that the regex [^"]* would consume backslashes, causing it to stop early
+	// when it hit an escaped quote (\") because it would consume the backslash and then
+	// stop at the quote.
+	//
+	// Fixed by using [^"\\]* which doesn't consume backslashes, allowing \\. to properly
+	// match escaped characters like \"
+
+	// Content with escaped JSON containing quotes
+	contentWithEscapedQuotes := `Some text with \"escaped\" quotes and more \"nested\" content`
+	input := `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"` + contentWithEscapedQuotes + `"}]}}`
+
+	// The strip function should handle this correctly without breaking
+	result := stripLargeToolResultContent(input)
+
+	// Since content is small, it should remain unchanged
+	if result != input {
+		t.Errorf("Small content with escaped quotes should remain unchanged.\nInput:  %s\nResult: %s", input, result)
+	}
+}
+
+func TestLargeToolUseResultParsing(t *testing.T) {
+	// This test verifies that the parser can handle output containing very large
+	// tool_use_result.stdout fields that would previously exceed the 4MB buffer limit.
+	//
+	// Real-world scenario: Claude runs a command that outputs 64MB+ of data.
+	// The tool_use_result.stdout field would exceed bufio.Scanner's buffer.
+	// With stripLargeToolUseResultContent, the stdout is truncated before parsing.
+
+	// Create 5MB of stdout content
+	largeStdout := strings.Repeat("output line\\n", 500000)
+
+	input := `{"type":"system","subtype":"init","session_id":"test-session-001"}
+{"type":"assistant","message":{"id":"msg_001","type":"message","content":[{"type":"tool_use","id":"toolu_001","name":"Bash","input":{"command":"cat bigfile.txt"}}]},"session_id":"test-session-001"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"output"}]},"session_id":"test-session-001","tool_use_result":{"stdout":"` + largeStdout + `","stderr":"","interrupted":false}}
+{"type":"assistant","message":{"id":"msg_002","type":"message","content":[{"type":"text","text":"Done processing."}]},"session_id":"test-session-001"}
+{"type":"result","subtype":"success","is_error":false,"result":"Done processing.","session_id":"test-session-001"}`
+
+	t.Logf("Test input size: %d bytes (%.2f MB)", len(input), float64(len(input))/(1024*1024))
+
+	messages, err := MapClaudeOutputToMessages(input)
+	if err != nil {
+		t.Fatalf("Failed to parse output with large tool_use_result: %v", err)
+	}
+
+	// Should successfully parse all messages
+	if len(messages) != 5 {
+		t.Errorf("Expected 5 messages, got %d", len(messages))
+	}
+
+	// Verify we can extract the final result
+	var resultMsg ResultMessage
+	var foundResult bool
+	for _, msg := range messages {
+		if r, ok := msg.(ResultMessage); ok {
+			resultMsg = r
+			foundResult = true
+		}
+	}
+
+	if !foundResult {
+		t.Error("Expected to find a result message")
+	}
+
+	if resultMsg.Result != "Done processing." {
+		t.Errorf("Unexpected result: %s", resultMsg.Result)
+	}
+
+	t.Logf("Successfully parsed %d messages from large output", len(messages))
+}

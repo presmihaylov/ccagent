@@ -3,6 +3,7 @@ package services
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -148,12 +149,115 @@ func stripBase64Images(output string) string {
 	return re.ReplaceAllString(output, `${1}[IMAGE_STRIPPED]${3}`)
 }
 
+// stripLargeToolResultContent removes large tool_result content from user messages to reduce memory usage.
+// Tool results can be massive (17MB-85MB for grep results, file reads, etc.) but the parser only
+// needs the final assistant response and result message. This preserves the JSON structure but
+// truncates the content payload when it exceeds a threshold.
+//
+// The pattern matches: "type":"tool_result","content":"<very long content>"
+// and replaces the content with a truncated version plus a marker.
+func stripLargeToolResultContent(output string) string {
+	// Match tool_result content fields that are larger than 100KB
+	// Pattern: "tool_result","content":"<long string that may contain escaped chars>"
+	// The content field in tool_results is always a JSON string (not an object)
+	//
+	// We use a regex that matches the structure and captures content up to a reasonable size
+	// then replaces anything larger with a truncated version
+	const maxContentSize = 100 * 1024 // 100KB threshold
+
+	// This regex matches: "type":"tool_result","content":"
+	// followed by the content string (which we'll process)
+	// IMPORTANT: Use [^"\\]* instead of [^"]* to avoid consuming backslashes that are part of escape sequences
+	re := regexp.MustCompile(`("type":"tool_result","content":")([^"\\]*(?:\\.[^"\\]*)*)(")`)
+
+	return re.ReplaceAllStringFunc(output, func(match string) string {
+		// Extract the parts using the same regex
+		submatches := re.FindStringSubmatch(match)
+		if len(submatches) != 4 {
+			return match
+		}
+
+		prefix := submatches[1]  // "type":"tool_result","content":"
+		content := submatches[2] // the actual content
+		suffix := submatches[3]  // closing quote
+
+		if len(content) > maxContentSize {
+			// Truncate and add marker
+			truncated := content[:maxContentSize] + "...[CONTENT_TRUNCATED_" + fmt.Sprintf("%d", len(content)) + "_BYTES]"
+			return prefix + truncated + suffix
+		}
+
+		return match
+	})
+}
+
+// stripLargeToolUseResultContent removes large stdout/stderr content from tool_use_result fields.
+// These fields can be massive (64MB+) when commands output large amounts of data.
+// The parser doesn't use these fields, so we can safely truncate them.
+//
+// The pattern matches: "tool_use_result":{"stdout":"<very long content>"...}
+// and truncates the stdout and stderr fields when they exceed a threshold.
+func stripLargeToolUseResultContent(output string) string {
+	const maxContentSize = 100 * 1024 // 100KB threshold
+
+	// Match stdout field: "stdout":"<content>"
+	// IMPORTANT: Use [^"\\]* to properly handle escaped characters
+	stdoutRe := regexp.MustCompile(`("stdout":")([^"\\]*(?:\\.[^"\\]*)*)(")`)
+	output = stdoutRe.ReplaceAllStringFunc(output, func(match string) string {
+		submatches := stdoutRe.FindStringSubmatch(match)
+		if len(submatches) != 4 {
+			return match
+		}
+
+		prefix := submatches[1]
+		content := submatches[2]
+		suffix := submatches[3]
+
+		if len(content) > maxContentSize {
+			truncated := content[:maxContentSize] + "...[STDOUT_TRUNCATED_" + fmt.Sprintf("%d", len(content)) + "_BYTES]"
+			return prefix + truncated + suffix
+		}
+
+		return match
+	})
+
+	// Match stderr field: "stderr":"<content>"
+	stderrRe := regexp.MustCompile(`("stderr":")([^"\\]*(?:\\.[^"\\]*)*)(")`)
+	output = stderrRe.ReplaceAllStringFunc(output, func(match string) string {
+		submatches := stderrRe.FindStringSubmatch(match)
+		if len(submatches) != 4 {
+			return match
+		}
+
+		prefix := submatches[1]
+		content := submatches[2]
+		suffix := submatches[3]
+
+		if len(content) > maxContentSize {
+			truncated := content[:maxContentSize] + "...[STDERR_TRUNCATED_" + fmt.Sprintf("%d", len(content)) + "_BYTES]"
+			return prefix + truncated + suffix
+		}
+
+		return match
+	})
+
+	return output
+}
+
 // MapClaudeOutputToMessages parses Claude command output into structured messages
 // This is exported to allow reuse across different modules
 func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
 	// Strip large base64 images before parsing to reduce memory usage
 	// Images are never used (only text is extracted), but can make lines exceed buffer limits
 	output = stripBase64Images(output)
+
+	// Strip large tool_result content before parsing to reduce memory usage
+	// Tool results can be massive (17MB-85MB) but we only need the final assistant response
+	output = stripLargeToolResultContent(output)
+
+	// Strip large tool_use_result stdout/stderr content before parsing
+	// These fields can be 64MB+ when commands output large data
+	output = stripLargeToolUseResultContent(output)
 
 	var messages []ClaudeMessage
 

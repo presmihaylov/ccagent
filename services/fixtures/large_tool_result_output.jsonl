@@ -1,0 +1,6 @@
+{"type":"system","subtype":"init","cwd":"/workspace/repo","session_id":"test-session-12345","tools":["Task","Bash","Read"],"mcp_servers":[],"model":"claude-opus-4-5-20251101","permissionMode":"bypassPermissions"}
+{"type":"assistant","message":{"id":"msg_001","type":"message","role":"assistant","content":[{"type":"text","text":"I'll search for the files."}]},"session_id":"test-session-12345"}
+{"type":"assistant","message":{"id":"msg_001","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_001","name":"Bash","input":{"command":"find . -type f"}}]},"session_id":"test-session-12345"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"file1.txt\nfile2.txt\nfile3.txt"}]},"session_id":"test-session-12345"}
+{"type":"assistant","message":{"id":"msg_002","type":"message","role":"assistant","content":[{"type":"text","text":"Found the files. Here's the summary."}]},"session_id":"test-session-12345"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":2,"result":"Found the files. Here's the summary.","session_id":"test-session-12345","total_cost_usd":0.05}
