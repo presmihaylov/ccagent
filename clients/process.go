@@ -32,7 +32,7 @@ func AgentHTTPProxy() string {
 // BuildAgentCommand creates an exec.Cmd that runs the given command
 // as the configured agent user (or current user if not configured).
 //
-// When AGENT_EXEC_USER is set, the command is wrapped with 'su' to run
+// When AGENT_EXEC_USER is set, the command is wrapped with 'sudo -u' to run
 // as the specified user, providing process isolation that prevents
 // agents from reading the parent process's /proc/*/environ.
 //
@@ -41,6 +41,9 @@ func AgentHTTPProxy() string {
 //
 // If AGENT_HTTP_PROXY is configured, HTTP_PROXY and HTTPS_PROXY are
 // injected into the agent's environment to route traffic through the proxy.
+//
+// When running as a different user, HOME is updated to point to that user's
+// home directory to ensure the agent can write to its own home.
 func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 	execUser := AgentExecUser()
 	filteredEnv := FilterEnvForAgent(os.Environ())
@@ -55,9 +58,15 @@ func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 		return cmd
 	}
 
-	// Managed mode: run as specified user via su
-	fullCommand := buildShellCommand(name, args)
-	cmd := exec.Command("su", "-s", "/bin/sh", "-c", fullCommand, execUser)
+	// Managed mode: run as specified user via sudo
+	// Update HOME to point to the agent user's home directory
+	filteredEnv = UpdateHomeForUser(filteredEnv, execUser)
+
+	// Using sudo -E to preserve environment, -u to specify user
+	// The command and args are passed directly (not via shell) for security
+	sudoArgs := []string{"-E", "-u", execUser, name}
+	sudoArgs = append(sudoArgs, args...)
+	cmd := exec.Command("sudo", sudoArgs...)
 	cmd.Env = filteredEnv
 	return cmd
 }
@@ -90,6 +99,24 @@ func FilterEnvForAgent(env []string) []string {
 		}
 	}
 	return filtered
+}
+
+// UpdateHomeForUser updates the HOME environment variable to point to the specified user's home directory.
+// This is necessary when running as a different user to ensure the process can write to its own home.
+func UpdateHomeForUser(env []string, username string) []string {
+	newHome := "/home/" + username
+	result := make([]string, 0, len(env))
+
+	for _, e := range env {
+		if strings.HasPrefix(e, "HOME=") {
+			// Replace existing HOME
+			result = append(result, "HOME="+newHome)
+		} else {
+			result = append(result, e)
+		}
+	}
+
+	return result
 }
 
 // InjectProxyEnv adds HTTP_PROXY and HTTPS_PROXY to the environment if AGENT_HTTP_PROXY is set.

@@ -172,13 +172,13 @@ func TestBuildAgentCommand_Managed(t *testing.T) {
 	os.Setenv("AGENT_EXEC_USER", "agentrunner")
 	cmd := BuildAgentCommand("echo", "hello")
 
-	// In managed mode, should use su
-	if cmd.Args[0] != "su" {
-		t.Errorf("Expected su command in managed mode, got %v", cmd.Args)
+	// In managed mode, should use sudo
+	if cmd.Args[0] != "sudo" {
+		t.Errorf("Expected sudo command in managed mode, got %v", cmd.Args)
 	}
 
-	// Verify su arguments structure: su -s /bin/sh -c "command" username
-	expectedArgs := []string{"su", "-s", "/bin/sh", "-c", "echo 'hello'", "agentrunner"}
+	// Verify sudo arguments structure: sudo -E -u username command args...
+	expectedArgs := []string{"sudo", "-E", "-u", "agentrunner", "echo", "hello"}
 	if len(cmd.Args) != len(expectedArgs) {
 		t.Errorf("Expected %d args, got %d: %v", len(expectedArgs), len(cmd.Args), cmd.Args)
 	}
@@ -187,6 +187,52 @@ func TestBuildAgentCommand_Managed(t *testing.T) {
 		if i < len(cmd.Args) && cmd.Args[i] != arg {
 			t.Errorf("Arg %d: expected %q, got %q", i, arg, cmd.Args[i])
 		}
+	}
+
+	// Verify HOME is updated to agentrunner's home directory
+	hasCorrectHome := false
+	for _, e := range cmd.Env {
+		if e == "HOME=/home/agentrunner" {
+			hasCorrectHome = true
+			break
+		}
+	}
+	if !hasCorrectHome {
+		t.Error("HOME should be set to /home/agentrunner in managed mode")
+	}
+}
+
+func TestUpdateHomeForUser(t *testing.T) {
+	env := []string{
+		"PATH=/usr/bin",
+		"HOME=/home/ccagent",
+		"USER=ccagent",
+	}
+
+	result := UpdateHomeForUser(env, "agentrunner")
+
+	// Should have same number of vars
+	if len(result) != len(env) {
+		t.Errorf("Expected %d vars, got %d", len(env), len(result))
+	}
+
+	// HOME should be updated
+	hasNewHome := false
+	hasOldHome := false
+	for _, e := range result {
+		if e == "HOME=/home/agentrunner" {
+			hasNewHome = true
+		}
+		if e == "HOME=/home/ccagent" {
+			hasOldHome = true
+		}
+	}
+
+	if !hasNewHome {
+		t.Error("HOME should be set to /home/agentrunner")
+	}
+	if hasOldHome {
+		t.Error("Old HOME value should be replaced")
 	}
 }
 
