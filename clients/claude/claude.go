@@ -1,8 +1,6 @@
 package claude
 
 import (
-	"os"
-	"os/exec"
 	"strings"
 
 	"ccagent/clients"
@@ -45,8 +43,7 @@ func (c *ClaudeClient) StartNewSession(prompt string, options *clients.ClaudeOpt
 	log.Info("Starting new Claude session with prompt: %s", prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := exec.Command("claude", args...)
-	cmd.Env = os.Environ()
+	cmd := clients.BuildAgentCommand("claude", args...)
 
 	log.Info("Running Claude command")
 	output, err := cmd.CombinedOutput()
@@ -89,8 +86,7 @@ func (c *ClaudeClient) ContinueSession(sessionID, prompt string, options *client
 	log.Info("Executing Claude command with sessionID: %s, prompt: %s", sessionID, prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := exec.Command("claude", args...)
-	cmd.Env = os.Environ()
+	cmd := clients.BuildAgentCommand("claude", args...)
 
 	log.Info("Running Claude command")
 	output, err := cmd.CombinedOutput()
