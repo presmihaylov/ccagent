@@ -189,3 +189,152 @@ func TestBuildAgentCommand_Managed(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentHTTPProxy(t *testing.T) {
+	// Save original value
+	original := os.Getenv("AGENT_HTTP_PROXY")
+	defer os.Setenv("AGENT_HTTP_PROXY", original)
+
+	// Test when not set
+	os.Unsetenv("AGENT_HTTP_PROXY")
+	if proxy := AgentHTTPProxy(); proxy != "" {
+		t.Errorf("AgentHTTPProxy() = %q, want empty string", proxy)
+	}
+
+	// Test when set
+	os.Setenv("AGENT_HTTP_PROXY", "http://proxy:8080")
+	if proxy := AgentHTTPProxy(); proxy != "http://proxy:8080" {
+		t.Errorf("AgentHTTPProxy() = %q, want %q", proxy, "http://proxy:8080")
+	}
+}
+
+func TestInjectProxyEnv_NoProxy(t *testing.T) {
+	// Save original value
+	original := os.Getenv("AGENT_HTTP_PROXY")
+	defer os.Setenv("AGENT_HTTP_PROXY", original)
+
+	os.Unsetenv("AGENT_HTTP_PROXY")
+
+	env := []string{"PATH=/usr/bin", "HOME=/home/user"}
+	result := InjectProxyEnv(env)
+
+	// Should return unchanged when no proxy configured
+	if len(result) != len(env) {
+		t.Errorf("Expected %d vars, got %d", len(env), len(result))
+	}
+}
+
+func TestInjectProxyEnv_WithProxy(t *testing.T) {
+	// Save original value
+	original := os.Getenv("AGENT_HTTP_PROXY")
+	defer os.Setenv("AGENT_HTTP_PROXY", original)
+
+	os.Setenv("AGENT_HTTP_PROXY", "http://proxy:8080")
+
+	env := []string{"PATH=/usr/bin", "HOME=/home/user"}
+	result := InjectProxyEnv(env)
+
+	// Should add HTTP_PROXY, http_proxy, HTTPS_PROXY, https_proxy
+	expectedLen := len(env) + 4
+	if len(result) != expectedLen {
+		t.Errorf("Expected %d vars, got %d", expectedLen, len(result))
+	}
+
+	// Check that proxy vars are present
+	hasHTTPProxy := false
+	hasHTTPSProxy := false
+	hasLowerHTTPProxy := false
+	hasLowerHTTPSProxy := false
+
+	for _, e := range result {
+		switch {
+		case strings.HasPrefix(e, "HTTP_PROXY=http://proxy:8080"):
+			hasHTTPProxy = true
+		case strings.HasPrefix(e, "HTTPS_PROXY=http://proxy:8080"):
+			hasHTTPSProxy = true
+		case strings.HasPrefix(e, "http_proxy=http://proxy:8080"):
+			hasLowerHTTPProxy = true
+		case strings.HasPrefix(e, "https_proxy=http://proxy:8080"):
+			hasLowerHTTPSProxy = true
+		}
+	}
+
+	if !hasHTTPProxy {
+		t.Error("HTTP_PROXY not found in result")
+	}
+	if !hasHTTPSProxy {
+		t.Error("HTTPS_PROXY not found in result")
+	}
+	if !hasLowerHTTPProxy {
+		t.Error("http_proxy not found in result")
+	}
+	if !hasLowerHTTPSProxy {
+		t.Error("https_proxy not found in result")
+	}
+}
+
+func TestInjectProxyEnv_DoesNotOverride(t *testing.T) {
+	// Save original value
+	original := os.Getenv("AGENT_HTTP_PROXY")
+	defer os.Setenv("AGENT_HTTP_PROXY", original)
+
+	os.Setenv("AGENT_HTTP_PROXY", "http://proxy:8080")
+
+	// Env already has proxy vars
+	env := []string{
+		"PATH=/usr/bin",
+		"HTTP_PROXY=http://existing:3128",
+		"HTTPS_PROXY=http://existing:3128",
+	}
+	result := InjectProxyEnv(env)
+
+	// Should not add new proxy vars if they already exist
+	if len(result) != len(env) {
+		t.Errorf("Expected %d vars (no additions), got %d", len(env), len(result))
+	}
+
+	// Verify existing proxy values are preserved
+	for _, e := range result {
+		if strings.HasPrefix(e, "HTTP_PROXY=") && e != "HTTP_PROXY=http://existing:3128" {
+			t.Errorf("HTTP_PROXY was overridden: %s", e)
+		}
+		if strings.HasPrefix(e, "HTTPS_PROXY=") && e != "HTTPS_PROXY=http://existing:3128" {
+			t.Errorf("HTTPS_PROXY was overridden: %s", e)
+		}
+	}
+}
+
+func TestBuildAgentCommand_InjectsProxy(t *testing.T) {
+	// Save original values
+	origUser := os.Getenv("AGENT_EXEC_USER")
+	origProxy := os.Getenv("AGENT_HTTP_PROXY")
+	defer func() {
+		os.Setenv("AGENT_EXEC_USER", origUser)
+		os.Setenv("AGENT_HTTP_PROXY", origProxy)
+	}()
+
+	os.Unsetenv("AGENT_EXEC_USER")
+	os.Setenv("AGENT_HTTP_PROXY", "http://secret-proxy:8080")
+
+	cmd := BuildAgentCommand("echo", "hello")
+
+	// Check that proxy vars are in the command's environment
+	hasHTTPProxy := false
+	hasHTTPSProxy := false
+
+	for _, e := range cmd.Env {
+		if strings.HasPrefix(e, "HTTP_PROXY=http://secret-proxy:8080") {
+			hasHTTPProxy = true
+		}
+		if strings.HasPrefix(e, "HTTPS_PROXY=http://secret-proxy:8080") {
+			hasHTTPSProxy = true
+		}
+	}
+
+	if !hasHTTPProxy {
+		t.Error("HTTP_PROXY not injected into command environment")
+	}
+	if !hasHTTPSProxy {
+		t.Error("HTTPS_PROXY not injected into command environment")
+	}
+}

@@ -13,12 +13,20 @@ var BlockedEnvVars = map[string]bool{
 	"CCAGENT_API_KEY":    true,
 	"CCAGENT_WS_API_URL": true,
 	"AGENT_EXEC_USER":    true,
+	"AGENT_HTTP_PROXY":   true, // This is for ccagent to read, not for agents
 }
 
 // AgentExecUser returns the configured user for running agent processes.
 // Returns empty string if not configured (self-hosted mode).
 func AgentExecUser() string {
 	return os.Getenv("AGENT_EXEC_USER")
+}
+
+// AgentHTTPProxy returns the HTTP proxy URL that agent processes should use.
+// This is read from AGENT_HTTP_PROXY and injected into agent processes as HTTP_PROXY/HTTPS_PROXY.
+// Returns empty string if not configured.
+func AgentHTTPProxy() string {
+	return os.Getenv("AGENT_HTTP_PROXY")
 }
 
 // BuildAgentCommand creates an exec.Cmd that runs the given command
@@ -30,9 +38,15 @@ func AgentExecUser() string {
 //
 // Sensitive environment variables (CCAGENT_API_KEY, etc.) are always
 // filtered from the command's environment.
+//
+// If AGENT_HTTP_PROXY is configured, HTTP_PROXY and HTTPS_PROXY are
+// injected into the agent's environment to route traffic through the proxy.
 func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 	execUser := AgentExecUser()
 	filteredEnv := FilterEnvForAgent(os.Environ())
+
+	// Inject HTTP proxy settings for agent processes if configured
+	filteredEnv = InjectProxyEnv(filteredEnv)
 
 	if execUser == "" {
 		// Self-hosted mode: run as current user
@@ -76,4 +90,38 @@ func FilterEnvForAgent(env []string) []string {
 		}
 	}
 	return filtered
+}
+
+// InjectProxyEnv adds HTTP_PROXY and HTTPS_PROXY to the environment if AGENT_HTTP_PROXY is set.
+// This ensures agent processes route their traffic through the secret proxy while the
+// ccagent process itself does not use the proxy (allowing it to reach the backend).
+func InjectProxyEnv(env []string) []string {
+	proxyURL := AgentHTTPProxy()
+	if proxyURL == "" {
+		return env
+	}
+
+	// Check if HTTP_PROXY or HTTPS_PROXY already exist in env
+	hasHTTPProxy := false
+	hasHTTPSProxy := false
+	for _, e := range env {
+		if strings.HasPrefix(e, "HTTP_PROXY=") || strings.HasPrefix(e, "http_proxy=") {
+			hasHTTPProxy = true
+		}
+		if strings.HasPrefix(e, "HTTPS_PROXY=") || strings.HasPrefix(e, "https_proxy=") {
+			hasHTTPSProxy = true
+		}
+	}
+
+	// Only add if not already present (don't override explicit settings)
+	if !hasHTTPProxy {
+		env = append(env, "HTTP_PROXY="+proxyURL)
+		env = append(env, "http_proxy="+proxyURL) // Some tools use lowercase
+	}
+	if !hasHTTPSProxy {
+		env = append(env, "HTTPS_PROXY="+proxyURL)
+		env = append(env, "https_proxy="+proxyURL) // Some tools use lowercase
+	}
+
+	return env
 }
