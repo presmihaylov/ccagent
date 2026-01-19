@@ -14,10 +14,6 @@ var BlockedEnvVars = map[string]bool{
 	"CCAGENT_WS_API_URL": true,
 	"AGENT_EXEC_USER":    true,
 	"AGENT_HTTP_PROXY":   true, // This is for ccagent to read, not for agents
-	// OAuth and API tokens - agents should use placeholders, real values injected by proxy
-	"CLAUDE_CODE_OAUTH_TOKEN": true,
-	"GH_TOKEN":                true,
-	"GITHUB_TOKEN":            true, // Alternative name for GitHub token
 }
 
 // AgentExecUser returns the configured user for running agent processes.
