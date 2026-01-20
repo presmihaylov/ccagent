@@ -1,3 +1,12 @@
+## [v0.0.44] - 2026-01-20
+
+### Bugfixes
+
+- Fix deploy artifacts to agent user's home directory ([#79](https://github.com/presmihaylov/ccagent/pull/79))
+  - Deploys MCP servers, rules, permissions, and skills to the agent user's home directory
+  - Ensures proper file ownership and permissions for agent processes
+  - Improves reliability when running agents as non-root users
+
 ## [v0.0.43] - 2026-01-20
 
 ### Features
