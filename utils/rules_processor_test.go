@@ -317,7 +317,7 @@ func TestClaudeCodeRulesProcessor_NoRules(t *testing.T) {
 
 	// Process rules (should succeed with no rules)
 	processor := NewClaudeCodeRulesProcessor(workDir)
-	if err := processor.ProcessRules(); err != nil {
+	if err := processor.ProcessRules(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -367,7 +367,7 @@ func TestClaudeCodeRulesProcessor_WithRules(t *testing.T) {
 
 	// Process rules
 	processor := NewClaudeCodeRulesProcessor(workDir)
-	if err := processor.ProcessRules(); err != nil {
+	if err := processor.ProcessRules(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -431,7 +431,7 @@ func TestClaudeCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
 
 	// Process rules
 	processor := NewClaudeCodeRulesProcessor(workDir)
-	if err := processor.ProcessRules(); err != nil {
+	if err := processor.ProcessRules(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -465,7 +465,7 @@ func TestOpenCodeRulesProcessor_NoRules(t *testing.T) {
 
 	// Process rules (should succeed with no rules)
 	processor := NewOpenCodeRulesProcessor(workDir)
-	if err := processor.ProcessRules(); err != nil {
+	if err := processor.ProcessRules(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -522,7 +522,7 @@ Write tests for everything.`
 
 	// Process rules
 	processor := NewOpenCodeRulesProcessor(workDir)
-	if err := processor.ProcessRules(); err != nil {
+	if err := processor.ProcessRules(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -587,7 +587,7 @@ func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 
 	// Process rules
 	processor := NewOpenCodeRulesProcessor(workDir)
-	if err := processor.ProcessRules(); err != nil {
+	if err := processor.ProcessRules(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -606,7 +606,7 @@ func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 
 func TestNoOpRulesProcessor(t *testing.T) {
 	processor := NewNoOpRulesProcessor()
-	if err := processor.ProcessRules(); err != nil {
+	if err := processor.ProcessRules(""); err != nil {
 		t.Fatalf("Expected no error from NoOp processor, got: %v", err)
 	}
 }

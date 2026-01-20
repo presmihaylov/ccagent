@@ -22,7 +22,7 @@ func TestOpenCodePermissionsProcessor_ProcessPermissions(t *testing.T) {
 
 	// Create the processor and run it
 	processor := NewOpenCodePermissionsProcessor("/tmp/workdir")
-	err = processor.ProcessPermissions()
+	err = processor.ProcessPermissions("")
 	if err != nil {
 		t.Fatalf("ProcessPermissions failed: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestOpenCodePermissionsProcessor_PreservesExistingConfig(t *testing.T) {
 
 	// Create the processor and run it
 	processor := NewOpenCodePermissionsProcessor("/tmp/workdir")
-	err = processor.ProcessPermissions()
+	err = processor.ProcessPermissions("")
 	if err != nil {
 		t.Fatalf("ProcessPermissions failed: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestOpenCodePermissionsProcessor_PreservesExistingConfig(t *testing.T) {
 
 func TestNoOpPermissionsProcessor_ProcessPermissions(t *testing.T) {
 	processor := NewNoOpPermissionsProcessor()
-	err := processor.ProcessPermissions()
+	err := processor.ProcessPermissions("")
 	if err != nil {
 		t.Errorf("NoOpPermissionsProcessor should not return an error, got: %v", err)
 	}

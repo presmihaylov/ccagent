@@ -177,7 +177,9 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 }
 
 // processAgentRules processes rules from ccagent directory based on agent type
-func processAgentRules(agentType, workDir string) error {
+// targetHomeDir specifies the home directory to deploy rules to.
+// If empty, uses the current user's home directory.
+func processAgentRules(agentType, workDir, targetHomeDir string) error {
 	log.Info("📋 Processing agent rules for agent type: %s", agentType)
 
 	var processor utils.RulesProcessor
@@ -194,7 +196,7 @@ func processAgentRules(agentType, workDir string) error {
 		return fmt.Errorf("unknown agent type: %s", agentType)
 	}
 
-	if err := processor.ProcessRules(); err != nil {
+	if err := processor.ProcessRules(targetHomeDir); err != nil {
 		return fmt.Errorf("failed to process rules: %w", err)
 	}
 
@@ -202,7 +204,9 @@ func processAgentRules(agentType, workDir string) error {
 }
 
 // processMCPConfigs processes MCP configs from ccagent directory based on agent type
-func processMCPConfigs(agentType, workDir string) error {
+// targetHomeDir specifies the home directory to deploy configs to.
+// If empty, uses the current user's home directory.
+func processMCPConfigs(agentType, workDir, targetHomeDir string) error {
 	log.Info("🔌 Processing MCP configs for agent type: %s", agentType)
 
 	var processor utils.MCPProcessor
@@ -219,7 +223,7 @@ func processMCPConfigs(agentType, workDir string) error {
 		return fmt.Errorf("unknown agent type: %s", agentType)
 	}
 
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(targetHomeDir); err != nil {
 		return fmt.Errorf("failed to process MCP configs: %w", err)
 	}
 
@@ -227,7 +231,9 @@ func processMCPConfigs(agentType, workDir string) error {
 }
 
 // processSkills processes skills from ccagent directory based on agent type
-func processSkills(agentType string) error {
+// targetHomeDir specifies the home directory to deploy skills to.
+// If empty, uses the current user's home directory.
+func processSkills(agentType, targetHomeDir string) error {
 	log.Info("🎯 Processing skills for agent type: %s", agentType)
 
 	var processor utils.SkillsProcessor
@@ -244,7 +250,7 @@ func processSkills(agentType string) error {
 		return fmt.Errorf("unknown agent type: %s", agentType)
 	}
 
-	if err := processor.ProcessSkills(); err != nil {
+	if err := processor.ProcessSkills(targetHomeDir); err != nil {
 		return fmt.Errorf("failed to process skills: %w", err)
 	}
 
@@ -252,7 +258,9 @@ func processSkills(agentType string) error {
 }
 
 // processPermissions configures agent-specific permissions for automated operation
-func processPermissions(agentType, workDir string) error {
+// targetHomeDir specifies the home directory to deploy config to.
+// If empty, uses the current user's home directory.
+func processPermissions(agentType, workDir, targetHomeDir string) error {
 	log.Info("🔓 Processing permissions for agent type: %s", agentType)
 
 	var processor utils.PermissionsProcessor
@@ -268,7 +276,7 @@ func processPermissions(agentType, workDir string) error {
 		return fmt.Errorf("unknown agent type: %s", agentType)
 	}
 
-	if err := processor.ProcessPermissions(); err != nil {
+	if err := processor.ProcessPermissions(targetHomeDir); err != nil {
 		return fmt.Errorf("failed to process permissions: %w", err)
 	}
 
@@ -386,23 +394,33 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 		return nil, fmt.Errorf("failed to get working directory: %w", err)
 	}
 
+	// Determine target home directory for artifact deployment.
+	// When AGENT_EXEC_USER is set (managed container mode), artifacts should be
+	// deployed to that user's home directory since the agent process runs as that user.
+	// This ensures skills, rules, and MCP configs are accessible to the agent.
+	targetHomeDir := ""
+	if execUser := clients.AgentExecUser(); execUser != "" {
+		targetHomeDir = "/home/" + execUser
+		log.Info("🏠 Agent exec user configured: %s, deploying artifacts to %s", execUser, targetHomeDir)
+	}
+
 	// Process rules based on agent type
-	if err := processAgentRules(agentType, workDir); err != nil {
+	if err := processAgentRules(agentType, workDir, targetHomeDir); err != nil {
 		return nil, fmt.Errorf("failed to process agent rules: %w", err)
 	}
 
 	// Process MCP configs based on agent type
-	if err := processMCPConfigs(agentType, workDir); err != nil {
+	if err := processMCPConfigs(agentType, workDir, targetHomeDir); err != nil {
 		return nil, fmt.Errorf("failed to process MCP configs: %w", err)
 	}
 
 	// Process skills based on agent type
-	if err := processSkills(agentType); err != nil {
+	if err := processSkills(agentType, targetHomeDir); err != nil {
 		return nil, fmt.Errorf("failed to process skills: %w", err)
 	}
 
 	// Process permissions based on agent type (enables yolo mode for OpenCode)
-	if err := processPermissions(agentType, workDir); err != nil {
+	if err := processPermissions(agentType, workDir, targetHomeDir); err != nil {
 		return nil, fmt.Errorf("failed to process permissions: %w", err)
 	}
 

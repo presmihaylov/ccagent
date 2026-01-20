@@ -15,8 +15,10 @@ import (
 // SkillsProcessor defines the interface for processing agent-specific skills
 type SkillsProcessor interface {
 	// ProcessSkills processes skills from the ccagent skills directory
-	// and extracts them to the agent-specific location
-	ProcessSkills() error
+	// and extracts them to the agent-specific location.
+	// targetHomeDir specifies the home directory to deploy skills to.
+	// If empty, uses the current user's home directory.
+	ProcessSkills(targetHomeDir string) error
 }
 
 // GetCcagentSkillsDir returns the path to the ccagent skills directory
@@ -252,7 +254,9 @@ func NewClaudeCodeSkillsProcessor() *ClaudeCodeSkillsProcessor {
 }
 
 // ProcessSkills implements SkillsProcessor for Claude Code
-func (p *ClaudeCodeSkillsProcessor) ProcessSkills() error {
+// targetHomeDir specifies the home directory to deploy skills to.
+// If empty, uses the current user's home directory.
+func (p *ClaudeCodeSkillsProcessor) ProcessSkills(targetHomeDir string) error {
 	log.Info("🎯 Processing skills for Claude Code agent")
 
 	// Get skill files from ccagent directory
@@ -268,11 +272,17 @@ func (p *ClaudeCodeSkillsProcessor) ProcessSkills() error {
 
 	log.Info("🎯 Found %d skill file(s) to process", len(skillFiles))
 
-	// Get home directory for Claude Code skills
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	// Determine home directory for Claude Code skills
+	homeDir := targetHomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
 	}
+
+	log.Info("🎯 Deploying skills to home directory: %s", homeDir)
 
 	// Target directory: ~/.claude/skills/
 	claudeSkillsDir := filepath.Join(homeDir, ".claude", "skills")
@@ -328,7 +338,9 @@ func NewOpenCodeSkillsProcessor() *OpenCodeSkillsProcessor {
 }
 
 // ProcessSkills implements SkillsProcessor for OpenCode
-func (p *OpenCodeSkillsProcessor) ProcessSkills() error {
+// targetHomeDir specifies the home directory to deploy skills to.
+// If empty, uses the current user's home directory.
+func (p *OpenCodeSkillsProcessor) ProcessSkills(targetHomeDir string) error {
 	log.Info("🎯 Processing skills for OpenCode agent")
 
 	// Get skill files from ccagent directory
@@ -344,11 +356,17 @@ func (p *OpenCodeSkillsProcessor) ProcessSkills() error {
 
 	log.Info("🎯 Found %d skill file(s) to process", len(skillFiles))
 
-	// Get home directory for OpenCode skills
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	// Determine home directory for OpenCode skills
+	homeDir := targetHomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
 	}
+
+	log.Info("🎯 Deploying skills to home directory: %s", homeDir)
 
 	// Target directory: ~/.config/opencode/skill/
 	opencodeSkillsDir := filepath.Join(homeDir, ".config", "opencode", "skill")
@@ -404,7 +422,7 @@ func NewNoOpSkillsProcessor() *NoOpSkillsProcessor {
 }
 
 // ProcessSkills implements SkillsProcessor with no operation
-func (p *NoOpSkillsProcessor) ProcessSkills() error {
+func (p *NoOpSkillsProcessor) ProcessSkills(targetHomeDir string) error {
 	log.Info("🎯 Skills processing not supported for this agent type")
 	return nil
 }

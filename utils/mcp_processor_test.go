@@ -543,7 +543,7 @@ func TestClaudeCodeMCPProcessor_NoConfigs(t *testing.T) {
 
 	// Process MCP configs (should succeed with no configs)
 	processor := NewClaudeCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -590,7 +590,7 @@ func TestClaudeCodeMCPProcessor_WithConfigs(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewClaudeCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -674,7 +674,7 @@ func TestClaudeCodeMCPProcessor_WithMultipleMCPConfigs(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewClaudeCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -761,7 +761,7 @@ func TestClaudeCodeMCPProcessor_PreservesExistingConfig(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewClaudeCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -809,7 +809,7 @@ func TestOpenCodeMCPProcessor_NoConfigs(t *testing.T) {
 
 	// Process MCP configs (should succeed with no configs)
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -856,7 +856,7 @@ func TestOpenCodeMCPProcessor_WithConfigs(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -976,7 +976,7 @@ func TestOpenCodeMCPProcessor_WithMultipleMCPConfigs(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -1068,7 +1068,7 @@ func TestOpenCodeMCPProcessor_PreservesExistingConfig(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -1145,7 +1145,7 @@ func TestOpenCodeMCPProcessor_LocalServerTransformation(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -1264,7 +1264,7 @@ func TestOpenCodeMCPProcessor_RemoteServerTransformation(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -1370,7 +1370,7 @@ func TestOpenCodeMCPProcessor_MixedLocalAndRemoteServers(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -1461,7 +1461,7 @@ func TestOpenCodeMCPProcessor_LocalServerWithoutEnv(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -1549,7 +1549,7 @@ func TestOpenCodeMCPProcessor_RemoteServerWithoutHeaders(t *testing.T) {
 
 	// Process MCP configs
 	processor := NewOpenCodeMCPProcessor(workDir)
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
@@ -1600,7 +1600,7 @@ func TestOpenCodeMCPProcessor_RemoteServerWithoutHeaders(t *testing.T) {
 
 func TestNoOpMCPProcessor(t *testing.T) {
 	processor := NewNoOpMCPProcessor()
-	if err := processor.ProcessMCPConfigs(); err != nil {
+	if err := processor.ProcessMCPConfigs(""); err != nil {
 		t.Fatalf("Expected no error from NoOp processor, got: %v", err)
 	}
 }
