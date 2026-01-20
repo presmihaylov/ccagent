@@ -20,8 +20,10 @@ type RuleFrontMatter struct {
 // RulesProcessor defines the interface for processing agent-specific rules
 type RulesProcessor interface {
 	// ProcessRules processes rules from the ccagent rules directory
-	// and copies them to the agent-specific location
-	ProcessRules() error
+	// and copies them to the agent-specific location.
+	// targetHomeDir specifies the home directory to deploy rules to.
+	// If empty, uses the current user's home directory.
+	ProcessRules(targetHomeDir string) error
 }
 
 // ParseFrontMatter extracts title and description from markdown front matter
@@ -165,7 +167,9 @@ func NewClaudeCodeRulesProcessor(workDir string) *ClaudeCodeRulesProcessor {
 }
 
 // ProcessRules implements RulesProcessor for Claude Code
-func (p *ClaudeCodeRulesProcessor) ProcessRules() error {
+// targetHomeDir specifies the home directory to deploy rules to.
+// If empty, uses the current user's home directory.
+func (p *ClaudeCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 	log.Info("📋 Processing rules for Claude Code agent")
 
 	// Get rule files from ccagent directory
@@ -181,11 +185,17 @@ func (p *ClaudeCodeRulesProcessor) ProcessRules() error {
 
 	log.Info("📋 Found %d rule file(s) to process", len(ruleFiles))
 
-	// Get home directory for Claude Code rules
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	// Determine home directory for Claude Code rules
+	homeDir := targetHomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
 	}
+
+	log.Info("📋 Deploying rules to home directory: %s", homeDir)
 
 	// Create .claude/rules directory in home directory
 	claudeRulesDir := filepath.Join(homeDir, ".claude", "rules")
@@ -245,7 +255,9 @@ func NewOpenCodeRulesProcessor(workDir string) *OpenCodeRulesProcessor {
 // It creates an opencode.json with an instructions array that references the ccagent
 // rules directory directly using a glob pattern. OpenCode will load rules from there
 // without needing to copy files.
-func (p *OpenCodeRulesProcessor) ProcessRules() error {
+// targetHomeDir specifies the home directory to deploy config to.
+// If empty, uses the current user's home directory.
+func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 	log.Info("📋 Processing rules for OpenCode agent")
 
 	// Get rule files from ccagent directory
@@ -261,11 +273,17 @@ func (p *OpenCodeRulesProcessor) ProcessRules() error {
 
 	log.Info("📋 Found %d rule file(s) to process", len(ruleFiles))
 
-	// Get home directory for OpenCode config
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	// Determine home directory for OpenCode config
+	homeDir := targetHomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
 	}
+
+	log.Info("📋 Deploying OpenCode config to home directory: %s", homeDir)
 
 	opencodeConfigDir := filepath.Join(homeDir, ".config", "opencode")
 
@@ -312,7 +330,7 @@ func NewNoOpRulesProcessor() *NoOpRulesProcessor {
 }
 
 // ProcessRules implements RulesProcessor with no operation
-func (p *NoOpRulesProcessor) ProcessRules() error {
+func (p *NoOpRulesProcessor) ProcessRules(targetHomeDir string) error {
 	log.Info("📋 Rules processing not supported for this agent type")
 	return nil
 }

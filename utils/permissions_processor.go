@@ -11,8 +11,10 @@ import (
 
 // PermissionsProcessor defines the interface for processing agent-specific permissions
 type PermissionsProcessor interface {
-	// ProcessPermissions configures permissions for the agent
-	ProcessPermissions() error
+	// ProcessPermissions configures permissions for the agent.
+	// targetHomeDir specifies the home directory to deploy config to.
+	// If empty, uses the current user's home directory.
+	ProcessPermissions(targetHomeDir string) error
 }
 
 // OpenCodePermissionsProcessor handles permissions configuration for OpenCode
@@ -33,14 +35,22 @@ func NewOpenCodePermissionsProcessor(workDir string) *OpenCodePermissionsProcess
 // This is required because OpenCode defaults to asking for permission on certain
 // operations (like accessing paths outside the project directory), which blocks
 // automated workflows.
-func (p *OpenCodePermissionsProcessor) ProcessPermissions() error {
+// targetHomeDir specifies the home directory to deploy config to.
+// If empty, uses the current user's home directory.
+func (p *OpenCodePermissionsProcessor) ProcessPermissions(targetHomeDir string) error {
 	log.Info("🔓 Processing permissions for OpenCode agent")
 
-	// Get home directory for OpenCode config
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	// Determine home directory for OpenCode config
+	homeDir := targetHomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
 	}
+
+	log.Info("🔓 Deploying OpenCode permissions to home directory: %s", homeDir)
 
 	opencodeConfigDir := filepath.Join(homeDir, ".config", "opencode")
 	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
@@ -108,7 +118,7 @@ func NewNoOpPermissionsProcessor() *NoOpPermissionsProcessor {
 }
 
 // ProcessPermissions implements PermissionsProcessor with no operation
-func (p *NoOpPermissionsProcessor) ProcessPermissions() error {
+func (p *NoOpPermissionsProcessor) ProcessPermissions(targetHomeDir string) error {
 	log.Info("🔓 Permissions processing not needed for this agent type")
 	return nil
 }

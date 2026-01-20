@@ -13,8 +13,10 @@ import (
 // MCPProcessor defines the interface for processing agent-specific MCP configurations
 type MCPProcessor interface {
 	// ProcessMCPConfigs processes MCP configs from the ccagent MCP directory
-	// and applies them to the agent-specific location
-	ProcessMCPConfigs() error
+	// and applies them to the agent-specific location.
+	// targetHomeDir specifies the home directory to deploy configs to.
+	// If empty, uses the current user's home directory.
+	ProcessMCPConfigs(targetHomeDir string) error
 }
 
 // GetCcagentMCPDir returns the path to the ccagent MCP directory
@@ -159,7 +161,9 @@ func NewClaudeCodeMCPProcessor(workDir string) *ClaudeCodeMCPProcessor {
 
 // ProcessMCPConfigs implements MCPProcessor for Claude Code
 // It reads all MCP configs, merges them, and updates ~/.claude.json
-func (p *ClaudeCodeMCPProcessor) ProcessMCPConfigs() error {
+// targetHomeDir specifies the home directory to deploy configs to.
+// If empty, uses the current user's home directory.
+func (p *ClaudeCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 	log.Info("🔌 Processing MCP configs for Claude Code agent")
 
 	// Get merged MCP server configs
@@ -175,11 +179,17 @@ func (p *ClaudeCodeMCPProcessor) ProcessMCPConfigs() error {
 
 	log.Info("🔌 Found %d MCP server(s) to configure", len(mcpServers))
 
-	// Get home directory for Claude Code config
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	// Determine home directory for Claude Code config
+	homeDir := targetHomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
 	}
+
+	log.Info("🔌 Deploying MCP configs to home directory: %s", homeDir)
 
 	claudeConfigPath := filepath.Join(homeDir, ".claude.json")
 
@@ -230,7 +240,9 @@ func NewOpenCodeMCPProcessor(workDir string) *OpenCodeMCPProcessor {
 // ProcessMCPConfigs implements MCPProcessor for OpenCode
 // It reads all MCP configs, merges them, transforms them to OpenCode format,
 // and updates ~/.config/opencode/opencode.json
-func (p *OpenCodeMCPProcessor) ProcessMCPConfigs() error {
+// targetHomeDir specifies the home directory to deploy configs to.
+// If empty, uses the current user's home directory.
+func (p *OpenCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 	log.Info("🔌 Processing MCP configs for OpenCode agent")
 
 	// Get merged MCP server configs
@@ -298,11 +310,17 @@ func (p *OpenCodeMCPProcessor) ProcessMCPConfigs() error {
 		opencodeMcpServers[serverName] = opencodeConfig
 	}
 
-	// Get home directory for OpenCode config
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+	// Determine home directory for OpenCode config
+	homeDir := targetHomeDir
+	if homeDir == "" {
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
 	}
+
+	log.Info("🔌 Deploying OpenCode MCP configs to home directory: %s", homeDir)
 
 	opencodeConfigDir := filepath.Join(homeDir, ".config", "opencode")
 	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
@@ -353,7 +371,7 @@ func NewNoOpMCPProcessor() *NoOpMCPProcessor {
 }
 
 // ProcessMCPConfigs implements MCPProcessor with no operation
-func (p *NoOpMCPProcessor) ProcessMCPConfigs() error {
+func (p *NoOpMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 	log.Info("🔌 MCP config processing not supported for this agent type")
 	return nil
 }

@@ -467,7 +467,7 @@ func TestClaudeCodeSkillsProcessor_Integration(t *testing.T) {
 
 	// Create and run the processor
 	processor := NewClaudeCodeSkillsProcessor()
-	if err := processor.ProcessSkills(); err != nil {
+	if err := processor.ProcessSkills(""); err != nil {
 		t.Fatalf("ProcessSkills failed: %v", err)
 	}
 
@@ -519,7 +519,7 @@ func TestOpenCodeSkillsProcessor_Integration(t *testing.T) {
 
 	// Create and run the processor
 	processor := NewOpenCodeSkillsProcessor()
-	if err := processor.ProcessSkills(); err != nil {
+	if err := processor.ProcessSkills(""); err != nil {
 		t.Fatalf("ProcessSkills failed: %v", err)
 	}
 
@@ -550,7 +550,7 @@ func TestOpenCodeSkillsProcessor_Integration(t *testing.T) {
 
 func TestNoOpSkillsProcessor(t *testing.T) {
 	processor := NewNoOpSkillsProcessor()
-	err := processor.ProcessSkills()
+	err := processor.ProcessSkills("")
 
 	if err != nil {
 		t.Errorf("NoOpSkillsProcessor should not return an error, got: %v", err)
