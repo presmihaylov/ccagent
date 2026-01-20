@@ -1,14 +1,53 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"ccagent/core/log"
 )
+
+// writeFileAsTargetUser writes content to a file, using sudo if necessary.
+// When AGENT_EXEC_USER is set and the target path is in that user's home directory,
+// the file is written via 'sudo -u <user> tee' to ensure proper ownership and permissions.
+// This solves permission issues where ccagent (running as 'ccagent' user) needs to write
+// files to the agent user's home directory (e.g., /home/agentrunner/.claude.json).
+func writeFileAsTargetUser(filePath string, content []byte, perm os.FileMode) error {
+	execUser := os.Getenv("AGENT_EXEC_USER")
+	if execUser == "" {
+		// Self-hosted mode: write directly
+		return os.WriteFile(filePath, content, perm)
+	}
+
+	// Check if the target path is in the agent user's home directory
+	agentHome := "/home/" + execUser
+	if !strings.HasPrefix(filePath, agentHome) {
+		// Not in agent's home, write directly
+		return os.WriteFile(filePath, content, perm)
+	}
+
+	log.Info("🔌 Writing file as user '%s': %s", execUser, filePath)
+
+	// Use sudo -u <user> tee to write the file with correct ownership
+	// The tee command writes stdin to the file, and we redirect stdout to /dev/null
+	cmd := exec.Command("sudo", "-u", execUser, "tee", filePath)
+	cmd.Stdin = bytes.NewReader(content)
+	cmd.Stdout = nil // Discard tee's stdout (it echoes the input)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to write file as user %s: %w (stderr: %s)", execUser, err, stderr.String())
+	}
+
+	return nil
+}
 
 // MCPProcessor defines the interface for processing agent-specific MCP configurations
 type MCPProcessor interface {
@@ -217,7 +256,7 @@ func (p *ClaudeCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 
 	log.Info("🔌 Updating .claude.json at: %s", claudeConfigPath)
 
-	if err := os.WriteFile(claudeConfigPath, configJSON, 0644); err != nil {
+	if err := writeFileAsTargetUser(claudeConfigPath, configJSON, 0644); err != nil {
 		return fmt.Errorf("failed to write .claude.json: %w", err)
 	}
 
@@ -354,7 +393,7 @@ func (p *OpenCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 
 	log.Info("🔌 Updating opencode.json at: %s", opencodeConfigPath)
 
-	if err := os.WriteFile(opencodeConfigPath, configJSON, 0644); err != nil {
+	if err := writeFileAsTargetUser(opencodeConfigPath, configJSON, 0644); err != nil {
 		return fmt.Errorf("failed to write opencode.json: %w", err)
 	}
 
