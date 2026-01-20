@@ -101,6 +101,13 @@ func fetchAndSetToken(agentsApiClient *clients.AgentsApiClient, envManager *env.
 		return nil
 	}
 
+	// Skip token operations when running with secret proxy (managed container mode)
+	// In this mode, the secret proxy handles token fetching and injection via HTTP MITM.
+	if clients.AgentHTTPProxy() != "" {
+		log.Info("🔒 Secret proxy mode detected, skipping token fetch (proxy handles secrets)")
+		return nil
+	}
+
 	log.Info("🔑 Fetching Anthropic token from API...")
 
 	tokenResp, err := agentsApiClient.FetchToken()

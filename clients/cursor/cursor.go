@@ -1,8 +1,6 @@
 package cursor
 
 import (
-	"os"
-	"os/exec"
 	"strings"
 
 	"ccagent/clients"
@@ -46,8 +44,7 @@ func (c *CursorClient) StartNewSession(prompt string, options *clients.CursorOpt
 	log.Info("Starting new Cursor session with prompt: %s", finalPrompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := exec.Command("cursor-agent", args...)
-	cmd.Env = os.Environ() // Inherit parent environment including CURSOR_API_KEY
+	cmd := clients.BuildAgentCommand("cursor-agent", args...)
 
 	log.Info("Running Cursor command")
 	output, err := cmd.CombinedOutput()
@@ -82,8 +79,7 @@ func (c *CursorClient) ContinueSession(sessionID, prompt string, options *client
 	log.Info("Executing Cursor command with sessionID: %s, prompt: %s", sessionID, prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := exec.Command("cursor-agent", args...)
-	cmd.Env = os.Environ() // Inherit parent environment including CURSOR_API_KEY
+	cmd := clients.BuildAgentCommand("cursor-agent", args...)
 
 	log.Info("Running Cursor command")
 	output, err := cmd.CombinedOutput()

@@ -1,8 +1,6 @@
 package codex
 
 import (
-	"os"
-	"os/exec"
 	"strings"
 
 	"ccagent/clients"
@@ -31,8 +29,7 @@ func (c *CodexClient) StartNewSession(prompt string, options *clients.CodexOptio
 	log.Info("Starting new Codex session with prompt: %s", prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := exec.Command("codex", args...)
-	cmd.Env = os.Environ()
+	cmd := clients.BuildAgentCommand("codex", args...)
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
 	}
@@ -64,8 +61,7 @@ func (c *CodexClient) ContinueSession(threadID, prompt string, options *clients.
 	log.Info("Executing Codex command with threadID: %s, prompt: %s", threadID, prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := exec.Command("codex", args...)
-	cmd.Env = os.Environ()
+	cmd := clients.BuildAgentCommand("codex", args...)
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
 	}
