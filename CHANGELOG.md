@@ -1,3 +1,12 @@
+## [v0.0.45] - 2026-01-20
+
+### Bugfixes
+
+- Fix: write .claude.json as target user via sudo ([#80](https://github.com/presmihaylov/ccagent/pull/80))
+  - Writes .claude.json configuration file with proper ownership when running as non-root
+  - Uses sudo to ensure file is created with target user permissions
+  - Fixes permission issues when deploying MCP server configurations
+
 ## [v0.0.44] - 2026-01-20
 
 ### Bugfixes
