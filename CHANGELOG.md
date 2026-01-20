@@ -1,3 +1,20 @@
+## [v0.0.43] - 2026-01-20
+
+### Features
+
+- Add process isolation support for agent execution ([#77](https://github.com/presmihaylov/ccagent/pull/77))
+  - Enables process isolation for running multiple agent instances
+  - Provides better resource isolation and security boundaries
+  - Supports isolated execution environments for agent processes
+  - Adds comprehensive test coverage for process isolation
+
+### Bugfixes
+
+- Fix extractSessionID to handle non-JSON output before session data ([#76](https://github.com/presmihaylov/ccagent/pull/76))
+  - Properly handles Claude Code output that contains non-JSON content before session data
+  - Improves parsing reliability when output includes warnings or other text
+  - Adds test coverage for edge cases in session ID extraction
+
 ## [v0.0.42] - 2026-01-16
 
 ### Bugfixes
