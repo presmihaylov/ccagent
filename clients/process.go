@@ -2,6 +2,7 @@
 package clients
 
 import (
+	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -51,8 +52,11 @@ func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 	// Inject HTTP proxy settings for agent processes if configured
 	filteredEnv = InjectProxyEnv(filteredEnv)
 
+	log.Printf("[BuildAgentCommand] execUser=%q, name=%q", execUser, name)
+
 	if execUser == "" {
 		// Self-hosted mode: run as current user
+		log.Printf("[BuildAgentCommand] Self-hosted mode: running %s as current user", name)
 		cmd := exec.Command(name, args...)
 		cmd.Env = filteredEnv
 		return cmd
@@ -62,12 +66,25 @@ func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 	// Update HOME to point to the agent user's home directory
 	filteredEnv = UpdateHomeForUser(filteredEnv, execUser)
 
-	// Using sudo -E to preserve environment, -u to specify user
-	// The command and args are passed directly (not via shell) for security
-	sudoArgs := []string{"-E", "-u", execUser, name}
+	// Build sudo command WITHOUT -E flag to avoid inheriting parent's env.
+	// Instead, we use 'env' to explicitly set the filtered environment.
+	// This ensures only the filtered env vars are passed to the child process.
+	//
+	// Command structure: sudo -u agentrunner env VAR1=val1 VAR2=val2 ... <command> <args>
+	sudoArgs := []string{"-u", execUser, "env", "-i"}
+
+	// Add each filtered environment variable to the env command
+	for _, envVar := range filteredEnv {
+		sudoArgs = append(sudoArgs, envVar)
+	}
+
+	// Add the actual command and its arguments
+	sudoArgs = append(sudoArgs, name)
 	sudoArgs = append(sudoArgs, args...)
+
+	log.Printf("[BuildAgentCommand] Managed mode: running sudo with args (first 5): %v...", sudoArgs[:min(len(sudoArgs), 5)])
 	cmd := exec.Command("sudo", sudoArgs...)
-	cmd.Env = filteredEnv
+	// Don't set cmd.Env since we're passing env via 'env' command
 	return cmd
 }
 
