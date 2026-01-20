@@ -199,6 +199,14 @@ ccagent operates in different permission modes depending on the AI assistant and
 
 When running in bypass permissions mode, **anyone with access to your Slack workspace or Discord server can execute arbitrary commands on your system with your user privileges**. It's recommended that you use this mode only if you're running the agent in a secure environment like a docker container or a remote, isolated server.
 
+## Pirate Haiku
+
+```
+Yo ho, code ahoy!
+AI sails the repo seas
+Merge, ye scallywags
+```
+
 ## Contributing
 
 Fork the repository and open a pull request. Contributions are welcome!
