@@ -177,28 +177,42 @@ func TestBuildAgentCommand_Managed(t *testing.T) {
 		t.Errorf("Expected sudo command in managed mode, got %v", cmd.Args)
 	}
 
-	// Verify sudo arguments structure: sudo -E -u username command args...
-	expectedArgs := []string{"sudo", "-E", "-u", "agentrunner", "echo", "hello"}
-	if len(cmd.Args) != len(expectedArgs) {
-		t.Errorf("Expected %d args, got %d: %v", len(expectedArgs), len(cmd.Args), cmd.Args)
+	// Verify sudo arguments structure: sudo -u username env -i VAR=val... command args...
+	// First 4 args should be: sudo -u agentrunner env -i
+	if len(cmd.Args) < 5 {
+		t.Fatalf("Expected at least 5 args, got %d: %v", len(cmd.Args), cmd.Args)
 	}
 
-	for i, arg := range expectedArgs {
-		if i < len(cmd.Args) && cmd.Args[i] != arg {
-			t.Errorf("Arg %d: expected %q, got %q", i, arg, cmd.Args[i])
+	expectedPrefix := []string{"sudo", "-u", "agentrunner", "env", "-i"}
+	for i, expected := range expectedPrefix {
+		if cmd.Args[i] != expected {
+			t.Errorf("Arg %d: expected %q, got %q", i, expected, cmd.Args[i])
 		}
 	}
 
-	// Verify HOME is updated to agentrunner's home directory
+	// Last two args should be the command and its arguments
+	if cmd.Args[len(cmd.Args)-2] != "echo" {
+		t.Errorf("Expected 'echo' as second-to-last arg, got %q", cmd.Args[len(cmd.Args)-2])
+	}
+	if cmd.Args[len(cmd.Args)-1] != "hello" {
+		t.Errorf("Expected 'hello' as last arg, got %q", cmd.Args[len(cmd.Args)-1])
+	}
+
+	// Verify HOME is passed via env command (in the args, not cmd.Env)
 	hasCorrectHome := false
-	for _, e := range cmd.Env {
-		if e == "HOME=/home/agentrunner" {
+	for _, arg := range cmd.Args {
+		if arg == "HOME=/home/agentrunner" {
 			hasCorrectHome = true
 			break
 		}
 	}
 	if !hasCorrectHome {
-		t.Error("HOME should be set to /home/agentrunner in managed mode")
+		t.Error("HOME=/home/agentrunner should be passed via env command in managed mode")
+	}
+
+	// cmd.Env should NOT be set in managed mode (env passed via 'env' command)
+	if cmd.Env != nil {
+		t.Error("cmd.Env should be nil in managed mode (env passed via 'env' command)")
 	}
 }
 

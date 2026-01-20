@@ -74,9 +74,7 @@ func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 	sudoArgs := []string{"-u", execUser, "env", "-i"}
 
 	// Add each filtered environment variable to the env command
-	for _, envVar := range filteredEnv {
-		sudoArgs = append(sudoArgs, envVar)
-	}
+	sudoArgs = append(sudoArgs, filteredEnv...)
 
 	// Add the actual command and its arguments
 	sudoArgs = append(sudoArgs, name)
