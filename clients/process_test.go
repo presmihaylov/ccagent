@@ -177,42 +177,41 @@ func TestBuildAgentCommand_Managed(t *testing.T) {
 		t.Errorf("Expected sudo command in managed mode, got %v", cmd.Args)
 	}
 
-	// Verify sudo arguments structure: sudo -u username env -i VAR=val... command args...
-	// First 4 args should be: sudo -u agentrunner env -i
-	if len(cmd.Args) < 5 {
-		t.Fatalf("Expected at least 5 args, got %d: %v", len(cmd.Args), cmd.Args)
+	// Verify sudo arguments structure: sudo -u agentrunner bash -c '...'
+	// That's 6 args: sudo, -u, agentrunner, bash, -c, <script>
+	if len(cmd.Args) != 6 {
+		t.Fatalf("Expected 6 args (sudo -u agentrunner bash -c <script>), got %d: %v", len(cmd.Args), cmd.Args)
 	}
 
-	expectedPrefix := []string{"sudo", "-u", "agentrunner", "env", "-i"}
+	expectedPrefix := []string{"sudo", "-u", "agentrunner", "bash", "-c"}
 	for i, expected := range expectedPrefix {
 		if cmd.Args[i] != expected {
 			t.Errorf("Arg %d: expected %q, got %q", i, expected, cmd.Args[i])
 		}
 	}
 
-	// Last two args should be the command and its arguments
-	if cmd.Args[len(cmd.Args)-2] != "echo" {
-		t.Errorf("Expected 'echo' as second-to-last arg, got %q", cmd.Args[len(cmd.Args)-2])
-	}
-	if cmd.Args[len(cmd.Args)-1] != "hello" {
-		t.Errorf("Expected 'hello' as last arg, got %q", cmd.Args[len(cmd.Args)-1])
+	// The bash script (6th arg, index 5) should contain umask 002, env -i, HOME, and the command
+	bashScript := cmd.Args[5]
+
+	if !strings.HasPrefix(bashScript, "umask 002 && exec ") {
+		t.Errorf("Bash script should start with 'umask 002 && exec ', got: %s", bashScript)
 	}
 
-	// Verify HOME is passed via env command (in the args, not cmd.Env)
-	hasCorrectHome := false
-	for _, arg := range cmd.Args {
-		if arg == "HOME=/home/agentrunner" {
-			hasCorrectHome = true
-			break
-		}
-	}
-	if !hasCorrectHome {
-		t.Error("HOME=/home/agentrunner should be passed via env command in managed mode")
+	if !strings.Contains(bashScript, "env -i") {
+		t.Error("Bash script should contain 'env -i'")
 	}
 
-	// cmd.Env should NOT be set in managed mode (env passed via 'env' command)
+	if !strings.Contains(bashScript, "HOME=/home/agentrunner") {
+		t.Error("Bash script should contain HOME=/home/agentrunner")
+	}
+
+	if !strings.Contains(bashScript, "echo 'hello'") {
+		t.Errorf("Bash script should contain the command 'echo 'hello'', got: %s", bashScript)
+	}
+
+	// cmd.Env should NOT be set in managed mode (env passed via 'env' command inside bash)
 	if cmd.Env != nil {
-		t.Error("cmd.Env should be nil in managed mode (env passed via 'env' command)")
+		t.Error("cmd.Env should be nil in managed mode (env passed via 'env' command inside bash)")
 	}
 }
 

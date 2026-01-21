@@ -70,19 +70,23 @@ func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 	// Instead, we use 'env' to explicitly set the filtered environment.
 	// This ensures only the filtered env vars are passed to the child process.
 	//
-	// Command structure: sudo -u agentrunner env VAR1=val1 VAR2=val2 ... <command> <args>
-	sudoArgs := []string{"-u", execUser, "env", "-i"}
+	// We wrap in bash with umask 002 to ensure files/directories created by the
+	// agent process are group-writable. This allows the ccagent (parent) process
+	// to manage (delete/modify) files created by the agent during git operations.
+	//
+	// Command structure: sudo -u agentrunner bash -c 'umask 002 && exec env -i VAR=val ... <command> <args>'
+	shellCmd := buildShellCommand(name, args)
+	envArgs := make([]string, 0, len(filteredEnv)+1)
+	envArgs = append(envArgs, "env", "-i")
+	envArgs = append(envArgs, filteredEnv...)
+	envCmd := strings.Join(envArgs, " ") + " " + shellCmd
 
-	// Add each filtered environment variable to the env command
-	sudoArgs = append(sudoArgs, filteredEnv...)
+	bashScript := "umask 002 && exec " + envCmd
+	sudoArgs := []string{"-u", execUser, "bash", "-c", bashScript}
 
-	// Add the actual command and its arguments
-	sudoArgs = append(sudoArgs, name)
-	sudoArgs = append(sudoArgs, args...)
-
-	log.Printf("[BuildAgentCommand] Managed mode: running sudo with args (first 5): %v...", sudoArgs[:min(len(sudoArgs), 5)])
+	log.Printf("[BuildAgentCommand] Managed mode: running sudo -u %s bash -c '...' (cmd=%s)", execUser, name)
 	cmd := exec.Command("sudo", sudoArgs...)
-	// Don't set cmd.Env since we're passing env via 'env' command
+	// Don't set cmd.Env since we're passing env via 'env' command inside bash
 	return cmd
 }
 
