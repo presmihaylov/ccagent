@@ -1,3 +1,12 @@
+## [v0.0.46] - 2026-01-21
+
+### Bugfixes
+
+- Set umask 002 when spawning agent processes in managed mode ([#81](https://github.com/presmihaylov/ccagent/pull/81))
+  - Wraps agent commands in bash with umask 002 for group-writable file permissions
+  - Enables ccagent to delete files created by agent during git clean operations
+  - Fixes "Permission denied" errors on git operations with agentrunner-created files
+
 ## [v0.0.45] - 2026-01-20
 
 ### Bugfixes
