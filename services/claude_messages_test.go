@@ -821,6 +821,120 @@ func TestToolResultWithEscapedQuotes(t *testing.T) {
 	}
 }
 
+func TestStripLargeToolUseResultTextContent(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectStripped bool
+		truncMarker    string
+		description    string
+	}{
+		{
+			name:           "small text field unchanged",
+			input:          `{"type":"user","tool_use_result":[{"type":"text","text":"small output"}]}`,
+			expectStripped: false,
+			description:    "text under 100KB should not be modified",
+		},
+		{
+			name:           "large text field truncated",
+			input:          `{"type":"user","tool_use_result":[{"type":"text","text":"` + strings.Repeat("x", 150*1024) + `"}]}`,
+			expectStripped: true,
+			truncMarker:    "[TEXT_TRUNCATED_",
+			description:    "text over 100KB should be truncated",
+		},
+		{
+			name:           "MCP postgres result format truncated",
+			input:          `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"<persisted-output>\\nOutput too large"}]},"tool_use_result":[{"type":"text","text":"` + strings.Repeat(`{\"id\":\"1\",\"name\":\"test\"},`, 10000) + `"}]}`,
+			expectStripped: true,
+			truncMarker:    "[TEXT_TRUNCATED_",
+			description:    "MCP tool result text field should be truncated when large",
+		},
+		{
+			name:           "multiple text fields - both truncated",
+			input:          `{"tool_use_result":[{"type":"text","text":"` + strings.Repeat("a", 150*1024) + `"},{"type":"text","text":"` + strings.Repeat("b", 150*1024) + `"}]}`,
+			expectStripped: true,
+			truncMarker:    "[TEXT_TRUNCATED_",
+			description:    "Multiple large text fields should all be truncated",
+		},
+		{
+			name:           "empty input",
+			input:          "",
+			expectStripped: false,
+			description:    "Empty input should return empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripLargeToolUseResultTextContent(tt.input)
+
+			if tt.expectStripped {
+				if !strings.Contains(result, tt.truncMarker) {
+					t.Errorf("%s: expected content to be truncated with marker %s but it wasn't", tt.description, tt.truncMarker)
+				}
+				if len(result) >= len(tt.input) {
+					t.Errorf("%s: expected result to be smaller than input", tt.description)
+				}
+			} else {
+				if tt.input != "" && result != tt.input {
+					t.Errorf("%s: expected content to remain unchanged", tt.description)
+				}
+			}
+		})
+	}
+}
+
+func TestLargeMCPToolResultParsing(t *testing.T) {
+	// This test verifies that the parser can handle MCP tool results with massive text content.
+	// MCP tools like mcp__postgres__query return results in tool_use_result arrays with
+	// {"type":"text","text":"<massive JSON content>"} structure that can be 100MB+.
+	//
+	// Real-world scenario: A postgres query returns millions of rows serialized as JSON.
+	// The tool_use_result text field would exceed bufio.Scanner's 4MB buffer.
+	// With stripLargeToolUseResultTextContent, the text is truncated before parsing.
+
+	// Create ~5MB of JSON content simulating postgres query results
+	largeJSONContent := strings.Repeat(`{\"id\":\"1\",\"name\":\"Place moto\",\"parking_id\":\"125\"},`, 100000)
+
+	input := `{"type":"system","subtype":"init","session_id":"test-session-001"}
+{"type":"assistant","message":{"id":"msg_001","type":"message","content":[{"type":"tool_use","id":"toolu_001","name":"mcp__postgres__query","input":{"sql":"SELECT * FROM spots"}}]},"session_id":"test-session-001"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_001","type":"tool_result","content":"<persisted-output>\\nOutput too large (185.5MB).\\n</persisted-output>"}]},"session_id":"test-session-001","tool_use_result":[{"type":"text","text":"[` + largeJSONContent + `]"}]}
+{"type":"assistant","message":{"id":"msg_002","type":"message","content":[{"type":"text","text":"Query returned many results."}]},"session_id":"test-session-001"}
+{"type":"result","subtype":"success","is_error":false,"result":"Query returned many results.","session_id":"test-session-001"}`
+
+	t.Logf("Test input size: %d bytes (%.2f MB)", len(input), float64(len(input))/(1024*1024))
+
+	messages, err := MapClaudeOutputToMessages(input)
+	if err != nil {
+		t.Fatalf("Failed to parse output with large MCP tool result: %v", err)
+	}
+
+	// Should successfully parse all messages
+	if len(messages) != 5 {
+		t.Errorf("Expected 5 messages, got %d", len(messages))
+	}
+
+	// Verify we can extract the final result
+	var resultMsg ResultMessage
+	var foundResult bool
+	for _, msg := range messages {
+		if r, ok := msg.(ResultMessage); ok {
+			resultMsg = r
+			foundResult = true
+		}
+	}
+
+	if !foundResult {
+		t.Error("Expected to find a result message")
+	}
+
+	if resultMsg.Result != "Query returned many results." {
+		t.Errorf("Unexpected result: %s", resultMsg.Result)
+	}
+
+	t.Logf("Successfully parsed %d messages from large MCP tool result output", len(messages))
+}
+
 func TestLargeToolUseResultParsing(t *testing.T) {
 	// This test verifies that the parser can handle output containing very large
 	// tool_use_result.stdout fields that would previously exceed the 4MB buffer limit.

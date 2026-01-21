@@ -244,6 +244,42 @@ func stripLargeToolUseResultContent(output string) string {
 	return output
 }
 
+// stripLargeToolUseResultTextContent removes large "text" content from tool_use_result fields.
+// MCP tools (like mcp__postgres__query) return results in tool_use_result arrays with
+// {"type":"text","text":"<massive content>"} structure. These can be 100MB+ for large query results.
+// The parser doesn't use these fields, so we can safely truncate them.
+//
+// The pattern matches: "tool_use_result":[{"type":"text","text":"<very long content>"...}]
+// and truncates the text field when it exceeds a threshold.
+func stripLargeToolUseResultTextContent(output string) string {
+	const maxContentSize = 100 * 1024 // 100KB threshold
+
+	// Match text field within tool_use_result context: "text":"<content>"
+	// This is intentionally broad to catch text fields in various contexts,
+	// but the 100KB threshold ensures we only truncate genuinely large content
+	// IMPORTANT: Use [^"\\]* to properly handle escaped characters
+	textRe := regexp.MustCompile(`("text":")([^"\\]*(?:\\.[^"\\]*)*)(")`)
+	output = textRe.ReplaceAllStringFunc(output, func(match string) string {
+		submatches := textRe.FindStringSubmatch(match)
+		if len(submatches) != 4 {
+			return match
+		}
+
+		prefix := submatches[1]
+		content := submatches[2]
+		suffix := submatches[3]
+
+		if len(content) > maxContentSize {
+			truncated := content[:maxContentSize] + "...[TEXT_TRUNCATED_" + fmt.Sprintf("%d", len(content)) + "_BYTES]"
+			return prefix + truncated + suffix
+		}
+
+		return match
+	})
+
+	return output
+}
+
 // MapClaudeOutputToMessages parses Claude command output into structured messages
 // This is exported to allow reuse across different modules
 func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
@@ -258,6 +294,10 @@ func MapClaudeOutputToMessages(output string) ([]ClaudeMessage, error) {
 	// Strip large tool_use_result stdout/stderr content before parsing
 	// These fields can be 64MB+ when commands output large data
 	output = stripLargeToolUseResultContent(output)
+
+	// Strip large tool_use_result text content before parsing
+	// MCP tools can return 100MB+ in text fields within tool_use_result arrays
+	output = stripLargeToolUseResultTextContent(output)
 
 	var messages []ClaudeMessage
 
