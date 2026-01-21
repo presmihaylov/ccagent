@@ -1,3 +1,13 @@
+## [v0.0.47] - 2026-01-21
+
+### Bugfixes
+
+- Fix parsing failure for large MCP tool results ([#82](https://github.com/presmihaylov/ccagent/pull/82))
+  - Adds handler for large `text` fields in `tool_use_result` arrays
+  - MCP tools (like `mcp__postgres__query`) return results in a different format than regular tools
+  - Truncates text fields over 100KB to prevent bufio.Scanner "token too long" errors
+  - Fixes parsing failures when postgres queries return large result sets (100MB+)
+
 ## [v0.0.46] - 2026-01-21
 
 ### Bugfixes
