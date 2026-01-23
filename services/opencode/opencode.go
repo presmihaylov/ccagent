@@ -188,6 +188,29 @@ func (o *OpenCodeService) ContinueConversation(sessionID, prompt string) (*servi
 	return o.ContinueConversationWithOptions(sessionID, prompt, nil)
 }
 
+// StartNewConversationInDir starts a new conversation in a specific working directory
+// Note: OpenCode does not support custom working directories yet, falls back to default behavior
+func (o *OpenCodeService) StartNewConversationInDir(prompt, workDir string) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ OpenCode does not support custom working directories, ignoring workDir: %s", workDir)
+	return o.StartNewConversation(prompt)
+}
+
+// StartNewConversationWithSystemPromptInDir starts a new conversation with system prompt in a specific directory
+// Note: OpenCode does not support custom working directories yet, falls back to default behavior
+func (o *OpenCodeService) StartNewConversationWithSystemPromptInDir(
+	prompt, systemPrompt, workDir string,
+) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ OpenCode does not support custom working directories, ignoring workDir: %s", workDir)
+	return o.StartNewConversationWithSystemPrompt(prompt, systemPrompt)
+}
+
+// ContinueConversationInDir continues an existing conversation in a specific directory
+// Note: OpenCode does not support custom working directories yet, falls back to default behavior
+func (o *OpenCodeService) ContinueConversationInDir(sessionID, prompt, workDir string) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ OpenCode does not support custom working directories, ignoring workDir: %s", workDir)
+	return o.ContinueConversation(sessionID, prompt)
+}
+
 func (o *OpenCodeService) ContinueConversationWithOptions(
 	sessionID, prompt string,
 	options *clients.OpenCodeOptions,

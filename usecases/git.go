@@ -3,7 +3,9 @@ package usecases
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1100,5 +1102,739 @@ func (g *GitUseCase) AbandonJobAndCleanup(jobID, branchName string) error {
 
 	log.Info("✅ Successfully abandoned job and cleaned up")
 	log.Info("📋 Completed successfully - abandoned job and reset to default branch")
+	return nil
+}
+
+// =============================================================================
+// Worktree-based Concurrent Job Support
+// =============================================================================
+
+// GetWorktreeBasePath returns the base path for ccagent worktrees.
+// Worktrees are stored in ~/.ccagent_worktrees/
+func (g *GitUseCase) GetWorktreeBasePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	return filepath.Join(homeDir, ".ccagent_worktrees"), nil
+}
+
+// GetMaxConcurrency returns the max concurrency setting from environment
+// Defaults to 1 (sequential processing) if not set
+func (g *GitUseCase) GetMaxConcurrency() int {
+	maxConcurrency := 1
+	if envVal := os.Getenv("MAX_CONCURRENCY"); envVal != "" {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			maxConcurrency = val
+		}
+	}
+	return maxConcurrency
+}
+
+// ShouldUseWorktrees returns true if concurrent worktree mode should be used
+func (g *GitUseCase) ShouldUseWorktrees() bool {
+	return g.GetMaxConcurrency() > 1
+}
+
+// PrepareForNewConversationWithWorktree creates a worktree for a new conversation
+// Returns (branchName, worktreePath, error)
+// This is used when MAX_CONCURRENCY > 1 for concurrent job processing
+func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHint string) (string, string, error) {
+	log.Info("📋 Starting to prepare worktree for new conversation (jobID: %s)", jobID)
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping worktree creation")
+		return "", "", nil
+	}
+
+	// Generate random branch name
+	branchName, err := g.generateRandomBranchName()
+	if err != nil {
+		log.Error("❌ Failed to generate random branch name: %v", err)
+		return "", "", fmt.Errorf("failed to generate branch name: %w", err)
+	}
+
+	log.Info("🌿 Generated branch name: %s", branchName)
+
+	// Reset and pull default branch in main repo first
+	if err := g.resetAndPullDefaultBranch(); err != nil {
+		log.Error("❌ Failed to reset and pull main: %v", err)
+		return "", "", fmt.Errorf("failed to reset and pull main: %w", err)
+	}
+
+	// Determine worktree path
+	worktreeBasePath, err := g.GetWorktreeBasePath()
+	if err != nil {
+		log.Error("❌ Failed to get worktree base path: %v", err)
+		return "", "", fmt.Errorf("failed to get worktree base path: %w", err)
+	}
+
+	// Create base directory if it doesn't exist
+	if err := os.MkdirAll(worktreeBasePath, 0755); err != nil {
+		log.Error("❌ Failed to create worktree base directory: %v", err)
+		return "", "", fmt.Errorf("failed to create worktree base directory: %w", err)
+	}
+
+	worktreePath := filepath.Join(worktreeBasePath, jobID)
+
+	// Create worktree with new branch
+	if err := g.gitClient.CreateWorktree(worktreePath, branchName); err != nil {
+		log.Error("❌ Failed to create worktree: %v", err)
+		return "", "", fmt.Errorf("failed to create worktree: %w", err)
+	}
+
+	log.Info("✅ Successfully created worktree at %s for branch %s", worktreePath, branchName)
+	return branchName, worktreePath, nil
+}
+
+// PrepareWorktreeForJob validates and prepares an existing worktree for continuing a job
+func (g *GitUseCase) PrepareWorktreeForJob(worktreePath, branchName string) error {
+	log.Info("📋 Starting to prepare worktree for job: %s (branch: %s)", worktreePath, branchName)
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping worktree preparation")
+		return nil
+	}
+
+	// Check if worktree exists
+	if !g.gitClient.WorktreeExists(worktreePath) {
+		log.Error("❌ Worktree does not exist at %s", worktreePath)
+		return fmt.Errorf("worktree not found at %s", worktreePath)
+	}
+
+	// Pull latest changes in the worktree
+	if err := g.gitClient.PullLatestInWorktree(worktreePath); err != nil {
+		// Check if error is due to remote branch being deleted
+		if strings.Contains(err.Error(), "remote branch deleted") {
+			log.Warn("⚠️ Remote branch was deleted for worktree")
+			return fmt.Errorf("remote branch deleted, cannot continue job: %w", err)
+		}
+
+		log.Error("❌ Failed to pull latest in worktree: %v", err)
+		return fmt.Errorf("failed to pull latest in worktree: %w", err)
+	}
+
+	log.Info("✅ Successfully prepared worktree for job")
+	return nil
+}
+
+// CleanupJobWorktree removes the worktree for a completed or abandoned job
+func (g *GitUseCase) CleanupJobWorktree(worktreePath, branchName string) error {
+	log.Info("📋 Starting to cleanup job worktree: %s", worktreePath)
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping worktree cleanup")
+		return nil
+	}
+
+	// Check if worktree exists
+	if !g.gitClient.WorktreeExists(worktreePath) {
+		log.Info("ℹ️ Worktree does not exist at %s - nothing to cleanup", worktreePath)
+		return nil
+	}
+
+	// Remove worktree
+	if err := g.gitClient.RemoveWorktree(worktreePath); err != nil {
+		log.Error("❌ Failed to remove worktree: %v", err)
+		return fmt.Errorf("failed to remove worktree: %w", err)
+	}
+
+	// Delete local branch if it still exists
+	branchExists, err := g.BranchExists(branchName)
+	if err != nil {
+		log.Warn("⚠️ Failed to check if branch %s exists: %v", branchName, err)
+		// Continue anyway - branch cleanup is best effort
+	}
+
+	if branchExists {
+		if err := g.gitClient.DeleteLocalBranch(branchName); err != nil {
+			log.Warn("⚠️ Failed to delete local branch %s: %v", branchName, err)
+			// Continue anyway - branch cleanup is best effort
+		} else {
+			log.Info("🗑️ Deleted local branch: %s", branchName)
+		}
+	}
+
+	log.Info("✅ Successfully cleaned up job worktree: %s", worktreePath)
+	return nil
+}
+
+// CleanupOrphanedWorktrees removes worktrees that don't correspond to any tracked job
+func (g *GitUseCase) CleanupOrphanedWorktrees() error {
+	log.Info("📋 Starting to cleanup orphaned worktrees")
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping orphaned worktree cleanup")
+		return nil
+	}
+
+	// Prune stale worktree entries first
+	if err := g.gitClient.PruneWorktrees(); err != nil {
+		log.Warn("⚠️ Failed to prune worktrees: %v", err)
+		// Continue anyway
+	}
+
+	// Get worktree base path
+	worktreeBasePath, err := g.GetWorktreeBasePath()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree base path: %w", err)
+	}
+
+	// Check if worktree directory exists
+	if _, err := os.Stat(worktreeBasePath); os.IsNotExist(err) {
+		log.Info("ℹ️ Worktree base directory doesn't exist - nothing to cleanup")
+		return nil
+	}
+
+	// List all directories in worktree base path
+	entries, err := os.ReadDir(worktreeBasePath)
+	if err != nil {
+		log.Error("❌ Failed to read worktree directory: %v", err)
+		return fmt.Errorf("failed to read worktree directory: %w", err)
+	}
+
+	// Get all tracked jobs
+	trackedJobs := g.appState.GetAllJobs()
+	trackedWorktrees := make(map[string]bool)
+	for _, jobData := range trackedJobs {
+		if jobData.WorktreePath != "" {
+			trackedWorktrees[jobData.WorktreePath] = true
+		}
+	}
+
+	// Identify orphaned worktrees
+	orphanedCount := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		worktreePath := filepath.Join(worktreeBasePath, entry.Name())
+		if !trackedWorktrees[worktreePath] {
+			log.Info("🗑️ Found orphaned worktree: %s", worktreePath)
+
+			// Remove the worktree
+			if err := g.gitClient.RemoveWorktree(worktreePath); err != nil {
+				log.Warn("⚠️ Failed to remove orphaned worktree %s: %v", worktreePath, err)
+				// Continue with other worktrees
+			} else {
+				orphanedCount++
+			}
+		}
+	}
+
+	log.Info("✅ Cleaned up %d orphaned worktrees", orphanedCount)
+	return nil
+}
+
+// WorktreeExists checks if a worktree exists at the given path
+func (g *GitUseCase) WorktreeExists(worktreePath string) bool {
+	return g.gitClient.WorktreeExists(worktreePath)
+}
+
+// AutoCommitChangesInWorktreeIfNeeded auto-commits changes in a specific worktree
+func (g *GitUseCase) AutoCommitChangesInWorktreeIfNeeded(
+	threadLink, sessionID, worktreePath string,
+) (*AutoCommitResult, error) {
+	log.Info("📋 Starting to auto-commit changes in worktree: %s", worktreePath)
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping auto-commit")
+		return &AutoCommitResult{}, nil
+	}
+
+	// Get current branch in worktree
+	currentBranch, err := g.gitClient.GetCurrentBranchInWorktree(worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to get current branch in worktree: %v", err)
+		return nil, fmt.Errorf("failed to get current branch in worktree: %w", err)
+	}
+
+	// Check if there are any uncommitted changes in worktree
+	hasChanges, err := g.gitClient.HasUncommittedChangesInWorktree(worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to check for uncommitted changes in worktree: %v", err)
+		return nil, fmt.Errorf("failed to check for uncommitted changes in worktree: %w", err)
+	}
+
+	if !hasChanges {
+		log.Info("ℹ️ No uncommitted changes found in worktree - skipping auto-commit")
+		return &AutoCommitResult{
+			JustCreatedPR:   false,
+			PullRequestLink: "",
+			PullRequestID:   "",
+			CommitHash:      "",
+			RepositoryURL:   "",
+			BranchName:      currentBranch,
+		}, nil
+	}
+
+	log.Info("✅ Uncommitted changes detected in worktree - proceeding with auto-commit")
+
+	// Generate commit message using Claude (in the worktree directory)
+	commitMessage, err := g.generateCommitMessageWithClaudeInWorktree(sessionID, currentBranch, worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to generate commit message with Claude: %v", err)
+		return nil, fmt.Errorf("failed to generate commit message with Claude: %w", err)
+	}
+
+	log.Info("📝 Generated commit message: %s", commitMessage)
+
+	// Add all changes in worktree
+	if err := g.gitClient.AddAllInWorktree(worktreePath); err != nil {
+		log.Error("❌ Failed to add all changes in worktree: %v", err)
+		return nil, fmt.Errorf("failed to add all changes in worktree: %w", err)
+	}
+
+	// Commit with message in worktree
+	if err := g.gitClient.CommitInWorktree(worktreePath, commitMessage); err != nil {
+		log.Error("❌ Failed to commit changes in worktree: %v", err)
+		return nil, fmt.Errorf("failed to commit changes in worktree: %w", err)
+	}
+
+	// Get commit hash after successful commit
+	commitHash, err := g.gitClient.GetLatestCommitHashInWorktree(worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to get commit hash in worktree: %v", err)
+		return nil, fmt.Errorf("failed to get commit hash in worktree: %w", err)
+	}
+
+	// Get repository URL for commit link
+	repositoryURL, err := g.gitClient.GetRemoteURLInWorktree(worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to get repository URL from worktree: %v", err)
+		return nil, fmt.Errorf("failed to get repository URL from worktree: %w", err)
+	}
+
+	// Push current branch from worktree
+	if err := g.gitClient.PushBranchFromWorktree(worktreePath, currentBranch); err != nil {
+		log.Error("❌ Failed to push branch from worktree: %v", err)
+		return nil, fmt.Errorf("failed to push branch from worktree: %w", err)
+	}
+
+	// Handle PR creation/update from worktree context
+	prResult, err := g.handlePRCreationOrUpdateInWorktree(sessionID, currentBranch, threadLink, worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to handle PR creation/update in worktree: %v", err)
+		return nil, fmt.Errorf("failed to handle PR creation/update in worktree: %w", err)
+	}
+
+	// Update the result with commit information
+	prResult.CommitHash = commitHash
+	prResult.RepositoryURL = repositoryURL
+
+	// Extract and store PR ID from the PR URL if available
+	if prResult.PullRequestLink != "" {
+		prResult.PullRequestID = g.gitClient.ExtractPRIDFromURL(prResult.PullRequestLink)
+	}
+
+	log.Info("✅ Successfully auto-committed and pushed changes from worktree")
+	return prResult, nil
+}
+
+func (g *GitUseCase) generateCommitMessageWithClaudeInWorktree(sessionID, branchName, worktreePath string) (string, error) {
+	log.Info("🤖 Asking Claude to generate commit message in worktree: %s", worktreePath)
+
+	prompt := CommitMessageGenerationPrompt(branchName)
+
+	// Use the worktree directory for Claude session
+	result, err := g.claudeService.ContinueConversationInDir(sessionID, prompt, worktreePath)
+	if err != nil {
+		return "", fmt.Errorf("claude failed to generate commit message: %w", err)
+	}
+
+	return strings.TrimSpace(result.Output), nil
+}
+
+func (g *GitUseCase) handlePRCreationOrUpdateInWorktree(
+	sessionID, branchName, threadLink, worktreePath string,
+) (*AutoCommitResult, error) {
+	log.Info("📋 Starting to handle PR creation or update for branch: %s (worktree: %s)", branchName, worktreePath)
+
+	// Check if a PR already exists for this branch
+	hasExistingPR, err := g.gitClient.HasExistingPRInWorktree(worktreePath, branchName)
+	if err != nil {
+		log.Error("❌ Failed to check for existing PR: %v", err)
+		return nil, fmt.Errorf("failed to check for existing PR: %w", err)
+	}
+
+	if hasExistingPR {
+		log.Info("✅ Existing PR found for branch %s - changes have been pushed", branchName)
+
+		// Get the PR URL for the existing PR
+		prURL, err := g.gitClient.GetPRURLInWorktree(worktreePath, branchName)
+		if err != nil {
+			log.Error("❌ Failed to get PR URL for existing PR: %v", err)
+			prURL = ""
+		}
+
+		// Update PR title and description based on new changes
+		if err := g.updatePRTitleAndDescriptionInWorktreeIfNeeded(sessionID, branchName, threadLink, worktreePath); err != nil {
+			log.Error("❌ Failed to update PR title/description: %v", err)
+			// Log error but don't fail the entire operation
+		}
+
+		return &AutoCommitResult{
+			JustCreatedPR:   false,
+			PullRequestLink: prURL,
+			PullRequestID:   g.gitClient.ExtractPRIDFromURL(prURL),
+			CommitHash:      "",
+			RepositoryURL:   "",
+			BranchName:      branchName,
+		}, nil
+	}
+
+	log.Info("🆕 No existing PR found - creating new PR from worktree")
+
+	// Generate PR title and body using Claude in parallel
+	titleChan := make(chan CLIAgentResult)
+	bodyChan := make(chan CLIAgentResult)
+
+	go func() {
+		output, err := g.generatePRTitleWithClaudeInWorktree(sessionID, branchName, worktreePath)
+		titleChan <- CLIAgentResult{Output: output, Err: err}
+	}()
+
+	go func() {
+		output, err := g.generatePRBodyWithClaudeInWorktree(sessionID, branchName, threadLink, worktreePath)
+		bodyChan <- CLIAgentResult{Output: output, Err: err}
+	}()
+
+	titleRes := <-titleChan
+	bodyRes := <-bodyChan
+
+	if titleRes.Err != nil {
+		log.Error("❌ Failed to generate PR title with Claude: %v", titleRes.Err)
+		return nil, fmt.Errorf("failed to generate PR title with Claude: %w", titleRes.Err)
+	}
+
+	if bodyRes.Err != nil {
+		log.Error("❌ Failed to generate PR body with Claude: %v", bodyRes.Err)
+		return nil, fmt.Errorf("failed to generate PR body with Claude: %w", bodyRes.Err)
+	}
+
+	prTitle := titleRes.Output
+	prBody := bodyRes.Output
+
+	log.Info("📋 Generated PR title: %s", prTitle)
+
+	// Get default branch for PR base
+	defaultBranch, err := g.gitClient.GetDefaultBranchInWorktree(worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to get default branch: %v", err)
+		return nil, fmt.Errorf("failed to get default branch: %w", err)
+	}
+
+	// Create pull request from worktree
+	prURL, err := g.gitClient.CreatePullRequestInWorktree(worktreePath, prTitle, prBody, defaultBranch)
+	if err != nil {
+		log.Error("❌ Failed to create pull request: %v", err)
+		return nil, fmt.Errorf("failed to create pull request: %w", err)
+	}
+
+	log.Info("✅ Successfully created PR: %s", prTitle)
+	return &AutoCommitResult{
+		JustCreatedPR:   true,
+		PullRequestLink: prURL,
+		PullRequestID:   g.gitClient.ExtractPRIDFromURL(prURL),
+		CommitHash:      "",
+		RepositoryURL:   "",
+		BranchName:      branchName,
+	}, nil
+}
+
+func (g *GitUseCase) generatePRTitleWithClaudeInWorktree(sessionID, branchName, worktreePath string) (string, error) {
+	log.Info("🤖 Asking Claude to generate PR title in worktree: %s", worktreePath)
+
+	prompt := PRTitleGenerationPrompt(branchName)
+
+	result, err := g.claudeService.ContinueConversationInDir(sessionID, prompt, worktreePath)
+	if err != nil {
+		return "", fmt.Errorf("claude failed to generate PR title: %w", err)
+	}
+
+	return strings.TrimSpace(result.Output), nil
+}
+
+func (g *GitUseCase) generatePRBodyWithClaudeInWorktree(
+	sessionID, branchName, threadLink, worktreePath string,
+) (string, error) {
+	log.Info("🤖 Asking Claude to generate PR body in worktree: %s", worktreePath)
+
+	// Look for GitHub PR template in worktree
+	prTemplate, err := g.gitClient.FindPRTemplateInWorktree(worktreePath)
+	if err != nil {
+		log.Error("⚠️ Failed to search for PR template: %v (continuing with default)", err)
+		prTemplate = ""
+	}
+
+	prompt := PRDescriptionGenerationPrompt(branchName, prTemplate)
+
+	result, err := g.claudeService.ContinueConversationInDir(sessionID, prompt, worktreePath)
+	if err != nil {
+		return "", fmt.Errorf("claude failed to generate PR body: %w", err)
+	}
+
+	// Append footer with thread link
+	cleanBody := strings.TrimSpace(result.Output)
+	platformName := getPlatformFromLink(threadLink)
+	finalBody := cleanBody + fmt.Sprintf(
+		"\n\n---\nGenerated by [Claude Control](https://claudecontrol.com) from this [%s](%s)",
+		platformName, threadLink,
+	)
+
+	return finalBody, nil
+}
+
+func (g *GitUseCase) updatePRTitleAndDescriptionInWorktreeIfNeeded(
+	sessionID, branchName, threadLink, worktreePath string,
+) error {
+	log.Info("📋 Starting to update PR title and description if needed (worktree: %s)", worktreePath)
+
+	// Get current PR title and description
+	currentTitle, err := g.gitClient.GetPRTitleInWorktree(worktreePath, branchName)
+	if err != nil {
+		log.Error("❌ Failed to get current PR title: %v", err)
+		return fmt.Errorf("failed to get current PR title: %w", err)
+	}
+
+	currentDescription, err := g.gitClient.GetPRDescriptionInWorktree(worktreePath, branchName)
+	if err != nil {
+		log.Error("❌ Failed to get current PR description: %v", err)
+		return fmt.Errorf("failed to get current PR description: %w", err)
+	}
+
+	// Generate updated PR title and description using Claude in parallel
+	titleUpdateChan := make(chan CLIAgentResult)
+	descriptionUpdateChan := make(chan CLIAgentResult)
+
+	go func() {
+		output, err := g.generateUpdatedPRTitleWithClaudeInWorktree(sessionID, branchName, currentTitle, worktreePath)
+		titleUpdateChan <- CLIAgentResult{Output: output, Err: err}
+	}()
+
+	go func() {
+		output, err := g.generateUpdatedPRDescriptionWithClaudeInWorktree(
+			sessionID, branchName, currentDescription, threadLink, worktreePath,
+		)
+		descriptionUpdateChan <- CLIAgentResult{Output: output, Err: err}
+	}()
+
+	titleUpdateRes := <-titleUpdateChan
+	descriptionUpdateRes := <-descriptionUpdateChan
+
+	if titleUpdateRes.Err != nil {
+		log.Error("❌ Failed to generate updated PR title: %v", titleUpdateRes.Err)
+		return fmt.Errorf("failed to generate updated PR title: %w", titleUpdateRes.Err)
+	}
+
+	if descriptionUpdateRes.Err != nil {
+		log.Error("❌ Failed to generate updated PR description: %v", descriptionUpdateRes.Err)
+		return fmt.Errorf("failed to generate updated PR description: %w", descriptionUpdateRes.Err)
+	}
+
+	updatedTitle := titleUpdateRes.Output
+	updatedDescription := descriptionUpdateRes.Output
+
+	// Update title if changed
+	if strings.TrimSpace(updatedTitle) != strings.TrimSpace(currentTitle) {
+		log.Info("🔄 PR title has changed, updating...")
+		if err := g.gitClient.UpdatePRTitleInWorktree(worktreePath, branchName, updatedTitle); err != nil {
+			log.Error("❌ Failed to update PR title: %v", err)
+			return fmt.Errorf("failed to update PR title: %w", err)
+		}
+		log.Info("✅ Successfully updated PR title")
+	} else {
+		log.Info("ℹ️ PR title remains the same - no update needed")
+	}
+
+	// Update description if changed
+	if strings.TrimSpace(updatedDescription) != strings.TrimSpace(currentDescription) {
+		log.Info("🔄 PR description has changed, updating...")
+		if err := g.gitClient.UpdatePRDescriptionInWorktree(worktreePath, branchName, updatedDescription); err != nil {
+			log.Error("❌ Failed to update PR description: %v", err)
+			return fmt.Errorf("failed to update PR description: %w", err)
+		}
+		log.Info("✅ Successfully updated PR description")
+	} else {
+		log.Info("ℹ️ PR description remains the same - no update needed")
+	}
+
+	log.Info("📋 Completed successfully - updated PR title and description if needed")
+	return nil
+}
+
+func (g *GitUseCase) generateUpdatedPRTitleWithClaudeInWorktree(
+	sessionID, branchName, currentTitle, worktreePath string,
+) (string, error) {
+	log.Info("🤖 Asking Claude to generate updated PR title in worktree: %s", worktreePath)
+
+	prompt := PRTitleUpdatePrompt(currentTitle, branchName)
+
+	result, err := g.claudeService.ContinueConversationInDir(sessionID, prompt, worktreePath)
+	if err != nil {
+		return "", fmt.Errorf("claude failed to generate updated PR title: %w", err)
+	}
+
+	return strings.TrimSpace(result.Output), nil
+}
+
+func (g *GitUseCase) generateUpdatedPRDescriptionWithClaudeInWorktree(
+	sessionID, branchName, currentDescription, threadLink, worktreePath string,
+) (string, error) {
+	log.Info("🤖 Asking Claude to generate updated PR description in worktree: %s", worktreePath)
+
+	currentDescriptionClean := g.removeFooterFromDescription(currentDescription)
+
+	prompt := PRDescriptionUpdatePrompt(currentDescriptionClean, branchName)
+
+	result, err := g.claudeService.ContinueConversationInDir(sessionID, prompt, worktreePath)
+	if err != nil {
+		return "", fmt.Errorf("claude failed to generate updated PR description: %w", err)
+	}
+
+	// Append footer with thread link
+	cleanBody := strings.TrimSpace(result.Output)
+	platformName := getPlatformFromLink(threadLink)
+	finalBody := cleanBody + fmt.Sprintf(
+		"\n\n---\nGenerated by [Claude Control](https://claudecontrol.com) from this [%s](%s)",
+		platformName, threadLink,
+	)
+
+	return finalBody, nil
+}
+
+// ValidateAndRestorePRDescriptionFooterInWorktree validates and restores PR footer in worktree
+func (g *GitUseCase) ValidateAndRestorePRDescriptionFooterInWorktree(threadLink, worktreePath string) error {
+	log.Info("📋 Starting to validate and restore PR description footer in worktree: %s", worktreePath)
+
+	// Check if we're in repo mode
+	repoContext := g.appState.GetRepositoryContext()
+	if !repoContext.IsRepoMode {
+		log.Info("📦 No-repo mode: Skipping PR description footer validation")
+		return nil
+	}
+
+	// Get current branch in worktree
+	currentBranch, err := g.gitClient.GetCurrentBranchInWorktree(worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to get current branch in worktree: %v", err)
+		return fmt.Errorf("failed to get current branch in worktree: %w", err)
+	}
+
+	// Check if a PR exists for this branch
+	hasExistingPR, err := g.gitClient.HasExistingPRInWorktree(worktreePath, currentBranch)
+	if err != nil {
+		log.Error("❌ Failed to check for existing PR: %v", err)
+		return fmt.Errorf("failed to check for existing PR: %w", err)
+	}
+
+	if !hasExistingPR {
+		log.Info("ℹ️ No existing PR found - skipping footer validation")
+		return nil
+	}
+
+	// Get current PR description
+	currentDescription, err := g.gitClient.GetPRDescriptionInWorktree(worktreePath, currentBranch)
+	if err != nil {
+		log.Error("❌ Failed to get PR description: %v", err)
+		return fmt.Errorf("failed to get PR description: %w", err)
+	}
+
+	// Check if the expected footer pattern is present
+	footerPattern := `---\s*\n.*Generated by \[Claude Control\]\(https://claudecontrol\.com\) from this \[(Slack|Discord) thread\]\([^)]+\)`
+
+	matched, err := regexp.MatchString(footerPattern, currentDescription)
+	if err != nil {
+		log.Error("❌ Failed to match footer pattern: %v", err)
+		return fmt.Errorf("failed to match footer pattern: %w", err)
+	}
+
+	if matched {
+		log.Info("✅ PR description already has correct Claude Control footer")
+		return nil
+	}
+
+	log.Info("🔧 PR description missing Claude Control footer - restoring it")
+
+	// Remove any existing footer lines to avoid duplicates
+	lines := strings.Split(currentDescription, "\n")
+	var cleanedLines []string
+	inFooterSection := false
+
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+
+		if strings.Contains(trimmedLine, "Generated by Claude Control") ||
+			strings.Contains(trimmedLine, "Generated by Claude Code") {
+			inFooterSection = true
+			continue
+		}
+
+		if trimmedLine == "---" {
+			isFooterSeparator := false
+			for i := len(cleanedLines); i < len(lines)-1; i++ {
+				nextLine := strings.TrimSpace(lines[i+1])
+				if nextLine == "" {
+					continue
+				}
+				if strings.Contains(nextLine, "Generated by Claude") {
+					isFooterSeparator = true
+				}
+				break
+			}
+
+			if isFooterSeparator || inFooterSection {
+				continue
+			}
+		}
+
+		if inFooterSection && trimmedLine == "" {
+			continue
+		}
+
+		cleanedLines = append(cleanedLines, line)
+	}
+
+	// Remove trailing empty lines
+	for len(cleanedLines) > 0 && strings.TrimSpace(cleanedLines[len(cleanedLines)-1]) == "" {
+		cleanedLines = cleanedLines[:len(cleanedLines)-1]
+	}
+
+	// Add the correct footer
+	platformName := getPlatformFromLink(threadLink)
+	expectedFooter := fmt.Sprintf(
+		"Generated by [Claude Control](https://claudecontrol.com) from this [%s](%s)",
+		platformName, threadLink,
+	)
+	restoredDescription := strings.Join(cleanedLines, "\n")
+	if restoredDescription != "" {
+		if strings.HasSuffix(strings.TrimSpace(restoredDescription), "---") {
+			restoredDescription += "\n" + expectedFooter
+		} else {
+			restoredDescription += "\n\n---\n" + expectedFooter
+		}
+	} else {
+		restoredDescription = "---\n" + expectedFooter
+	}
+
+	// Update the PR description
+	if err := g.gitClient.UpdatePRDescriptionInWorktree(worktreePath, currentBranch, restoredDescription); err != nil {
+		log.Error("❌ Failed to update PR description: %v", err)
+		return fmt.Errorf("failed to update PR description: %w", err)
+	}
+
+	log.Info("✅ Successfully restored Claude Control footer to PR description")
 	return nil
 }

@@ -203,6 +203,30 @@ func (c *ClaudeService) ContinueConversation(sessionID, prompt string) (*service
 	return c.ContinueConversationWithOptions(sessionID, prompt, nil)
 }
 
+// StartNewConversationInDir starts a new conversation in a specific working directory
+func (c *ClaudeService) StartNewConversationInDir(prompt, workDir string) (*services.CLIAgentResult, error) {
+	return c.StartNewConversationWithOptions(prompt, &clients.ClaudeOptions{
+		WorkDir: workDir,
+	})
+}
+
+// StartNewConversationWithSystemPromptInDir starts a new conversation with system prompt in a specific directory
+func (c *ClaudeService) StartNewConversationWithSystemPromptInDir(
+	prompt, systemPrompt, workDir string,
+) (*services.CLIAgentResult, error) {
+	return c.StartNewConversationWithOptions(prompt, &clients.ClaudeOptions{
+		SystemPrompt: systemPrompt,
+		WorkDir:      workDir,
+	})
+}
+
+// ContinueConversationInDir continues an existing conversation in a specific directory
+func (c *ClaudeService) ContinueConversationInDir(sessionID, prompt, workDir string) (*services.CLIAgentResult, error) {
+	return c.ContinueConversationWithOptions(sessionID, prompt, &clients.ClaudeOptions{
+		WorkDir: workDir,
+	})
+}
+
 func (c *ClaudeService) ContinueConversationWithOptions(
 	sessionID, prompt string,
 	options *clients.ClaudeOptions,

@@ -53,6 +53,12 @@ func RecoverJobs(
 		jobAge := now.Sub(jobData.UpdatedAt)
 		if jobAge > 24*time.Hour {
 			log.Info("🗑️ Removing stale job %s (age: %v)", jobID, jobAge)
+			// Clean up worktree if present for stale jobs
+			if jobData.WorktreePath != "" {
+				if err := gitUseCase.CleanupJobWorktree(jobData.WorktreePath, jobData.BranchName); err != nil {
+					log.Warn("⚠️ Failed to cleanup worktree for stale job %s: %v", jobID, err)
+				}
+			}
 			if err := appState.RemoveJob(jobID); err != nil {
 				log.Error("❌ Failed to remove stale job %s: %v", jobID, err)
 			} else {
@@ -61,21 +67,35 @@ func RecoverJobs(
 			continue
 		}
 
-		// Validate branch exists (only in repo mode)
+		// Validate branch/worktree exists (only in repo mode)
 		if repoContext.IsRepoMode {
-			branchExists, err := gitUseCase.BranchExists(jobData.BranchName)
-			if err != nil {
-				log.Error("❌ Failed to check if branch %s exists for job %s: %v", jobData.BranchName, jobID, err)
-				continue
-			}
-			if !branchExists {
-				log.Warn("⚠️ Branch %s for job %s no longer exists, removing job", jobData.BranchName, jobID)
-				if err := appState.RemoveJob(jobID); err != nil {
-					log.Error("❌ Failed to remove job with missing branch %s: %v", jobID, err)
-				} else {
-					removedJobsCount++
+			// For worktree-based jobs, validate worktree exists
+			if jobData.WorktreePath != "" {
+				if !gitUseCase.WorktreeExists(jobData.WorktreePath) {
+					log.Warn("⚠️ Worktree %s for job %s no longer exists, removing job", jobData.WorktreePath, jobID)
+					if err := appState.RemoveJob(jobID); err != nil {
+						log.Error("❌ Failed to remove job with missing worktree %s: %v", jobID, err)
+					} else {
+						removedJobsCount++
+					}
+					continue
 				}
-				continue
+			} else {
+				// For branch-based jobs, validate branch exists
+				branchExists, err := gitUseCase.BranchExists(jobData.BranchName)
+				if err != nil {
+					log.Error("❌ Failed to check if branch %s exists for job %s: %v", jobData.BranchName, jobID, err)
+					continue
+				}
+				if !branchExists {
+					log.Warn("⚠️ Branch %s for job %s no longer exists, removing job", jobData.BranchName, jobID)
+					if err := appState.RemoveJob(jobID); err != nil {
+						log.Error("❌ Failed to remove job with missing branch %s: %v", jobID, err)
+					} else {
+						removedJobsCount++
+					}
+					continue
+				}
 			}
 		}
 
