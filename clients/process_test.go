@@ -363,6 +363,63 @@ func TestInjectProxyEnv_DoesNotOverride(t *testing.T) {
 	}
 }
 
+func TestBuildAgentCommandWithWorkDir(t *testing.T) {
+	// Save original value
+	original := os.Getenv("AGENT_EXEC_USER")
+	defer os.Setenv("AGENT_EXEC_USER", original)
+
+	os.Unsetenv("AGENT_EXEC_USER")
+
+	workDir := "/tmp/test-workdir"
+	cmd := BuildAgentCommandWithWorkDir(workDir, "echo", "hello")
+
+	// Should set working directory
+	if cmd.Dir != workDir {
+		t.Errorf("Expected cmd.Dir to be %q, got %q", workDir, cmd.Dir)
+	}
+
+	// Should still have the correct command
+	if cmd.Args[0] != "echo" {
+		t.Errorf("Expected command 'echo', got %v", cmd.Args)
+	}
+}
+
+func TestBuildAgentCommandWithWorkDir_EmptyWorkDir(t *testing.T) {
+	// Save original value
+	original := os.Getenv("AGENT_EXEC_USER")
+	defer os.Setenv("AGENT_EXEC_USER", original)
+
+	os.Unsetenv("AGENT_EXEC_USER")
+
+	// Empty workDir should not set Dir
+	cmd := BuildAgentCommandWithWorkDir("", "echo", "hello")
+
+	if cmd.Dir != "" {
+		t.Errorf("Expected cmd.Dir to be empty when workDir is empty, got %q", cmd.Dir)
+	}
+}
+
+func TestBuildAgentCommandWithWorkDir_Managed(t *testing.T) {
+	// Save original value
+	original := os.Getenv("AGENT_EXEC_USER")
+	defer os.Setenv("AGENT_EXEC_USER", original)
+
+	os.Setenv("AGENT_EXEC_USER", "agentrunner")
+
+	workDir := "/tmp/test-workdir"
+	cmd := BuildAgentCommandWithWorkDir(workDir, "echo", "hello")
+
+	// In managed mode, should use sudo
+	if cmd.Args[0] != "sudo" {
+		t.Errorf("Expected sudo command in managed mode, got %v", cmd.Args)
+	}
+
+	// Should still set working directory
+	if cmd.Dir != workDir {
+		t.Errorf("Expected cmd.Dir to be %q in managed mode, got %q", workDir, cmd.Dir)
+	}
+}
+
 func TestBuildAgentCommand_InjectsProxy(t *testing.T) {
 	// Save original values
 	origUser := os.Getenv("AGENT_EXEC_USER")
