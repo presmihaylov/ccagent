@@ -142,6 +142,7 @@ func (a *AppState) GetJobData(jobID string) (*JobData, bool) {
 	return &JobData{
 		JobID:              data.JobID,
 		BranchName:         data.BranchName,
+		WorktreePath:       data.WorktreePath,
 		ClaudeSessionID:    data.ClaudeSessionID,
 		PullRequestID:      data.PullRequestID,
 		LastMessage:        data.LastMessage,
@@ -176,6 +177,7 @@ func (a *AppState) GetAllJobs() map[string]JobData {
 		result[jobID] = JobData{
 			JobID:              data.JobID,
 			BranchName:         data.BranchName,
+			WorktreePath:       data.WorktreePath,
 			ClaudeSessionID:    data.ClaudeSessionID,
 			PullRequestID:      data.PullRequestID,
 			LastMessage:        data.LastMessage,

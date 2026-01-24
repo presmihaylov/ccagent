@@ -1115,6 +1115,21 @@ func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
 	return nil
 }
 
+// FetchOrigin fetches updates from the origin remote.
+// This is safe for concurrent calls as it only updates remote tracking refs.
+func (g *GitClient) FetchOrigin() error {
+	log.Info("📋 Starting to fetch from origin")
+	cmd := exec.Command("git", "fetch", "origin")
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error("❌ Git fetch failed: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git fetch failed: %w\nOutput: %s", err, string(output))
+	}
+	log.Info("✅ Successfully fetched from origin")
+	return nil
+}
+
 // FindPRTemplate searches for GitHub PR template in standard locations
 // Returns the template content if found, empty string otherwise
 func (g *GitClient) FindPRTemplate() (string, error) {
@@ -1148,12 +1163,18 @@ func (g *GitClient) FindPRTemplate() (string, error) {
 // =============================================================================
 
 // CreateWorktree creates a new worktree at the specified path for the given branch.
-// If the branch doesn't exist, it will be created from the current HEAD.
-func (g *GitClient) CreateWorktree(worktreePath, branchName string) error {
-	log.Info("📋 Starting to create worktree at %s for branch %s", worktreePath, branchName)
+// If baseRef is provided (e.g., "origin/main"), the branch is created from that ref.
+// If baseRef is empty, the branch is created from the current HEAD.
+func (g *GitClient) CreateWorktree(worktreePath, branchName, baseRef string) error {
+	log.Info("📋 Starting to create worktree at %s for branch %s (baseRef: %s)", worktreePath, branchName, baseRef)
 
-	// git worktree add <path> -b <branch> creates worktree with a new branch
-	cmd := exec.Command("git", "worktree", "add", worktreePath, "-b", branchName)
+	// git worktree add <path> -b <branch> [<baseRef>] creates worktree with a new branch
+	var cmd *exec.Cmd
+	if baseRef != "" {
+		cmd = exec.Command("git", "worktree", "add", worktreePath, "-b", branchName, baseRef)
+	} else {
+		cmd = exec.Command("git", "worktree", "add", worktreePath, "-b", branchName)
+	}
 	g.setWorkDir(cmd)
 	output, err := cmd.CombinedOutput()
 
@@ -1243,8 +1264,17 @@ func (g *GitClient) WorktreeExists(worktreePath string) bool {
 		return false
 	}
 
+	// Resolve symlinks in the input path for accurate comparison.
+	// On macOS, /var is a symlink to /private/var, so git stores paths
+	// with resolved symlinks while callers may pass unresolved paths.
+	normalizedInput, err := filepath.EvalSymlinks(worktreePath)
+	if err != nil {
+		// If path doesn't exist or can't be resolved, use original
+		normalizedInput = worktreePath
+	}
+
 	for _, wt := range worktrees {
-		if wt.Path == worktreePath {
+		if wt.Path == normalizedInput {
 			return true
 		}
 	}

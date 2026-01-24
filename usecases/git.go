@@ -230,6 +230,13 @@ func (g *GitUseCase) SwitchToJobBranch(branchName string) error {
 		}
 	}
 
+	// Prune stale worktree references before checkout
+	// This handles cases where a worktree directory was deleted but git still has a reference
+	if err := g.gitClient.PruneWorktrees(); err != nil {
+		log.Warn("⚠️ Failed to prune stale worktrees: %v", err)
+		// Continue anyway - this is a best-effort cleanup
+	}
+
 	if branchExistsLocally {
 		// Branch exists locally, checkout normally
 		if err := g.gitClient.CheckoutBranch(branchName); err != nil {
@@ -755,6 +762,12 @@ func (g *GitUseCase) CheckPRStatus(branchName string) (string, error) {
 		return "no_pr", nil
 	}
 
+	// Handle empty branch name (can happen for jobs created in no-repo mode)
+	if branchName == "" {
+		log.Info("ℹ️ Empty branch name - skipping PR status check")
+		return "no_pr", nil
+	}
+
 	// First check if a PR exists for this branch
 	hasExistingPR, err := g.gitClient.HasExistingPR(branchName)
 	if err != nil {
@@ -1159,10 +1172,17 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 
 	log.Info("🌿 Generated branch name: %s", branchName)
 
-	// Reset and pull default branch in main repo first
-	if err := g.resetAndPullDefaultBranch(); err != nil {
-		log.Error("❌ Failed to reset and pull main: %v", err)
-		return "", "", fmt.Errorf("failed to reset and pull main: %w", err)
+	// Fetch latest from origin (safe for concurrent calls)
+	if err := g.gitClient.FetchOrigin(); err != nil {
+		log.Error("❌ Failed to fetch from origin: %v", err)
+		return "", "", fmt.Errorf("failed to fetch from origin: %w", err)
+	}
+
+	// Get default branch name
+	defaultBranch, err := g.gitClient.GetDefaultBranch()
+	if err != nil {
+		log.Error("❌ Failed to get default branch: %v", err)
+		return "", "", fmt.Errorf("failed to get default branch: %w", err)
 	}
 
 	// Determine worktree path
@@ -1180,8 +1200,9 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 
 	worktreePath := filepath.Join(worktreeBasePath, jobID)
 
-	// Create worktree with new branch
-	if err := g.gitClient.CreateWorktree(worktreePath, branchName); err != nil {
+	// Create worktree with new branch based on origin/<default-branch>
+	baseRef := fmt.Sprintf("origin/%s", defaultBranch)
+	if err := g.gitClient.CreateWorktree(worktreePath, branchName, baseRef); err != nil {
 		log.Error("❌ Failed to create worktree: %v", err)
 		return "", "", fmt.Errorf("failed to create worktree: %w", err)
 	}

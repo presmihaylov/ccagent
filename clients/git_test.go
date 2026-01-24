@@ -294,7 +294,7 @@ func TestCreateWorktree(t *testing.T) {
 	defer os.RemoveAll(worktreePath)
 
 	branchName := "test-worktree-branch"
-	err := client.CreateWorktree(worktreePath, branchName)
+	err := client.CreateWorktree(worktreePath, branchName, "")
 	if err != nil {
 		t.Fatalf("Failed to create worktree: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestCreateWorktree_ExistingBranch(t *testing.T) {
 	worktreePath := filepath.Join(os.TempDir(), "worktree-test-"+t.Name())
 	defer os.RemoveAll(worktreePath)
 
-	err := client.CreateWorktree(worktreePath, branchName)
+	err := client.CreateWorktree(worktreePath, branchName, "")
 	if err == nil {
 		t.Error("Expected error when creating worktree with existing branch name, got nil")
 	}
@@ -360,7 +360,7 @@ func TestRemoveWorktree(t *testing.T) {
 	worktreePath := filepath.Join(os.TempDir(), "worktree-test-"+t.Name())
 	branchName := "worktree-to-remove"
 
-	err := client.CreateWorktree(worktreePath, branchName)
+	err := client.CreateWorktree(worktreePath, branchName, "")
 	if err != nil {
 		t.Fatalf("Failed to create worktree: %v", err)
 	}
@@ -407,7 +407,7 @@ func TestListWorktrees(t *testing.T) {
 	for i, wtPath := range worktreePaths {
 		defer os.RemoveAll(wtPath)
 		branchName := "test-branch-" + strings.Replace(t.Name(), "/", "-", -1) + "-" + string(rune('a'+i))
-		if err := client.CreateWorktree(wtPath, branchName); err != nil {
+		if err := client.CreateWorktree(wtPath, branchName, ""); err != nil {
 			t.Fatalf("Failed to create worktree %s: %v", wtPath, err)
 		}
 	}
@@ -441,7 +441,7 @@ func TestWorktreeExists(t *testing.T) {
 	defer os.RemoveAll(worktreePath)
 	branchName := "worktree-exists-branch"
 
-	if err := client.CreateWorktree(worktreePath, branchName); err != nil {
+	if err := client.CreateWorktree(worktreePath, branchName, ""); err != nil {
 		t.Fatalf("Failed to create worktree: %v", err)
 	}
 
@@ -462,7 +462,7 @@ func TestPruneWorktrees(t *testing.T) {
 	worktreePath := filepath.Join(os.TempDir(), "worktree-prune-test-"+t.Name())
 	branchName := "worktree-prune-branch"
 
-	if err := client.CreateWorktree(worktreePath, branchName); err != nil {
+	if err := client.CreateWorktree(worktreePath, branchName, ""); err != nil {
 		t.Fatalf("Failed to create worktree: %v", err)
 	}
 
@@ -500,7 +500,7 @@ func TestWorktreeGitOperations(t *testing.T) {
 	defer os.RemoveAll(worktreePath)
 	branchName := "worktree-ops-branch"
 
-	if err := client.CreateWorktree(worktreePath, branchName); err != nil {
+	if err := client.CreateWorktree(worktreePath, branchName, ""); err != nil {
 		t.Fatalf("Failed to create worktree: %v", err)
 	}
 

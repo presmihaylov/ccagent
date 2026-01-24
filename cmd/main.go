@@ -687,16 +687,17 @@ func main() {
 			os.Exit(1)
 		}
 
-		err = cmdRunner.gitUseCase.CleanupStaleBranches()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to cleanup stale branches: %v\n", err)
-			// Don't exit - this is not critical for agent operation
-		}
-
-		// Cleanup orphaned worktrees (worktrees that don't correspond to any tracked job)
+		// Cleanup orphaned worktrees first (must happen before branch cleanup)
+		// Worktrees lock branches, so we must remove worktrees before deleting their branches
 		err = cmdRunner.gitUseCase.CleanupOrphanedWorktrees()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to cleanup orphaned worktrees: %v\n", err)
+			// Don't exit - this is not critical for agent operation
+		}
+
+		err = cmdRunner.gitUseCase.CleanupStaleBranches()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to cleanup stale branches: %v\n", err)
 			// Don't exit - this is not critical for agent operation
 		}
 	}

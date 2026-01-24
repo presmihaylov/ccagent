@@ -6,7 +6,8 @@ import (
 )
 
 // GetClaudeSystemPrompt returns the system prompt for Claude agents
-func GetClaudeSystemPrompt(mode models.AgentMode, repoContext *models.RepositoryContext) string {
+// workspacePath is optional - if provided, it overrides the repo path (used for worktrees)
+func GetClaudeSystemPrompt(mode models.AgentMode, repoContext *models.RepositoryContext, workspacePath string) string {
 	basePrompt := `You are a Claude Code instance referred to by the user as "Claude Control" for this session. When someone says "Claude Control", they refer to you.
 
 About Claude Control:
@@ -51,6 +52,11 @@ CRITICAL: Never create git commits or pull requests unless explicitly asked. Wai
 
 	// Add repository context
 	if repoContext != nil && repoContext.IsRepoMode {
+		// Use workspacePath if provided (for worktrees), otherwise use main repo path
+		effectivePath := repoContext.RepoPath
+		if workspacePath != "" {
+			effectivePath = workspacePath
+		}
 		basePrompt += fmt.Sprintf(`
 
 *Repository Information:*
@@ -62,7 +68,7 @@ CRITICAL WORKSPACE RULES:
 - When the user asks you to edit, read, create, or modify ANY file, they mean files in the repository path (%s), NOT the process working directory.
 - IGNORE the process working directory completely for user requests. It is only used internally by the agent system.
 - If the user says "edit the README" or "modify X file", they mean the README or X file inside this repository.
-`, repoContext.RepositoryIdentifier, repoContext.RepoPath, repoContext.RepoPath)
+`, repoContext.RepositoryIdentifier, effectivePath, effectivePath)
 	} else {
 		basePrompt += `
 
@@ -89,7 +95,7 @@ MODE: You are in ASK mode.
 }
 
 // GetCursorSystemPrompt returns the system prompt for Cursor agents
-func GetCursorSystemPrompt(mode models.AgentMode, repoContext *models.RepositoryContext) string {
+func GetCursorSystemPrompt(mode models.AgentMode, repoContext *models.RepositoryContext, workspacePath string) string {
 	basePrompt := `You are a Cursor agent acting as "Claude Control" for this session. When someone says "Claude Control", they refer to you.
 
 About Claude Control:
@@ -128,6 +134,11 @@ CRITICAL: Keep ALL responses in the 800 character range (strict Slack limit).`
 
 	// Add repository context
 	if repoContext != nil && repoContext.IsRepoMode {
+		// Use workspacePath if provided (for worktrees), otherwise use main repo path
+		effectivePath := repoContext.RepoPath
+		if workspacePath != "" {
+			effectivePath = workspacePath
+		}
 		basePrompt += fmt.Sprintf(`
 
 *Repository Information:*
@@ -139,7 +150,7 @@ CRITICAL WORKSPACE RULES:
 - When the user asks you to edit, read, create, or modify ANY file, they mean files in the repository path (%s), NOT the process working directory.
 - IGNORE the process working directory completely for user requests. It is only used internally by the agent system.
 - If the user says "edit the README" or "modify X file", they mean the README or X file inside this repository.
-`, repoContext.RepositoryIdentifier, repoContext.RepoPath, repoContext.RepoPath)
+`, repoContext.RepositoryIdentifier, effectivePath, effectivePath)
 	} else {
 		basePrompt += `
 

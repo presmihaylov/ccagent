@@ -280,9 +280,10 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	repoContext := mh.appState.GetRepositoryContext()
 
 	// Get appropriate system prompt based on agent type and mode
-	systemPrompt := GetClaudeSystemPrompt(payload.Mode, repoContext)
+	// Pass worktreePath so Claude knows to work in the worktree directory
+	systemPrompt := GetClaudeSystemPrompt(payload.Mode, repoContext, worktreePath)
 	if mh.claudeService.AgentName() == "cursor" {
-		systemPrompt = GetCursorSystemPrompt(payload.Mode, repoContext)
+		systemPrompt = GetCursorSystemPrompt(payload.Mode, repoContext, worktreePath)
 	}
 
 	// Process thread context (previous messages) and attachments
@@ -378,6 +379,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
 		BranchName:         finalBranchName,
+		WorktreePath:       worktreePath, // Preserve worktree path for concurrent job mode
 		ClaudeSessionID:    claudeResult.SessionID,
 		PullRequestID:      prID,
 		LastMessage:        payload.Message,
