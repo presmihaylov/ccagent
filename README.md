@@ -210,3 +210,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
+
+---
+
+*Sails on the horizon,*
+*Code and treasure intertwine—*
+*Ship your PRs, arr!*
