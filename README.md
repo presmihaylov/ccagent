@@ -210,3 +210,13 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
+
+---
+
+🏴‍☠️ *A Pirate Haiku*
+
+```
+Salt winds fill the sails
+Treasure gleams on distant shores
+Yo ho, code the seas
+```
