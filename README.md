@@ -210,3 +210,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
+
+---
+
+*Sails catch the wind,*
+*Code flows like the open sea,*
+*Pirates ship their PRs.*
