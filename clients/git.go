@@ -1784,3 +1784,59 @@ func (g *GitClient) FindPRTemplateInWorktree(worktreePath string) (string, error
 	log.Info("ℹ️ No PR template found in worktree")
 	return "", nil
 }
+
+// =============================================================================
+// Additional Worktree Pool Support Methods
+// =============================================================================
+
+// ResetHardInWorktreeToRef performs a git reset --hard to a specific ref in the worktree
+func (g *GitClient) ResetHardInWorktreeToRef(worktreePath, ref string) error {
+	log.Info("📋 Starting to reset worktree %s to ref %s", worktreePath, ref)
+
+	cmd := exec.Command("git", "reset", "--hard", ref)
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Git reset hard to ref failed in worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git reset hard to ref failed in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully reset worktree to ref %s", ref)
+	return nil
+}
+
+// RenameBranchInWorktree renames a branch within a worktree context
+func (g *GitClient) RenameBranchInWorktree(worktreePath, oldBranch, newBranch string) error {
+	log.Info("📋 Starting to rename branch %s to %s in worktree %s", oldBranch, newBranch, worktreePath)
+
+	cmd := exec.Command("git", "branch", "-m", oldBranch, newBranch)
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Branch rename failed in worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("branch rename failed in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully renamed branch to %s", newBranch)
+	return nil
+}
+
+// GetOriginCommit gets the commit hash of a branch on origin
+func (g *GitClient) GetOriginCommit(branchName string) (string, error) {
+	log.Info("📋 Starting to get origin commit for branch %s", branchName)
+
+	cmd := exec.Command("git", "rev-parse", fmt.Sprintf("origin/%s", branchName))
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to get origin commit: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to get origin commit: %w\nOutput: %s", err, string(output))
+	}
+
+	commitHash := strings.TrimSpace(string(output))
+	log.Info("✅ Origin commit for %s: %s", branchName, commitHash[:8])
+	return commitHash, nil
+}

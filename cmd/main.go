@@ -56,6 +56,10 @@ type CmdRunner struct {
 	// Persistent worker pools reused across reconnects
 	blockingWorkerPool *workerpool.WorkerPool
 	instantWorkerPool  *workerpool.WorkerPool
+
+	// Worktree pool for fast worktree acquisition
+	poolCtx    context.Context
+	poolCancel context.CancelFunc
 }
 
 // validateModelForAgent checks if the specified model is compatible with the chosen agent
@@ -499,6 +503,44 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	cr.blockingWorkerPool = workerpool.New(maxConcurrency) // concurrent conversation processing
 	cr.instantWorkerPool = workerpool.New(5)               // parallel PR status checks
 
+	// Initialize worktree pool if concurrency enabled and in repo mode
+	// Note: repoContext is already set above, we just refresh it here
+	repoContext = appState.GetRepositoryContext()
+	if gitUseCase.ShouldUseWorktrees() && repoContext.IsRepoMode {
+		// Get pool size from environment, default to MAX_CONCURRENCY
+		poolSize := maxConcurrency
+		if envVal := envManager.Get("WORKTREE_POOL_SIZE"); envVal != "" {
+			if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+				poolSize = val
+			}
+		}
+
+		worktreeBasePath, err := gitUseCase.GetWorktreeBasePath()
+		if err != nil {
+			log.Error("❌ Failed to get worktree base path: %v", err)
+			// Don't fail startup - pool is optional
+		} else {
+			worktreePool := usecases.NewWorktreePool(
+				gitUseCase.GetGitClient(),
+				worktreeBasePath,
+				poolSize,
+			)
+			gitUseCase.SetWorktreePool(worktreePool)
+
+			// Create context for pool lifecycle
+			cr.poolCtx, cr.poolCancel = context.WithCancel(context.Background())
+
+			// Reclaim any orphaned pool worktrees from previous crash
+			if err := worktreePool.ReclaimOrphanedPoolWorktrees(); err != nil {
+				log.Warn("⚠️ Failed to reclaim orphaned pool worktrees: %v", err)
+			}
+
+			// Start the pool replenisher
+			worktreePool.Start(cr.poolCtx)
+			log.Info("🏊 Worktree pool initialized (target size: %d)", poolSize)
+		}
+	}
+
 	// Register GitHub token update hook
 	envManager.RegisterReloadHook(gitUseCase.GithubTokenUpdateHook)
 	log.Info("📎 Registered GitHub token update hook")
@@ -712,6 +754,15 @@ func main() {
 
 	// Set up deferred cleanup
 	defer func() {
+		// Stop worktree pool first (before worker pools to ensure no new acquisitions)
+		if cmdRunner.poolCancel != nil {
+			cmdRunner.poolCancel()
+		}
+		if cmdRunner.gitUseCase.GetWorktreePool() != nil {
+			cmdRunner.gitUseCase.GetWorktreePool().Stop()
+			log.Info("🏊 Worktree pool stopped")
+		}
+
 		// Stop environment manager periodic refresh
 		if cmdRunner.envManager != nil {
 			cmdRunner.envManager.Stop()
