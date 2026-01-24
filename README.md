@@ -210,3 +210,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
+
+---
+
+*Salt spray on the bow,*
+*Code plundered from distant shores,*
+*Yarr, the build succeeds.*
