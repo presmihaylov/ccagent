@@ -1,5 +1,9 @@
 # ccagent
 
+*Wings of light descend,*
+*Guarding code through endless night—*
+*Angels never sleep.*
+
 A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [Claude Control platform](https://claudecontrol.com).
 
 ### Supported AI Assistants
