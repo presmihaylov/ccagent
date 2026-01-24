@@ -184,6 +184,29 @@ func (c *CursorService) ContinueConversation(sessionID, prompt string) (*service
 	return c.ContinueConversationWithOptions(sessionID, prompt, nil)
 }
 
+// StartNewConversationInDir starts a new conversation in a specific working directory
+// Note: Cursor does not support custom working directories yet, falls back to default behavior
+func (c *CursorService) StartNewConversationInDir(prompt, workDir string) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ Cursor does not support custom working directories, ignoring workDir: %s", workDir)
+	return c.StartNewConversation(prompt)
+}
+
+// StartNewConversationWithSystemPromptInDir starts a new conversation with system prompt in a specific directory
+// Note: Cursor does not support custom working directories yet, falls back to default behavior
+func (c *CursorService) StartNewConversationWithSystemPromptInDir(
+	prompt, systemPrompt, workDir string,
+) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ Cursor does not support custom working directories, ignoring workDir: %s", workDir)
+	return c.StartNewConversationWithSystemPrompt(prompt, systemPrompt)
+}
+
+// ContinueConversationInDir continues an existing conversation in a specific directory
+// Note: Cursor does not support custom working directories yet, falls back to default behavior
+func (c *CursorService) ContinueConversationInDir(sessionID, prompt, workDir string) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ Cursor does not support custom working directories, ignoring workDir: %s", workDir)
+	return c.ContinueConversation(sessionID, prompt)
+}
+
 func (c *CursorService) ContinueConversationWithOptions(
 	sessionID, prompt string,
 	options *clients.CursorOptions,

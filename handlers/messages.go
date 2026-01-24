@@ -221,7 +221,17 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	log.Info("🚀 Starting new conversation with message: %s", payload.Message)
 
 	// Prepare Git environment for new conversation - FAIL if this doesn't work
-	branchName, err := mh.gitUseCase.PrepareForNewConversation(payload.Message)
+	// Use worktrees if MAX_CONCURRENCY > 1 for concurrent job processing
+	var branchName, worktreePath string
+	var err error
+
+	if mh.gitUseCase.ShouldUseWorktrees() {
+		log.Info("🌳 Using worktree mode for concurrent job processing")
+		branchName, worktreePath, err = mh.gitUseCase.PrepareForNewConversationWithWorktree(payload.JobID, payload.Message)
+	} else {
+		branchName, err = mh.gitUseCase.PrepareForNewConversation(payload.Message)
+	}
+
 	if err != nil {
 		log.Error("❌ Failed to prepare Git environment: %v", err)
 		return fmt.Errorf("failed to prepare Git environment: %w", err)
@@ -245,6 +255,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
 		BranchName:         branchName,
+		WorktreePath:       worktreePath, // Will be empty if not using worktrees
 		ClaudeSessionID:    "", // No session yet
 		PullRequestID:      "",
 		LastMessage:        payload.Message,
@@ -269,9 +280,10 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	repoContext := mh.appState.GetRepositoryContext()
 
 	// Get appropriate system prompt based on agent type and mode
-	systemPrompt := GetClaudeSystemPrompt(payload.Mode, repoContext)
+	// Pass worktreePath so Claude knows to work in the worktree directory
+	systemPrompt := GetClaudeSystemPrompt(payload.Mode, repoContext, worktreePath)
 	if mh.claudeService.AgentName() == "cursor" {
-		systemPrompt = GetCursorSystemPrompt(payload.Mode, repoContext)
+		systemPrompt = GetCursorSystemPrompt(payload.Mode, repoContext, worktreePath)
 	}
 
 	// Process thread context (previous messages) and attachments
@@ -296,7 +308,15 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		log.Info("📝 Formatted thread context with %d previous messages", len(payload.PreviousMessages))
 	}
 
-	claudeResult, err := mh.claudeService.StartNewConversationWithSystemPrompt(finalPrompt, systemPrompt)
+	// Start Claude session - use worktree directory if in worktree mode
+	var claudeResult *services.CLIAgentResult
+	if worktreePath != "" {
+		log.Info("🌳 Starting Claude session in worktree: %s", worktreePath)
+		claudeResult, err = mh.claudeService.StartNewConversationWithSystemPromptInDir(finalPrompt, systemPrompt, worktreePath)
+	} else {
+		claudeResult, err = mh.claudeService.StartNewConversationWithSystemPrompt(finalPrompt, systemPrompt)
+	}
+
 	if err != nil {
 		log.Info("❌ Error starting Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
@@ -314,7 +334,12 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	var commitResult *usecases.AutoCommitResult
 	if payload.Mode != models.AgentModeAsk {
 		var err error
-		commitResult, err = mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
+		if worktreePath != "" {
+			// Use worktree-aware auto-commit
+			commitResult, err = mh.gitUseCase.AutoCommitChangesInWorktreeIfNeeded(payload.MessageLink, claudeResult.SessionID, worktreePath)
+		} else {
+			commitResult, err = mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
+		}
 		if err != nil {
 			log.Info("❌ Auto-commit failed: %v", err)
 			return fmt.Errorf("auto-commit failed: %w", err)
@@ -354,6 +379,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
 		BranchName:         finalBranchName,
+		WorktreePath:       worktreePath, // Preserve worktree path for concurrent job mode
 		ClaudeSessionID:    claudeResult.SessionID,
 		PullRequestID:      prID,
 		LastMessage:        payload.Message,
@@ -378,9 +404,16 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	}
 
 	// Validate and restore PR description footer if needed
-	if err := mh.gitUseCase.ValidateAndRestorePRDescriptionFooter(payload.MessageLink); err != nil {
-		log.Info("❌ Failed to validate PR description footer: %v", err)
-		return fmt.Errorf("failed to validate PR description footer: %w", err)
+	if worktreePath != "" {
+		if err := mh.gitUseCase.ValidateAndRestorePRDescriptionFooterInWorktree(payload.MessageLink, worktreePath); err != nil {
+			log.Info("❌ Failed to validate PR description footer in worktree: %v", err)
+			return fmt.Errorf("failed to validate PR description footer in worktree: %w", err)
+		}
+	} else {
+		if err := mh.gitUseCase.ValidateAndRestorePRDescriptionFooter(payload.MessageLink); err != nil {
+			log.Info("❌ Failed to validate PR description footer: %v", err)
+			return fmt.Errorf("failed to validate PR description footer: %w", err)
+		}
 	}
 
 	log.Info("📋 Completed successfully - handled start conversation message")
@@ -423,49 +456,86 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	if repoContext.IsRepoMode {
 		utils.AssertInvariant(jobData.BranchName != "", "BranchName must not be empty for job "+payload.JobID)
 
-		// Switch to the job's branch before continuing the conversation
-		if err := mh.gitUseCase.SwitchToJobBranch(jobData.BranchName); err != nil {
-			log.Error("❌ Failed to switch to job branch %s: %v", jobData.BranchName, err)
-			return fmt.Errorf("failed to switch to job branch %s: %w", jobData.BranchName, err)
+		// Handle worktree mode vs regular branch mode
+		if jobData.WorktreePath != "" {
+			// Worktree mode: prepare the existing worktree for continuing the job
+			log.Info("🌳 Using worktree mode for job: %s", jobData.WorktreePath)
+			if err := mh.gitUseCase.PrepareWorktreeForJob(jobData.WorktreePath, jobData.BranchName); err != nil {
+				// Check if error is due to remote branch being deleted
+				if strings.Contains(err.Error(), "remote branch deleted") {
+					log.Warn("⚠️ Remote branch deleted for job %s in worktree - abandoning job", payload.JobID)
+
+					// Cleanup worktree and abandon job
+					cleanupErr := mh.gitUseCase.CleanupJobWorktree(jobData.WorktreePath, jobData.BranchName)
+					abandonErr := mh.appState.RemoveJob(payload.JobID)
+
+					var systemMessage string
+					if cleanupErr != nil || abandonErr != nil {
+						systemMessage = fmt.Sprintf("Job failed: Remote branch '%s' was deleted (likely merged), but cleanup failed. Please check repository state.", jobData.BranchName)
+					} else {
+						systemMessage = fmt.Sprintf("Job abandoned: Remote branch '%s' was deleted (likely merged). Please start a new conversation.", jobData.BranchName)
+					}
+
+					systemErr := mh.sendSystemMessage(systemMessage, payload.ProcessedMessageID, payload.JobID)
+					if systemErr != nil {
+						log.Error("❌ Failed to send system message for abandoned job: %v", systemErr)
+					}
+
+					return fmt.Errorf("job abandoned: remote branch deleted")
+				}
+
+				log.Error("❌ Failed to prepare worktree for job: %v", err)
+				return fmt.Errorf("failed to prepare worktree for job: %w", err)
+			}
+			log.Info("✅ Successfully prepared worktree for job: %s", jobData.WorktreePath)
+		} else {
+			// Regular branch mode: switch to the job's branch before continuing
+			if err := mh.gitUseCase.SwitchToJobBranch(jobData.BranchName); err != nil {
+				log.Error("❌ Failed to switch to job branch %s: %v", jobData.BranchName, err)
+				return fmt.Errorf("failed to switch to job branch %s: %w", jobData.BranchName, err)
+			}
+			log.Info("✅ Successfully switched to job branch: %s", jobData.BranchName)
 		}
-		log.Info("✅ Successfully switched to job branch: %s", jobData.BranchName)
 	}
 
-	// Pull latest changes before continuing conversation
-	if err := mh.gitUseCase.PullLatestChanges(); err != nil {
-		// Check if error is due to remote branch being deleted
-		if strings.Contains(err.Error(), "remote branch deleted") {
-			log.Warn("⚠️ Remote branch deleted for job %s - abandoning job and cleaning up", payload.JobID)
+	// Pull latest changes before continuing conversation (only in non-worktree mode)
+	// In worktree mode, PrepareWorktreeForJob already pulls latest changes
+	if jobData.WorktreePath == "" {
+		if err := mh.gitUseCase.PullLatestChanges(); err != nil {
+			// Check if error is due to remote branch being deleted
+			if strings.Contains(err.Error(), "remote branch deleted") {
+				log.Warn("⚠️ Remote branch deleted for job %s - abandoning job and cleaning up", payload.JobID)
 
-			// Abandon the job and cleanup
-			abandonErr := mh.gitUseCase.AbandonJobAndCleanup(payload.JobID, jobData.BranchName)
+				// Abandon the job and cleanup
+				abandonErr := mh.gitUseCase.AbandonJobAndCleanup(payload.JobID, jobData.BranchName)
 
-			// Send system message to notify user (try even if cleanup fails)
-			var systemMessage string
-			if abandonErr != nil {
-				systemMessage = fmt.Sprintf("Job failed: Remote branch '%s' was deleted (likely merged), but cleanup failed: %v. Please check repository state.", jobData.BranchName, abandonErr)
-			} else {
-				systemMessage = fmt.Sprintf("Job abandoned: Remote branch '%s' was deleted (likely merged). Please start a new conversation.", jobData.BranchName)
+				// Send system message to notify user (try even if cleanup fails)
+				var systemMessage string
+				if abandonErr != nil {
+					systemMessage = fmt.Sprintf("Job failed: Remote branch '%s' was deleted (likely merged), but cleanup failed: %v. Please check repository state.", jobData.BranchName, abandonErr)
+				} else {
+					systemMessage = fmt.Sprintf("Job abandoned: Remote branch '%s' was deleted (likely merged). Please start a new conversation.", jobData.BranchName)
+				}
+
+				systemErr := mh.sendSystemMessage(systemMessage, payload.ProcessedMessageID, payload.JobID)
+				if systemErr != nil {
+					log.Error("❌ Failed to send system message for abandoned job: %v", systemErr)
+				}
+
+				// Return the cleanup error if it occurred, otherwise return abandoned error
+				if abandonErr != nil {
+					log.Error("❌ Failed to abandon job and cleanup: %v", abandonErr)
+					return fmt.Errorf("failed to abandon job: %w", abandonErr)
+				}
+
+				return fmt.Errorf("job abandoned: remote branch deleted")
 			}
 
-			systemErr := mh.sendSystemMessage(systemMessage, payload.ProcessedMessageID, payload.JobID)
-			if systemErr != nil {
-				log.Error("❌ Failed to send system message for abandoned job: %v", systemErr)
-			}
-
-			// Return the cleanup error if it occurred, otherwise return abandoned error
-			if abandonErr != nil {
-				log.Error("❌ Failed to abandon job and cleanup: %v", abandonErr)
-				return fmt.Errorf("failed to abandon job: %w", abandonErr)
-			}
-
-			return fmt.Errorf("job abandoned: remote branch deleted")
+			log.Error("❌ Failed to pull latest changes: %v", err)
+			return fmt.Errorf("failed to pull latest changes: %w", err)
 		}
-
-		log.Error("❌ Failed to pull latest changes: %v", err)
-		return fmt.Errorf("failed to pull latest changes: %w", err)
+		log.Info("✅ Pulled latest changes from remote")
 	}
-	log.Info("✅ Pulled latest changes from remote")
 
 	// Refresh environment variables before continuing conversation
 	if err := mh.envManager.Reload(); err != nil {
@@ -485,6 +555,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
 		BranchName:         jobData.BranchName,
+		WorktreePath:       jobData.WorktreePath, // Preserve worktree path
 		ClaudeSessionID:    jobData.ClaudeSessionID,
 		PullRequestID:      jobData.PullRequestID,
 		LastMessage:        payload.Message,
@@ -531,7 +602,14 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		finalPrompt = payload.Message + "\n" + attachmentText
 	}
 
-	claudeResult, err := mh.claudeService.ContinueConversation(sessionID, finalPrompt)
+	// Continue Claude session - use worktree directory if in worktree mode
+	var claudeResult *services.CLIAgentResult
+	if jobData.WorktreePath != "" {
+		log.Info("🌳 Continuing Claude session in worktree: %s", jobData.WorktreePath)
+		claudeResult, err = mh.claudeService.ContinueConversationInDir(sessionID, finalPrompt, jobData.WorktreePath)
+	} else {
+		claudeResult, err = mh.claudeService.ContinueConversation(sessionID, finalPrompt)
+	}
 	if err != nil {
 		log.Info("❌ Error continuing Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
@@ -549,7 +627,12 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	var commitResult *usecases.AutoCommitResult
 	if jobData.Mode != models.AgentModeAsk {
 		var err error
-		commitResult, err = mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
+		if jobData.WorktreePath != "" {
+			// Use worktree-aware auto-commit
+			commitResult, err = mh.gitUseCase.AutoCommitChangesInWorktreeIfNeeded(payload.MessageLink, claudeResult.SessionID, jobData.WorktreePath)
+		} else {
+			commitResult, err = mh.gitUseCase.AutoCommitChangesIfNeeded(payload.MessageLink, claudeResult.SessionID)
+		}
 		if err != nil {
 			log.Info("❌ Auto-commit failed: %v", err)
 			return fmt.Errorf("auto-commit failed: %w", err)
@@ -589,6 +672,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
 		JobID:              payload.JobID,
 		BranchName:         finalBranchName,
+		WorktreePath:       jobData.WorktreePath, // Preserve worktree path
 		Mode:               jobData.Mode,
 		ClaudeSessionID:    claudeResult.SessionID,
 		PullRequestID:      prID,
@@ -613,9 +697,16 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	}
 
 	// Validate and restore PR description footer if needed
-	if err := mh.gitUseCase.ValidateAndRestorePRDescriptionFooter(payload.MessageLink); err != nil {
-		log.Info("❌ Failed to validate PR description footer: %v", err)
-		return fmt.Errorf("failed to validate PR description footer: %w", err)
+	if jobData.WorktreePath != "" {
+		if err := mh.gitUseCase.ValidateAndRestorePRDescriptionFooterInWorktree(payload.MessageLink, jobData.WorktreePath); err != nil {
+			log.Info("❌ Failed to validate PR description footer in worktree: %v", err)
+			return fmt.Errorf("failed to validate PR description footer in worktree: %w", err)
+		}
+	} else {
+		if err := mh.gitUseCase.ValidateAndRestorePRDescriptionFooter(payload.MessageLink); err != nil {
+			log.Info("❌ Failed to validate PR description footer: %v", err)
+			return fmt.Errorf("failed to validate PR description footer: %w", err)
+		}
 	}
 
 	log.Info("📋 Completed successfully - handled user message")

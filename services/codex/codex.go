@@ -190,6 +190,29 @@ func (c *CodexService) ContinueConversation(sessionID, prompt string) (*services
 	return c.ContinueConversationWithOptions(sessionID, prompt, nil)
 }
 
+// StartNewConversationInDir starts a new conversation in a specific working directory
+// Note: Codex does not support custom working directories yet, falls back to default behavior
+func (c *CodexService) StartNewConversationInDir(prompt, workDir string) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ Codex does not support custom working directories, ignoring workDir: %s", workDir)
+	return c.StartNewConversation(prompt)
+}
+
+// StartNewConversationWithSystemPromptInDir starts a new conversation with system prompt in a specific directory
+// Note: Codex does not support custom working directories yet, falls back to default behavior
+func (c *CodexService) StartNewConversationWithSystemPromptInDir(
+	prompt, systemPrompt, workDir string,
+) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ Codex does not support custom working directories, ignoring workDir: %s", workDir)
+	return c.StartNewConversationWithSystemPrompt(prompt, systemPrompt)
+}
+
+// ContinueConversationInDir continues an existing conversation in a specific directory
+// Note: Codex does not support custom working directories yet, falls back to default behavior
+func (c *CodexService) ContinueConversationInDir(sessionID, prompt, workDir string) (*services.CLIAgentResult, error) {
+	log.Warn("⚠️ Codex does not support custom working directories, ignoring workDir: %s", workDir)
+	return c.ContinueConversation(sessionID, prompt)
+}
+
 func (c *CodexService) ContinueConversationWithOptions(
 	sessionID, prompt string,
 	options *clients.CodexOptions,

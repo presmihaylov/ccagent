@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +16,13 @@ import (
 
 type GitClient struct {
 	getRepoPath func() string // Function to get repository path (allows lazy evaluation)
+}
+
+// WorktreeInfo contains information about a git worktree
+type WorktreeInfo struct {
+	Path   string
+	Branch string
+	Commit string
 }
 
 func NewGitClient() *GitClient {
@@ -1107,6 +1115,21 @@ func (g *GitClient) UpdateRemoteURLWithToken(token string) error {
 	return nil
 }
 
+// FetchOrigin fetches updates from the origin remote.
+// This is safe for concurrent calls as it only updates remote tracking refs.
+func (g *GitClient) FetchOrigin() error {
+	log.Info("📋 Starting to fetch from origin")
+	cmd := exec.Command("git", "fetch", "origin")
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error("❌ Git fetch failed: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git fetch failed: %w\nOutput: %s", err, string(output))
+	}
+	log.Info("✅ Successfully fetched from origin")
+	return nil
+}
+
 // FindPRTemplate searches for GitHub PR template in standard locations
 // Returns the template content if found, empty string otherwise
 func (g *GitClient) FindPRTemplate() (string, error) {
@@ -1132,5 +1155,632 @@ func (g *GitClient) FindPRTemplate() (string, error) {
 	}
 
 	log.Info("ℹ️ No PR template found in standard locations")
+	return "", nil
+}
+
+// =============================================================================
+// Worktree Operations
+// =============================================================================
+
+// CreateWorktree creates a new worktree at the specified path for the given branch.
+// If baseRef is provided (e.g., "origin/main"), the branch is created from that ref.
+// If baseRef is empty, the branch is created from the current HEAD.
+func (g *GitClient) CreateWorktree(worktreePath, branchName, baseRef string) error {
+	log.Info("📋 Starting to create worktree at %s for branch %s (baseRef: %s)", worktreePath, branchName, baseRef)
+
+	// git worktree add <path> -b <branch> [<baseRef>] creates worktree with a new branch
+	var cmd *exec.Cmd
+	if baseRef != "" {
+		cmd = exec.Command("git", "worktree", "add", worktreePath, "-b", branchName, baseRef)
+	} else {
+		cmd = exec.Command("git", "worktree", "add", worktreePath, "-b", branchName)
+	}
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to create worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to create worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully created worktree at %s for branch %s", worktreePath, branchName)
+	return nil
+}
+
+// RemoveWorktree removes a worktree at the specified path.
+// The --force flag is used to remove even if there are uncommitted changes.
+func (g *GitClient) RemoveWorktree(worktreePath string) error {
+	log.Info("📋 Starting to remove worktree at %s", worktreePath)
+
+	cmd := exec.Command("git", "worktree", "remove", worktreePath, "--force")
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to remove worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to remove worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully removed worktree at %s", worktreePath)
+	return nil
+}
+
+// ListWorktrees returns a list of all worktrees for the repository
+func (g *GitClient) ListWorktrees() ([]WorktreeInfo, error) {
+	log.Info("📋 Starting to list worktrees")
+
+	cmd := exec.Command("git", "worktree", "list", "--porcelain")
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to list worktrees: %v\nOutput: %s", err, string(output))
+		return nil, fmt.Errorf("failed to list worktrees: %w\nOutput: %s", err, string(output))
+	}
+
+	// Parse porcelain output format:
+	// worktree /path/to/worktree
+	// HEAD <commit>
+	// branch refs/heads/<branch>
+	// (empty line)
+	var worktrees []WorktreeInfo
+	var current WorktreeInfo
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if current.Path != "" {
+				worktrees = append(worktrees, current)
+				current = WorktreeInfo{}
+			}
+			continue
+		}
+
+		if strings.HasPrefix(line, "worktree ") {
+			current.Path = strings.TrimPrefix(line, "worktree ")
+		} else if strings.HasPrefix(line, "HEAD ") {
+			current.Commit = strings.TrimPrefix(line, "HEAD ")
+		} else if strings.HasPrefix(line, "branch ") {
+			// Convert refs/heads/branch to just branch
+			ref := strings.TrimPrefix(line, "branch ")
+			current.Branch = strings.TrimPrefix(ref, "refs/heads/")
+		}
+	}
+
+	// Don't forget the last worktree if output doesn't end with empty line
+	if current.Path != "" {
+		worktrees = append(worktrees, current)
+	}
+
+	log.Info("✅ Found %d worktrees", len(worktrees))
+	return worktrees, nil
+}
+
+// WorktreeExists checks if a worktree exists at the given path
+func (g *GitClient) WorktreeExists(worktreePath string) bool {
+	worktrees, err := g.ListWorktrees()
+	if err != nil {
+		return false
+	}
+
+	// Resolve symlinks in the input path for accurate comparison.
+	// On macOS, /var is a symlink to /private/var, so git stores paths
+	// with resolved symlinks while callers may pass unresolved paths.
+	normalizedInput, err := filepath.EvalSymlinks(worktreePath)
+	if err != nil {
+		// If path doesn't exist or can't be resolved, use original
+		normalizedInput = worktreePath
+	}
+
+	for _, wt := range worktrees {
+		if wt.Path == normalizedInput {
+			return true
+		}
+	}
+
+	return false
+}
+
+// PruneWorktrees removes administrative files for worktrees that no longer exist on disk
+func (g *GitClient) PruneWorktrees() error {
+	log.Info("📋 Starting to prune stale worktree entries")
+
+	cmd := exec.Command("git", "worktree", "prune")
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to prune worktrees: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to prune worktrees: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully pruned stale worktree entries")
+	return nil
+}
+
+// =============================================================================
+// Worktree-Specific Git Operations
+// =============================================================================
+
+// ResetHardInWorktree performs a git reset --hard HEAD in the specified worktree
+func (g *GitClient) ResetHardInWorktree(worktreePath string) error {
+	log.Info("📋 Starting to reset hard in worktree: %s", worktreePath)
+
+	// Check if worktree has any commits first
+	hasCommits, err := g.hasCommitsInDir(worktreePath)
+	if err != nil {
+		log.Error("❌ Failed to check if worktree has commits: %v", err)
+		return fmt.Errorf("failed to check if worktree has commits: %w", err)
+	}
+
+	if !hasCommits {
+		log.Info("ℹ️ Worktree has no commits yet - skipping reset")
+		return nil
+	}
+
+	cmd := exec.Command("git", "reset", "--hard", "HEAD")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Git reset hard failed in worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git reset hard failed in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully reset hard in worktree: %s", worktreePath)
+	return nil
+}
+
+// hasCommitsInDir checks if the repository at the given directory has any commits
+func (g *GitClient) hasCommitsInDir(dir string) (bool, error) {
+	cmd := exec.Command("git", "rev-parse", "--verify", "HEAD")
+	cmd.Dir = dir
+	err := cmd.Run()
+	return err == nil, nil
+}
+
+// CleanUntrackedInWorktree removes untracked files in the specified worktree
+func (g *GitClient) CleanUntrackedInWorktree(worktreePath string) error {
+	log.Info("📋 Starting to clean untracked files in worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "clean", "-fd")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Git clean failed in worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git clean failed in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully cleaned untracked files in worktree: %s", worktreePath)
+	return nil
+}
+
+// PullLatestInWorktree pulls latest changes in the specified worktree
+func (g *GitClient) PullLatestInWorktree(worktreePath string) error {
+	log.Info("📋 Starting to pull latest changes in worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "pull")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		outputStr := strings.ToLower(string(output))
+
+		// Check if error is due to no upstream branch configured
+		if strings.Contains(outputStr, "no tracking information") ||
+			strings.Contains(outputStr, "no upstream branch") ||
+			strings.Contains(outputStr, "there is no tracking information for the current branch") {
+			log.Info("ℹ️ No remote branch exists yet in worktree - nothing to pull")
+			return nil
+		}
+
+		// Check if error is due to remote branch being deleted
+		if strings.Contains(outputStr, "no such ref was fetched") ||
+			strings.Contains(outputStr, "couldn't find remote ref") {
+			log.Warn("⚠️ Remote branch has been deleted for worktree")
+			return fmt.Errorf("remote branch deleted: %w", err)
+		}
+
+		log.Error("❌ Git pull failed in worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git pull failed in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully pulled latest changes in worktree: %s", worktreePath)
+	return nil
+}
+
+// AddAllInWorktree adds all changes in the specified worktree
+func (g *GitClient) AddAllInWorktree(worktreePath string) error {
+	log.Info("📋 Starting to add all changes in worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "add", ".")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Git add failed in worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git add failed in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully added all changes in worktree: %s", worktreePath)
+	return nil
+}
+
+// CommitInWorktree commits changes in the specified worktree
+func (g *GitClient) CommitInWorktree(worktreePath, message string) error {
+	log.Info("📋 Starting to commit in worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "commit", "-m", message)
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Git commit failed in worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git commit failed in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully committed changes in worktree: %s", worktreePath)
+	return nil
+}
+
+// PushBranchFromWorktree pushes a branch from the specified worktree
+func (g *GitClient) PushBranchFromWorktree(worktreePath, branchName string) error {
+	log.Info("📋 Starting to push branch %s from worktree: %s", branchName, worktreePath)
+
+	cmd := exec.Command("git", "push", "-u", "origin", branchName)
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Git push failed in worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("git push failed in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully pushed branch %s from worktree: %s", branchName, worktreePath)
+	return nil
+}
+
+// HasUncommittedChangesInWorktree checks if the specified worktree has uncommitted changes
+func (g *GitClient) HasUncommittedChangesInWorktree(worktreePath string) (bool, error) {
+	log.Info("📋 Starting to check for uncommitted changes in worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to check git status in worktree: %v\nOutput: %s", err, string(output))
+		return false, fmt.Errorf("failed to check git status in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	statusOutput := strings.TrimSpace(string(output))
+	hasChanges := statusOutput != ""
+
+	if hasChanges {
+		log.Info("✅ Found uncommitted changes in worktree")
+	} else {
+		log.Info("✅ No uncommitted changes found in worktree")
+	}
+
+	return hasChanges, nil
+}
+
+// GetCurrentBranchInWorktree gets the current branch name in the specified worktree
+func (g *GitClient) GetCurrentBranchInWorktree(worktreePath string) (string, error) {
+	log.Info("📋 Starting to get current branch in worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "branch", "--show-current")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to get current branch in worktree: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to get current branch in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	branch := strings.TrimSpace(string(output))
+	if branch == "" {
+		log.Error("❌ Worktree is in detached HEAD state")
+		return "", fmt.Errorf("worktree is in detached HEAD state")
+	}
+
+	log.Info("✅ Current branch in worktree: %s", branch)
+	return branch, nil
+}
+
+// GetLatestCommitHashInWorktree gets the latest commit hash in the specified worktree
+func (g *GitClient) GetLatestCommitHashInWorktree(worktreePath string) (string, error) {
+	log.Info("📋 Starting to get latest commit hash in worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to get latest commit hash in worktree: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to get latest commit hash in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	commitHash := strings.TrimSpace(string(output))
+	log.Info("✅ Latest commit hash in worktree: %s", commitHash)
+	return commitHash, nil
+}
+
+// GetRemoteURLInWorktree gets the remote URL from the specified worktree
+func (g *GitClient) GetRemoteURLInWorktree(worktreePath string) (string, error) {
+	log.Info("📋 Starting to get remote URL in worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to get remote URL in worktree: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to get remote URL in worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	remoteURL := strings.TrimSpace(string(output))
+
+	// Convert SSH URL to HTTPS if needed for GitHub links
+	if strings.HasPrefix(remoteURL, "git@github.com:") {
+		remoteURL = strings.Replace(remoteURL, "git@github.com:", "https://github.com/", 1)
+		remoteURL = strings.TrimSuffix(remoteURL, ".git")
+	} else if strings.HasSuffix(remoteURL, ".git") {
+		remoteURL = strings.TrimSuffix(remoteURL, ".git")
+	}
+
+	log.Info("✅ Remote URL in worktree: %s", remoteURL)
+	return remoteURL, nil
+}
+
+// HasExistingPRInWorktree checks if a PR already exists for a branch from the worktree context
+func (g *GitClient) HasExistingPRInWorktree(worktreePath, branchName string) (bool, error) {
+	log.Info("📋 Starting to check for existing PR for branch %s in worktree: %s", branchName, worktreePath)
+
+	cmd := exec.Command("gh", "pr", "list", "--head", branchName, "--json", "number")
+	cmd.Dir = worktreePath
+	output, err := g.executeWithRetryInDir(cmd, worktreePath, "check existing PR")
+
+	if err != nil {
+		log.Error("❌ Failed to check for existing PR: %v\nOutput: %s", err, string(output))
+		return false, fmt.Errorf("failed to check for existing PR: %w\nOutput: %s", err, string(output))
+	}
+
+	outputStr := strings.TrimSpace(string(output))
+	hasPR := outputStr != "[]" && outputStr != ""
+
+	if hasPR {
+		log.Info("✅ Found existing PR for branch: %s", branchName)
+	} else {
+		log.Info("✅ No existing PR found for branch: %s", branchName)
+	}
+
+	return hasPR, nil
+}
+
+// executeWithRetryInDir is like executeWithRetry but with explicit working directory
+func (g *GitClient) executeWithRetryInDir(cmd *exec.Cmd, workDir, operationName string) ([]byte, error) {
+	var output []byte
+	var err error
+
+	retryBackoff := backoff.NewExponentialBackOff()
+	retryBackoff.InitialInterval = 2 * time.Second
+	retryBackoff.MaxInterval = 30 * time.Second
+	retryBackoff.MaxElapsedTime = 2 * time.Minute
+	retryBackoff.Multiplier = 2
+
+	retryOperation := func() error {
+		output, err = cmd.CombinedOutput()
+
+		if err != nil && isRecoverableGHError(err, string(output)) {
+			log.Info("⏳ GitHub API recoverable error detected for %s, retrying...", operationName)
+			cmd = exec.Command(cmd.Args[0], cmd.Args[1:]...)
+			cmd.Dir = workDir
+			return err
+		}
+
+		return nil
+	}
+
+	retryErr := backoff.Retry(retryOperation, retryBackoff)
+	if retryErr != nil {
+		if err != nil {
+			return output, err
+		}
+		return output, retryErr
+	}
+
+	return output, err
+}
+
+// CreatePullRequestInWorktree creates a pull request from the specified worktree context
+func (g *GitClient) CreatePullRequestInWorktree(worktreePath, title, body, baseBranch string) (string, error) {
+	log.Info("📋 Starting to create pull request from worktree: %s", worktreePath)
+
+	// Validate and truncate PR title if necessary
+	validationResult := ValidateAndTruncatePRTitle(title, body)
+
+	finalBody := body
+	if validationResult.DescriptionPrefix != "" {
+		log.Warn("⚠️ PR title exceeded %d characters, truncating", MaxGitHubPRTitleLength)
+		finalBody = validationResult.DescriptionPrefix + body
+	}
+
+	cmd := exec.Command("gh", "pr", "create", "--title", validationResult.Title, "--body", finalBody, "--base", baseBranch)
+	cmd.Dir = worktreePath
+	output, err := g.executeWithRetryInDir(cmd, worktreePath, "create pull request")
+
+	if err != nil {
+		log.Error("❌ GitHub PR creation failed: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("github pr creation failed: %w\nOutput: %s", err, string(output))
+	}
+
+	prURL := strings.TrimSpace(string(output))
+	log.Info("✅ Successfully created pull request: %s", prURL)
+	return prURL, nil
+}
+
+// GetPRURLInWorktree gets the PR URL for a branch from the worktree context
+func (g *GitClient) GetPRURLInWorktree(worktreePath, branchName string) (string, error) {
+	log.Info("📋 Starting to get PR URL for branch %s from worktree: %s", branchName, worktreePath)
+
+	cmd := exec.Command("gh", "pr", "view", branchName, "--json", "url", "--jq", ".url")
+	cmd.Dir = worktreePath
+	output, err := g.executeWithRetryInDir(cmd, worktreePath, "get PR URL")
+
+	if err != nil {
+		log.Error("❌ Failed to get PR URL: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to get PR URL: %w\nOutput: %s", err, string(output))
+	}
+
+	prURL := strings.TrimSpace(string(output))
+	log.Info("✅ PR URL: %s", prURL)
+	return prURL, nil
+}
+
+// GetDefaultBranchInWorktree gets the default branch from the worktree context
+func (g *GitClient) GetDefaultBranchInWorktree(worktreePath string) (string, error) {
+	log.Info("📋 Starting to determine default branch from worktree: %s", worktreePath)
+
+	cmd := exec.Command("git", "remote", "show", "origin")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to run git remote show origin: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to get remote information: %w\nOutput: %s", err, string(output))
+	}
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "HEAD branch:") {
+			parts := strings.SplitN(trimmedLine, ":", 2)
+			if len(parts) != 2 {
+				return "", fmt.Errorf("unexpected format in remote show output: %s", trimmedLine)
+			}
+
+			branchName := strings.TrimSpace(parts[1])
+			log.Info("✅ Default branch from worktree: %s", branchName)
+			return branchName, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not determine default branch from remote show output")
+}
+
+// GetPRTitleInWorktree gets the PR title for a branch from the worktree context
+func (g *GitClient) GetPRTitleInWorktree(worktreePath, branchName string) (string, error) {
+	log.Info("📋 Starting to get PR title for branch %s from worktree: %s", branchName, worktreePath)
+
+	cmd := exec.Command("gh", "pr", "view", branchName, "--json", "title", "--jq", ".title")
+	cmd.Dir = worktreePath
+	output, err := g.executeWithRetryInDir(cmd, worktreePath, "get PR title")
+
+	if err != nil {
+		log.Error("❌ Failed to get PR title: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to get PR title: %w\nOutput: %s", err, string(output))
+	}
+
+	title := strings.TrimSpace(string(output))
+	log.Info("✅ PR title: %s", title)
+	return title, nil
+}
+
+// GetPRDescriptionInWorktree gets the PR description for a branch from the worktree context
+func (g *GitClient) GetPRDescriptionInWorktree(worktreePath, branchName string) (string, error) {
+	log.Info("📋 Starting to get PR description for branch %s from worktree: %s", branchName, worktreePath)
+
+	cmd := exec.Command("gh", "pr", "view", branchName, "--json", "body", "--jq", ".body")
+	cmd.Dir = worktreePath
+	output, err := g.executeWithRetryInDir(cmd, worktreePath, "get PR description")
+
+	if err != nil {
+		log.Error("❌ Failed to get PR description: %v\nOutput: %s", err, string(output))
+		return "", fmt.Errorf("failed to get PR description: %w\nOutput: %s", err, string(output))
+	}
+
+	description := strings.TrimSpace(string(output))
+	log.Info("✅ Got PR description")
+	return description, nil
+}
+
+// UpdatePRTitleInWorktree updates the PR title for a branch from the worktree context
+func (g *GitClient) UpdatePRTitleInWorktree(worktreePath, branchName, newTitle string) error {
+	log.Info("📋 Starting to update PR title for branch %s from worktree: %s", branchName, worktreePath)
+
+	// Get current description first in case we need to prepend overflow
+	currentDescription, err := g.GetPRDescriptionInWorktree(worktreePath, branchName)
+	if err != nil {
+		log.Warn("⚠️ Failed to get current PR description: %v", err)
+		currentDescription = ""
+	}
+
+	// Validate and truncate PR title if necessary
+	validationResult := ValidateAndTruncatePRTitle(newTitle, currentDescription)
+
+	if validationResult.DescriptionPrefix != "" {
+		log.Warn("⚠️ PR title exceeded %d characters, truncating", MaxGitHubPRTitleLength)
+		newDescription := validationResult.DescriptionPrefix + currentDescription
+		if err := g.UpdatePRDescriptionInWorktree(worktreePath, branchName, newDescription); err != nil {
+			return fmt.Errorf("failed to update PR description with overflow: %w", err)
+		}
+	}
+
+	cmd := exec.Command("gh", "pr", "edit", branchName, "--title", validationResult.Title)
+	cmd.Dir = worktreePath
+	output, err := g.executeWithRetryInDir(cmd, worktreePath, "update PR title")
+
+	if err != nil {
+		log.Error("❌ Failed to update PR title: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to update PR title: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully updated PR title")
+	return nil
+}
+
+// UpdatePRDescriptionInWorktree updates the PR description for a branch from the worktree context
+func (g *GitClient) UpdatePRDescriptionInWorktree(worktreePath, branchName, newDescription string) error {
+	log.Info("📋 Starting to update PR description for branch %s from worktree: %s", branchName, worktreePath)
+
+	cmd := exec.Command("gh", "pr", "edit", branchName, "--body", newDescription)
+	cmd.Dir = worktreePath
+	output, err := g.executeWithRetryInDir(cmd, worktreePath, "update PR description")
+
+	if err != nil {
+		log.Error("❌ Failed to update PR description: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to update PR description: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully updated PR description")
+	return nil
+}
+
+// FindPRTemplateInWorktree searches for GitHub PR template in the worktree
+func (g *GitClient) FindPRTemplateInWorktree(worktreePath string) (string, error) {
+	log.Info("🔍 Searching for GitHub PR template in worktree: %s", worktreePath)
+
+	templatePaths := []string{
+		"pull_request_template.md",
+		"PULL_REQUEST_TEMPLATE.md",
+		".github/pull_request_template.md",
+		".github/PULL_REQUEST_TEMPLATE.md",
+		"docs/pull_request_template.md",
+		"docs/PULL_REQUEST_TEMPLATE.md",
+		".github/PULL_REQUEST_TEMPLATE/pull_request_template.md",
+	}
+
+	for _, path := range templatePaths {
+		fullPath := filepath.Join(worktreePath, path)
+		if content, err := os.ReadFile(fullPath); err == nil {
+			log.Info("✅ Found PR template at: %s", fullPath)
+			return strings.TrimSpace(string(content)), nil
+		}
+	}
+
+	log.Info("ℹ️ No PR template found in worktree")
 	return "", nil
 }

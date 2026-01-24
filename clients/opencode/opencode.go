@@ -1,6 +1,7 @@
 package opencode
 
 import (
+	"os/exec"
 	"strings"
 
 	"ccagent/clients"
@@ -36,7 +37,13 @@ func (c *OpenCodeClient) StartNewSession(prompt string, options *clients.OpenCod
 	log.Info("Starting new OpenCode session with prompt: %s", prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := clients.BuildAgentCommand("opencode", args...)
+	var cmd *exec.Cmd
+	if options != nil && options.WorkDir != "" {
+		log.Info("Using working directory: %s", options.WorkDir)
+		cmd = clients.BuildAgentCommandWithWorkDir(options.WorkDir, "opencode", args...)
+	} else {
+		cmd = clients.BuildAgentCommand("opencode", args...)
+	}
 
 	log.Info("Running OpenCode command")
 	output, err := cmd.CombinedOutput()
@@ -74,7 +81,13 @@ func (c *OpenCodeClient) ContinueSession(sessionID, prompt string, options *clie
 	log.Info("Executing OpenCode command with sessionID: %s, prompt: %s", sessionID, prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := clients.BuildAgentCommand("opencode", args...)
+	var cmd *exec.Cmd
+	if options != nil && options.WorkDir != "" {
+		log.Info("Using working directory: %s", options.WorkDir)
+		cmd = clients.BuildAgentCommandWithWorkDir(options.WorkDir, "opencode", args...)
+	} else {
+		cmd = clients.BuildAgentCommand("opencode", args...)
+	}
 
 	log.Info("Running OpenCode command")
 	output, err := cmd.CombinedOutput()

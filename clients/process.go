@@ -90,8 +90,21 @@ func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 	return cmd
 }
 
+// BuildAgentCommandWithWorkDir creates an exec.Cmd that runs the given command
+// as the configured agent user (or current user if not configured), in the
+// specified working directory.
+//
+// This is useful for running commands in git worktrees or other specific directories.
+func BuildAgentCommandWithWorkDir(workDir, name string, args ...string) *exec.Cmd {
+	cmd := BuildAgentCommand(name, args...)
+	if workDir != "" {
+		cmd.Dir = workDir
+	}
+	return cmd
+}
+
 // buildShellCommand safely constructs a shell command string with escaped arguments.
-// Single quotes are escaped using the '\” pattern.
+// Single quotes are escaped using the '\" pattern.
 func buildShellCommand(name string, args []string) string {
 	parts := make([]string, 0, len(args)+1)
 	parts = append(parts, name)

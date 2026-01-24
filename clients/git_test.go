@@ -279,3 +279,289 @@ func TestDeleteLocalBranch_NonExistentBranch(t *testing.T) {
 		t.Error("Expected error when deleting non-existent branch, got nil")
 	}
 }
+
+// ============ Worktree Tests ============
+
+func TestCreateWorktree(t *testing.T) {
+	repoPath, cleanup := setupTestGitRepo(t)
+	defer cleanup()
+
+	client := NewGitClient()
+	client.SetRepoPathProvider(func() string { return repoPath })
+
+	// Create a worktree directory
+	worktreePath := filepath.Join(os.TempDir(), "worktree-test-"+t.Name())
+	defer os.RemoveAll(worktreePath)
+
+	branchName := "test-worktree-branch"
+	err := client.CreateWorktree(worktreePath, branchName, "")
+	if err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	// Verify worktree exists
+	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+		t.Error("Worktree directory was not created")
+	}
+
+	// Verify it contains git files
+	gitFile := filepath.Join(worktreePath, ".git")
+	if _, err := os.Stat(gitFile); os.IsNotExist(err) {
+		t.Error("Worktree .git file was not created")
+	}
+
+	// Verify branch was created
+	cmd := exec.Command("git", "branch", "--show-current")
+	cmd.Dir = worktreePath
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("Failed to get current branch in worktree: %v", err)
+	}
+
+	currentBranch := strings.TrimSpace(string(output))
+	if currentBranch != branchName {
+		t.Errorf("Expected worktree branch to be %s, got %s", branchName, currentBranch)
+	}
+}
+
+func TestCreateWorktree_ExistingBranch(t *testing.T) {
+	repoPath, cleanup := setupTestGitRepo(t)
+	defer cleanup()
+
+	client := NewGitClient()
+	client.SetRepoPathProvider(func() string { return repoPath })
+
+	// First create a branch
+	branchName := "existing-branch"
+	cmd := exec.Command("git", "branch", branchName)
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create branch: %v", err)
+	}
+
+	// Try to create worktree with existing branch name - should fail
+	worktreePath := filepath.Join(os.TempDir(), "worktree-test-"+t.Name())
+	defer os.RemoveAll(worktreePath)
+
+	err := client.CreateWorktree(worktreePath, branchName, "")
+	if err == nil {
+		t.Error("Expected error when creating worktree with existing branch name, got nil")
+	}
+}
+
+func TestRemoveWorktree(t *testing.T) {
+	repoPath, cleanup := setupTestGitRepo(t)
+	defer cleanup()
+
+	client := NewGitClient()
+	client.SetRepoPathProvider(func() string { return repoPath })
+
+	// Create a worktree first
+	worktreePath := filepath.Join(os.TempDir(), "worktree-test-"+t.Name())
+	branchName := "worktree-to-remove"
+
+	err := client.CreateWorktree(worktreePath, branchName, "")
+	if err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	// Verify worktree exists
+	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+		t.Fatal("Worktree was not created")
+	}
+
+	// Remove the worktree
+	err = client.RemoveWorktree(worktreePath)
+	if err != nil {
+		t.Fatalf("Failed to remove worktree: %v", err)
+	}
+
+	// Verify worktree directory is gone
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Error("Worktree directory should be removed")
+	}
+}
+
+func TestListWorktrees(t *testing.T) {
+	repoPath, cleanup := setupTestGitRepo(t)
+	defer cleanup()
+
+	client := NewGitClient()
+	client.SetRepoPathProvider(func() string { return repoPath })
+
+	// Initially should have just the main worktree
+	worktrees, err := client.ListWorktrees()
+	if err != nil {
+		t.Fatalf("Failed to list worktrees: %v", err)
+	}
+
+	if len(worktrees) != 1 {
+		t.Errorf("Expected 1 worktree (main), got %d", len(worktrees))
+	}
+
+	// Create additional worktrees
+	worktreePaths := []string{
+		filepath.Join(os.TempDir(), "worktree-test-1-"+t.Name()),
+		filepath.Join(os.TempDir(), "worktree-test-2-"+t.Name()),
+	}
+	for i, wtPath := range worktreePaths {
+		defer os.RemoveAll(wtPath)
+		branchName := "test-branch-" + strings.Replace(t.Name(), "/", "-", -1) + "-" + string(rune('a'+i))
+		if err := client.CreateWorktree(wtPath, branchName, ""); err != nil {
+			t.Fatalf("Failed to create worktree %s: %v", wtPath, err)
+		}
+	}
+
+	// List again
+	worktrees, err = client.ListWorktrees()
+	if err != nil {
+		t.Fatalf("Failed to list worktrees after creation: %v", err)
+	}
+
+	if len(worktrees) != 3 {
+		t.Errorf("Expected 3 worktrees, got %d", len(worktrees))
+	}
+}
+
+func TestWorktreeExists(t *testing.T) {
+	repoPath, cleanup := setupTestGitRepo(t)
+	defer cleanup()
+
+	client := NewGitClient()
+	client.SetRepoPathProvider(func() string { return repoPath })
+
+	// Non-existent worktree should return false
+	nonExistentPath := filepath.Join(os.TempDir(), "nonexistent-worktree-"+t.Name())
+	if client.WorktreeExists(nonExistentPath) {
+		t.Error("WorktreeExists should return false for non-existent path")
+	}
+
+	// Create a worktree
+	worktreePath := filepath.Join(os.TempDir(), "worktree-exists-test-"+t.Name())
+	defer os.RemoveAll(worktreePath)
+	branchName := "worktree-exists-branch"
+
+	if err := client.CreateWorktree(worktreePath, branchName, ""); err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	// Now it should exist
+	if !client.WorktreeExists(worktreePath) {
+		t.Error("WorktreeExists should return true for existing worktree")
+	}
+}
+
+func TestPruneWorktrees(t *testing.T) {
+	repoPath, cleanup := setupTestGitRepo(t)
+	defer cleanup()
+
+	client := NewGitClient()
+	client.SetRepoPathProvider(func() string { return repoPath })
+
+	// Create a worktree
+	worktreePath := filepath.Join(os.TempDir(), "worktree-prune-test-"+t.Name())
+	branchName := "worktree-prune-branch"
+
+	if err := client.CreateWorktree(worktreePath, branchName, ""); err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	// Manually delete the worktree directory (simulating stale worktree)
+	if err := os.RemoveAll(worktreePath); err != nil {
+		t.Fatalf("Failed to manually remove worktree dir: %v", err)
+	}
+
+	// Prune should clean up the stale entry
+	err := client.PruneWorktrees()
+	if err != nil {
+		t.Fatalf("Failed to prune worktrees: %v", err)
+	}
+
+	// List worktrees - should only have main
+	worktrees, err := client.ListWorktrees()
+	if err != nil {
+		t.Fatalf("Failed to list worktrees after prune: %v", err)
+	}
+
+	if len(worktrees) != 1 {
+		t.Errorf("Expected 1 worktree after prune (main only), got %d", len(worktrees))
+	}
+}
+
+func TestWorktreeGitOperations(t *testing.T) {
+	repoPath, cleanup := setupTestGitRepo(t)
+	defer cleanup()
+
+	client := NewGitClient()
+	client.SetRepoPathProvider(func() string { return repoPath })
+
+	// Create a worktree
+	worktreePath := filepath.Join(os.TempDir(), "worktree-ops-test-"+t.Name())
+	defer os.RemoveAll(worktreePath)
+	branchName := "worktree-ops-branch"
+
+	if err := client.CreateWorktree(worktreePath, branchName, ""); err != nil {
+		t.Fatalf("Failed to create worktree: %v", err)
+	}
+
+	// Test AddAllInWorktree
+	testFile := filepath.Join(worktreePath, "test-file.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	if err := client.AddAllInWorktree(worktreePath); err != nil {
+		t.Fatalf("Failed to add all in worktree: %v", err)
+	}
+
+	// Verify file is staged
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = worktreePath
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("Failed to get git status: %v", err)
+	}
+
+	if !strings.Contains(string(output), "A  test-file.txt") {
+		t.Errorf("Expected test-file.txt to be staged, got: %s", string(output))
+	}
+
+	// Test CommitInWorktree
+	if err := client.CommitInWorktree(worktreePath, "Test commit"); err != nil {
+		t.Fatalf("Failed to commit in worktree: %v", err)
+	}
+
+	// Verify commit was made
+	cmd = exec.Command("git", "log", "--oneline", "-1")
+	cmd.Dir = worktreePath
+	output, err = cmd.Output()
+	if err != nil {
+		t.Fatalf("Failed to get git log: %v", err)
+	}
+
+	if !strings.Contains(string(output), "Test commit") {
+		t.Errorf("Expected commit message 'Test commit', got: %s", string(output))
+	}
+
+	// Test HasUncommittedChangesInWorktree (should be false after commit)
+	hasChanges, err := client.HasUncommittedChangesInWorktree(worktreePath)
+	if err != nil {
+		t.Fatalf("Failed to check for uncommitted changes: %v", err)
+	}
+	if hasChanges {
+		t.Error("Expected no uncommitted changes after commit")
+	}
+
+	// Make another change to test HasUncommittedChanges returning true
+	if err := os.WriteFile(testFile, []byte("modified content"), 0644); err != nil {
+		t.Fatalf("Failed to modify test file: %v", err)
+	}
+
+	hasChanges, err = client.HasUncommittedChangesInWorktree(worktreePath)
+	if err != nil {
+		t.Fatalf("Failed to check for uncommitted changes: %v", err)
+	}
+	if !hasChanges {
+		t.Error("Expected uncommitted changes after modifying file")
+	}
+}

@@ -5,6 +5,7 @@ type ClaudeOptions struct {
 	SystemPrompt    string
 	DisallowedTools []string
 	Model           string // Model alias or full name (e.g., "sonnet", "haiku", "opus", "claude-sonnet-4-5-20250929")
+	WorkDir         string // Working directory for the Claude session (e.g., a git worktree path)
 }
 
 // CursorOptions contains optional parameters for Cursor CLI interactions
@@ -40,7 +41,8 @@ type CodexClient interface {
 
 // OpenCodeOptions contains optional parameters for OpenCode CLI interactions
 type OpenCodeOptions struct {
-	Model string // Model in provider/model format (e.g., "anthropic/claude-3-5-sonnet")
+	Model   string // Model in provider/model format (e.g., "anthropic/claude-3-5-sonnet")
+	WorkDir string // Working directory for the OpenCode session (e.g., a git worktree path)
 }
 
 // OpenCodeClient defines the interface for OpenCode CLI interactions

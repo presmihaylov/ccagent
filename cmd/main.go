@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -486,8 +487,17 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	}
 
 	// Initialize dual worker pools that persist for the app lifetime
-	cr.blockingWorkerPool = workerpool.New(1) // sequential conversation processing
-	cr.instantWorkerPool = workerpool.New(5)  // parallel PR status checks
+	// MAX_CONCURRENCY controls how many concurrent jobs can be processed
+	// Default is 1 (sequential processing) for backward compatibility
+	maxConcurrency := 1
+	if envVal := envManager.Get("MAX_CONCURRENCY"); envVal != "" {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			maxConcurrency = val
+			log.Info("🔧 MAX_CONCURRENCY set to %d (concurrent job processing enabled)", maxConcurrency)
+		}
+	}
+	cr.blockingWorkerPool = workerpool.New(maxConcurrency) // concurrent conversation processing
+	cr.instantWorkerPool = workerpool.New(5)               // parallel PR status checks
 
 	// Register GitHub token update hook
 	envManager.RegisterReloadHook(gitUseCase.GithubTokenUpdateHook)
@@ -669,12 +679,20 @@ func main() {
 		}()
 	}
 
-	// Validate Git environment and cleanup stale branches (only if in repo mode)
+	// Validate Git environment and cleanup stale branches/worktrees (only if in repo mode)
 	if repoCtx.IsRepoMode {
 		err = cmdRunner.gitUseCase.ValidateGitEnvironment()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Git environment validation failed: %v\n", err)
 			os.Exit(1)
+		}
+
+		// Cleanup orphaned worktrees first (must happen before branch cleanup)
+		// Worktrees lock branches, so we must remove worktrees before deleting their branches
+		err = cmdRunner.gitUseCase.CleanupOrphanedWorktrees()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to cleanup orphaned worktrees: %v\n", err)
+			// Don't exit - this is not critical for agent operation
 		}
 
 		err = cmdRunner.gitUseCase.CleanupStaleBranches()
