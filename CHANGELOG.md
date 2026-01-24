@@ -1,3 +1,13 @@
+## [v0.0.48] - 2026-01-24
+
+### Features
+
+- Add concurrent job processing with git worktrees ([#83](https://github.com/presmihaylov/ccagent/pull/83))
+  - Enables agents to process multiple jobs simultaneously using isolated git worktrees
+  - Each concurrent job runs in its own worktree with separate branches
+  - Improves throughput for repositories with multiple pending tasks
+  - Maintains isolation between concurrent job executions
+
 ## [v0.0.47] - 2026-01-21
 
 ### Bugfixes
