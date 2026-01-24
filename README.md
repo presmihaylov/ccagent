@@ -1,5 +1,9 @@
 # ccagent
 
+> _Sail the code seas,_
+> _Plundering bugs with cutlass—_
+> _Ship commits at dawn._
+
 A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [Claude Control platform](https://claudecontrol.com).
 
 ### Supported AI Assistants
