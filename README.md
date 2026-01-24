@@ -207,6 +207,14 @@ Fork the repository and open a pull request. Contributions are welcome!
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
+## Haiku
+
+```
+Sail the seven seas
+Treasure chest and parrot too
+Arr, the code be gold
+```
+
 ## Support
 
 Contact us at support@claudecontrol.com
