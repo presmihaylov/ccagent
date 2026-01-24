@@ -210,3 +210,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
+
+---
+
+*Signals from the stars,*
+*Code flows through the vast unknown—*
+*Aliens debug.*
