@@ -2,6 +2,12 @@
 
 A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [Claude Control platform](https://claudecontrol.com).
 
+```
+Sails catch the wind,
+Pirates search for treasure gold,
+Adventure awaits.
+```
+
 ### Supported AI Assistants
 
 - **Claude Code**: Anthropic's official CLI tool for software engineering (default)
