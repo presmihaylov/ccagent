@@ -41,7 +41,8 @@ type CodexClient interface {
 
 // OpenCodeOptions contains optional parameters for OpenCode CLI interactions
 type OpenCodeOptions struct {
-	Model string // Model in provider/model format (e.g., "anthropic/claude-3-5-sonnet")
+	Model   string // Model in provider/model format (e.g., "anthropic/claude-3-5-sonnet")
+	WorkDir string // Working directory for the OpenCode session (e.g., a git worktree path)
 }
 
 // OpenCodeClient defines the interface for OpenCode CLI interactions

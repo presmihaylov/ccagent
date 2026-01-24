@@ -100,17 +100,25 @@ func (o *OpenCodeService) StartNewConversation(prompt string) (*services.CLIAgen
 
 // deriveOpenCodeOptions creates a final options struct, applying service model if set
 func (o *OpenCodeService) deriveOpenCodeOptions(options *clients.OpenCodeOptions) *clients.OpenCodeOptions {
-	finalOptions := options
-	if o.model != "" {
-		if finalOptions == nil {
-			finalOptions = &clients.OpenCodeOptions{Model: o.model}
-		} else {
-			// Create a copy to avoid modifying the original
-			finalOptions = &clients.OpenCodeOptions{
-				Model: o.model, // Service model takes precedence
-			}
+	if options == nil {
+		if o.model != "" {
+			return &clients.OpenCodeOptions{Model: o.model}
 		}
+		return nil
 	}
+
+	// Create a copy to avoid modifying the original, preserving WorkDir
+	finalOptions := &clients.OpenCodeOptions{
+		WorkDir: options.WorkDir,
+	}
+
+	// Apply service model if set, otherwise use options model
+	if o.model != "" {
+		finalOptions.Model = o.model
+	} else {
+		finalOptions.Model = options.Model
+	}
+
 	return finalOptions
 }
 
@@ -189,26 +197,33 @@ func (o *OpenCodeService) ContinueConversation(sessionID, prompt string) (*servi
 }
 
 // StartNewConversationInDir starts a new conversation in a specific working directory
-// Note: OpenCode does not support custom working directories yet, falls back to default behavior
 func (o *OpenCodeService) StartNewConversationInDir(prompt, workDir string) (*services.CLIAgentResult, error) {
-	log.Warn("⚠️ OpenCode does not support custom working directories, ignoring workDir: %s", workDir)
-	return o.StartNewConversation(prompt)
+	return o.StartNewConversationWithOptions(prompt, &clients.OpenCodeOptions{
+		WorkDir: workDir,
+	})
 }
 
 // StartNewConversationWithSystemPromptInDir starts a new conversation with system prompt in a specific directory
-// Note: OpenCode does not support custom working directories yet, falls back to default behavior
 func (o *OpenCodeService) StartNewConversationWithSystemPromptInDir(
 	prompt, systemPrompt, workDir string,
 ) (*services.CLIAgentResult, error) {
-	log.Warn("⚠️ OpenCode does not support custom working directories, ignoring workDir: %s", workDir)
-	return o.StartNewConversationWithSystemPrompt(prompt, systemPrompt)
+	// OpenCode doesn't have a system prompt option like Claude
+	// We prepend it to the prompt similar to Cursor's approach
+	finalPrompt := "# BEHAVIOR INSTRUCTIONS\n" +
+		systemPrompt + "\n\n" +
+		"# USER MESSAGE\n" +
+		prompt
+	log.Info("Prepending system prompt to user prompt with clear delimiters")
+	return o.StartNewConversationWithOptions(finalPrompt, &clients.OpenCodeOptions{
+		WorkDir: workDir,
+	})
 }
 
 // ContinueConversationInDir continues an existing conversation in a specific directory
-// Note: OpenCode does not support custom working directories yet, falls back to default behavior
 func (o *OpenCodeService) ContinueConversationInDir(sessionID, prompt, workDir string) (*services.CLIAgentResult, error) {
-	log.Warn("⚠️ OpenCode does not support custom working directories, ignoring workDir: %s", workDir)
-	return o.ContinueConversation(sessionID, prompt)
+	return o.ContinueConversationWithOptions(sessionID, prompt, &clients.OpenCodeOptions{
+		WorkDir: workDir,
+	})
 }
 
 func (o *OpenCodeService) ContinueConversationWithOptions(
