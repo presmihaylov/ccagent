@@ -249,6 +249,33 @@ func TestUpdateHomeForUser(t *testing.T) {
 	}
 }
 
+func TestUpdateHomeForUser_NoHomeInEnv(t *testing.T) {
+	// Test case where HOME is not in the environment at all
+	env := []string{
+		"PATH=/usr/bin",
+		"USER=ccagent",
+	}
+
+	result := UpdateHomeForUser(env, "agentrunner")
+
+	// Should have one more var (HOME added)
+	if len(result) != len(env)+1 {
+		t.Errorf("Expected %d vars (HOME added), got %d", len(env)+1, len(result))
+	}
+
+	// HOME should be set
+	hasNewHome := false
+	for _, e := range result {
+		if e == "HOME=/home/agentrunner" {
+			hasNewHome = true
+		}
+	}
+
+	if !hasNewHome {
+		t.Error("HOME should be added as /home/agentrunner when not present in env")
+	}
+}
+
 func TestAgentHTTPProxy(t *testing.T) {
 	// Save original value
 	original := os.Getenv("AGENT_HTTP_PROXY")

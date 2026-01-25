@@ -134,18 +134,26 @@ func FilterEnvForAgent(env []string) []string {
 }
 
 // UpdateHomeForUser updates the HOME environment variable to point to the specified user's home directory.
-// This is necessary when running as a different user to ensure the process can write to its own home.
+// This is necessary when running as a different user to ensure the process can write to its own home
+// and find config files like .claude.json for MCP server configurations.
 func UpdateHomeForUser(env []string, username string) []string {
 	newHome := "/home/" + username
-	result := make([]string, 0, len(env))
+	result := make([]string, 0, len(env)+1)
+	foundHome := false
 
 	for _, e := range env {
 		if strings.HasPrefix(e, "HOME=") {
 			// Replace existing HOME
 			result = append(result, "HOME="+newHome)
+			foundHome = true
 		} else {
 			result = append(result, e)
 		}
+	}
+
+	// Always ensure HOME is set, even if it wasn't in the original environment
+	if !foundHome {
+		result = append(result, "HOME="+newHome)
 	}
 
 	return result
