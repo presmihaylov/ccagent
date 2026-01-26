@@ -49,6 +49,43 @@ func writeFileAsTargetUser(filePath string, content []byte, perm os.FileMode) er
 	return nil
 }
 
+// mkdirAllAsTargetUser creates a directory (and all parent directories), using sudo if necessary.
+// When AGENT_EXEC_USER is set and the target path is in that user's home directory,
+// the directory is created via 'sudo -u <user> mkdir -p' to ensure proper ownership.
+// This solves permission issues where ccagent (running as 'ccagent' user) needs to create
+// directories in the agent user's home directory (e.g., /home/agentrunner/.config/opencode).
+// The directory is created with mode 0775 to allow group write access.
+func mkdirAllAsTargetUser(dirPath string) error {
+	execUser := os.Getenv("AGENT_EXEC_USER")
+	if execUser == "" {
+		// Self-hosted mode: create directly with 0755
+		return os.MkdirAll(dirPath, 0755)
+	}
+
+	// Check if the target path is in the agent user's home directory
+	agentHome := "/home/" + execUser
+	if !strings.HasPrefix(dirPath, agentHome) {
+		// Not in agent's home, create directly
+		return os.MkdirAll(dirPath, 0755)
+	}
+
+	log.Info("📁 Creating directory as user '%s': %s", execUser, dirPath)
+
+	// Use sudo -u <user> mkdir -p to create the directory with correct ownership
+	// Use umask 002 to ensure directories are created with 775 permissions (group-writable)
+	// This allows both the agent user (owner) and ccagent (group member) to write to it
+	cmd := exec.Command("sudo", "-u", execUser, "bash", "-c", fmt.Sprintf("umask 002 && mkdir -p '%s'", dirPath))
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create directory as user %s: %w (stderr: %s)", execUser, err, stderr.String())
+	}
+
+	return nil
+}
+
 // MCPProcessor defines the interface for processing agent-specific MCP configurations
 type MCPProcessor interface {
 	// ProcessMCPConfigs processes MCP configs from the ccagent MCP directory
@@ -364,8 +401,8 @@ func (p *OpenCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 	opencodeConfigDir := filepath.Join(homeDir, ".config", "opencode")
 	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
 
-	// Ensure OpenCode config directory exists
-	if err := os.MkdirAll(opencodeConfigDir, 0755); err != nil {
+	// Ensure OpenCode config directory exists with correct ownership
+	if err := mkdirAllAsTargetUser(opencodeConfigDir); err != nil {
 		return fmt.Errorf("failed to create OpenCode config directory: %w", err)
 	}
 
