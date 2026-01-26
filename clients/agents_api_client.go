@@ -40,14 +40,16 @@ type TokenResponse struct {
 type AgentsApiClient struct {
 	apiKey  string
 	baseURL string
+	agentID string
 	client  *http.Client
 }
 
 // NewAgentsApiClient creates a new agents API client
-func NewAgentsApiClient(apiKey, baseURL string) *AgentsApiClient {
+func NewAgentsApiClient(apiKey, baseURL, agentID string) *AgentsApiClient {
 	return &AgentsApiClient{
 		apiKey:  apiKey,
 		baseURL: baseURL,
+		agentID: agentID,
 		client: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -174,6 +176,10 @@ func (c *AgentsApiClient) FetchArtifacts() ([]Artifact, error) {
 	// Add Bearer token authentication header
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
 	req.Header.Set("Accept", "application/json")
+	// Add X-AGENT-ID header for precise container lookup when multiple containers share API key
+	if c.agentID != "" {
+		req.Header.Set("X-AGENT-ID", c.agentID)
+	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {

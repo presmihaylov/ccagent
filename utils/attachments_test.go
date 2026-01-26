@@ -202,7 +202,7 @@ func TestFetchAndStoreAttachment_ValidPNG(t *testing.T) {
 	defer server.Close()
 
 	// Create agents API client with mock server URL
-	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL, "test-agent-id")
 
 	sessionID := "test_session_png"
 	filePath, err := FetchAndStoreAttachment(client, "test-attachment-id", sessionID, 0)
@@ -246,7 +246,7 @@ func TestFetchAndStoreAttachment_APIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL, "test-agent-id")
 
 	sessionID := "test_session_error"
 	_, err := FetchAndStoreAttachment(client, "nonexistent-id", sessionID, 0)
@@ -271,7 +271,7 @@ func TestFetchAndStoreAttachment_InvalidBase64(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL, "test-agent-id")
 
 	sessionID := "test_session_invalid"
 	_, err := FetchAndStoreAttachment(client, "test-id", sessionID, 0)
@@ -473,7 +473,7 @@ func TestFetchAndStoreArtifact_Success(t *testing.T) {
 	defer server.Close()
 
 	// Create agents API client with mock server URL
-	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL, "test-agent-id")
 
 	// Create temp directory for test
 	tempDir := filepath.Join(os.TempDir(), "ccagent_test_artifacts")
@@ -520,7 +520,7 @@ func TestFetchAndStoreArtifact_WithTilde(t *testing.T) {
 	defer server.Close()
 
 	// Create agents API client
-	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL, "test-agent-id")
 
 	// Use ~ in path
 	homeDir, _ := os.UserHomeDir()
@@ -550,7 +550,7 @@ func TestFetchAndStoreArtifact_APIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL, "test-agent-id")
 
 	tempDir := filepath.Join(os.TempDir(), "ccagent_test_artifacts_error")
 	defer os.RemoveAll(tempDir)
@@ -576,7 +576,7 @@ func TestFetchAndStoreArtifact_EmptyContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := clients.NewAgentsApiClient("test-api-key", server.URL)
+	client := clients.NewAgentsApiClient("test-api-key", server.URL, "test-agent-id")
 
 	tempDir := filepath.Join(os.TempDir(), "ccagent_test_artifacts_empty")
 	defer os.RemoveAll(tempDir)

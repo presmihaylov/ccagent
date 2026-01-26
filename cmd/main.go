@@ -376,7 +376,9 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 
 	// Extract base URL for API client (remove /socketio/ suffix)
 	apiBaseURL := strings.TrimSuffix(wsURL, "/socketio/")
-	agentsApiClient := clients.NewAgentsApiClient(ccagentAPIKey, apiBaseURL)
+	// Get agent ID for X-AGENT-ID header (used to disambiguate containers sharing API keys)
+	agentIDForAPI := envManager.Get("CCAGENT_AGENT_ID")
+	agentsApiClient := clients.NewAgentsApiClient(ccagentAPIKey, apiBaseURL, agentIDForAPI)
 	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
 
 	// Fetch and set Anthropic token BEFORE initializing anything else
