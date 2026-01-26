@@ -377,8 +377,8 @@ func (p *OpenCodeSkillsProcessor) ProcessSkills(targetHomeDir string) error {
 		log.Info("⚠️  Failed to remove existing skills directory: %v", err)
 	}
 
-	// Create fresh skills directory
-	if err := os.MkdirAll(opencodeSkillsDir, 0755); err != nil {
+	// Create fresh skills directory with correct ownership
+	if err := mkdirAllAsTargetUser(opencodeSkillsDir); err != nil {
 		return fmt.Errorf("failed to create OpenCode skills directory: %w", err)
 	}
 
@@ -390,8 +390,8 @@ func (p *OpenCodeSkillsProcessor) ProcessSkills(targetHomeDir string) error {
 
 		log.Info("🎯 Extracting skill: %s -> %s", fileName, targetSkillDir)
 
-		// Create skill directory
-		if err := os.MkdirAll(targetSkillDir, 0755); err != nil {
+		// Create skill directory with correct ownership
+		if err := mkdirAllAsTargetUser(targetSkillDir); err != nil {
 			log.Info("⚠️  Failed to create skill directory %s: %v", targetSkillDir, err)
 			continue
 		}

@@ -287,8 +287,8 @@ func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 
 	opencodeConfigDir := filepath.Join(homeDir, ".config", "opencode")
 
-	// Ensure OpenCode config directory exists
-	if err := os.MkdirAll(opencodeConfigDir, 0755); err != nil {
+	// Ensure OpenCode config directory exists with correct ownership
+	if err := mkdirAllAsTargetUser(opencodeConfigDir); err != nil {
 		return fmt.Errorf("failed to create OpenCode config directory: %w", err)
 	}
 
