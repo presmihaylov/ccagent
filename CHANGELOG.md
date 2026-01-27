@@ -1,3 +1,19 @@
+## [v0.0.50] - 2026-01-27
+
+### Features
+
+- Add X-AGENT-ID header to artifacts API calls ([#106](https://github.com/presmihaylov/ccagent/pull/106))
+  - Includes agent identification in artifact API requests
+  - Enables server-side tracking of which agent uploaded artifacts
+  - Improves observability for multi-agent deployments
+
+### Bugfixes
+
+- Fix OpenCode directory permissions for agentrunner user ([#105](https://github.com/presmihaylov/ccagent/pull/105))
+  - Fixes MCP config directory creation with proper ownership for non-root users
+  - Ensures permissions and rules processors use correct user paths
+  - Resolves directory permission errors in managed execution mode
+
 ## [v0.0.48] - 2026-01-24
 
 ### Features
