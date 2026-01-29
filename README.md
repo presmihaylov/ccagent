@@ -210,3 +210,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
+
+---
+
+*Swinging through branches,*
+*Monkeys type code in the trees—*
+*Bugs fall like ripe fruit.*
