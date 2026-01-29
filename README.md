@@ -207,6 +207,14 @@ Fork the repository and open a pull request. Contributions are welcome!
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
+## 🐒 Haiku
+
+```
+Monkeys swing through trees
+Code flows like jungle vines grow
+Bugs flee, features bloom
+```
+
 ## Support
 
 Contact us at support@claudecontrol.com
