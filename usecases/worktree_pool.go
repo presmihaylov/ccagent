@@ -20,6 +20,9 @@ import (
 // This is an expected condition during initial fill or high load.
 var ErrPoolEmpty = errors.New("pool is empty")
 
+// ErrPoolStopping is returned when the pool is being shut down.
+var ErrPoolStopping = errors.New("pool is stopping")
+
 // PooledWorktree represents a pre-created worktree ready for use
 type PooledWorktree struct {
 	Path       string    // e.g., ~/.ccagent_worktrees/pool-{uuid}
@@ -70,6 +73,16 @@ func (p *WorktreePool) Start(ctx context.Context) {
 func (p *WorktreePool) Stop() {
 	close(p.stopChan)
 	p.wg.Wait()
+}
+
+// isStopping returns true if the pool has been signaled to stop.
+func (p *WorktreePool) isStopping() bool {
+	select {
+	case <-p.stopChan:
+		return true
+	default:
+		return false
+	}
 }
 
 // Acquire gets a worktree from the pool and prepares it for a job.
@@ -161,7 +174,7 @@ func (p *WorktreePool) replenisherLoop(ctx context.Context) {
 
 	// Initial fill on startup
 	log.Info("🔄 Worktree pool: starting initial fill (target size: %d)", p.targetSize)
-	p.fillToTarget()
+	p.fillToTarget(ctx)
 	log.Info("✅ Worktree pool: initial fill complete (pool size: %d)", p.GetPoolSize())
 
 	for {
@@ -174,7 +187,7 @@ func (p *WorktreePool) replenisherLoop(ctx context.Context) {
 			return
 		case <-p.replenishChan:
 			log.Debug("🔄 Worktree pool: replenish signal received")
-			p.fillToTarget()
+			p.fillToTarget(ctx)
 		case <-time.After(5 * time.Minute):
 			// Periodic refresh of stale worktrees
 			log.Debug("🔄 Worktree pool: periodic staleness check")
@@ -184,8 +197,20 @@ func (p *WorktreePool) replenisherLoop(ctx context.Context) {
 }
 
 // fillToTarget creates worktrees until the pool reaches target size.
-func (p *WorktreePool) fillToTarget() {
+// It checks for context cancellation between each replenish attempt.
+func (p *WorktreePool) fillToTarget(ctx context.Context) {
 	for p.GetPoolSize() < p.targetSize {
+		// Check for cancellation before each replenish
+		select {
+		case <-ctx.Done():
+			log.Info("🛑 Worktree pool: fill interrupted by context cancellation")
+			return
+		case <-p.stopChan:
+			log.Info("🛑 Worktree pool: fill interrupted by stop signal")
+			return
+		default:
+		}
+
 		if err := p.replenish(); err != nil {
 			log.Error("❌ Worktree pool: failed to replenish: %v", err)
 			return // back off on errors
@@ -195,6 +220,11 @@ func (p *WorktreePool) fillToTarget() {
 
 // replenish creates one worktree and adds it to the pool.
 func (p *WorktreePool) replenish() error {
+	// Check for stop signal before starting
+	if p.isStopping() {
+		return ErrPoolStopping
+	}
+
 	// Generate unique ID
 	id := uuid.New().String()[:8]
 	wtPath := filepath.Join(p.basePath, fmt.Sprintf("pool-%s", id))
@@ -210,6 +240,11 @@ func (p *WorktreePool) replenish() error {
 		return fmt.Errorf("failed to fetch from origin: %w", err)
 	}
 
+	// Check for stop signal after slow network operation
+	if p.isStopping() {
+		return ErrPoolStopping
+	}
+
 	// Get current origin commit for staleness tracking
 	baseCommit, err := p.getCurrentOriginCommit()
 	if err != nil {
@@ -220,6 +255,11 @@ func (p *WorktreePool) replenish() error {
 	defaultBranch, err := p.gitClient.GetDefaultBranch()
 	if err != nil {
 		return fmt.Errorf("failed to get default branch: %w", err)
+	}
+
+	// Check for stop signal before creating worktree
+	if p.isStopping() {
+		return ErrPoolStopping
 	}
 
 	// Create worktree with new branch based on origin/<default-branch>
