@@ -210,3 +210,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@claudecontrol.com
+
+---
+
+*Salty winds call out*
+*Treasure waits beyond the waves*
+*Code the seven seas*
