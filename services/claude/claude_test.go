@@ -932,18 +932,16 @@ func TestClaudeService_ParseErrorHandling(t *testing.T) {
 	// Mock verification not needed with function-based mocks
 }
 
-func TestClaudeService_ActualParseError(t *testing.T) {
+func TestClaudeService_LargeOutputParses(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "claude_test_logs_*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Create a mock output that will cause MapClaudeOutputToMessages to return an error
-	// We'll use a string that causes the scanner to fail somehow
-	// After checking the code, the scanner is pretty robust, so let's create a scenario
-	// where we can force an error by creating extremely long content that exceeds buffer limits
-	longLine := strings.Repeat("x", 5*1024*1024) // 5MB line, exceeds the 4MB buffer
+	// Previously a 5MB single line would cause "bufio.Scanner: token too long".
+	// With bufio.Reader, arbitrarily long lines are handled correctly.
+	longLine := strings.Repeat("x", 5*1024*1024) // 5MB line
 	mockClient := &services.MockClaudeClient{
 		StartNewSessionFunc: func(prompt string, options *clients.ClaudeOptions) (string, error) {
 			if prompt == "test" {
@@ -957,16 +955,20 @@ func TestClaudeService_ActualParseError(t *testing.T) {
 
 	result, err := service.StartNewConversation("test")
 
-	// Should return some kind of error
-	if err == nil {
-		t.Errorf("Expected error but got no error")
+	// Should succeed (the output is invalid JSON but not a parse error)
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
 	}
 
-	if result != nil {
-		t.Errorf("Expected nil result on error, got: %v", result)
+	if result == nil {
+		t.Errorf("Expected result but got nil")
+		return
 	}
 
-	// Mock verification not needed with function-based mocks
+	// The output is not valid JSON, so no assistant message is extracted
+	if result.Output != "(agent returned no response)" {
+		t.Errorf("Expected fallback output, got: %v", result.Output)
+	}
 }
 
 func TestClaudeService_WriteErrorLogHandling(t *testing.T) {
