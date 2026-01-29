@@ -1840,3 +1840,21 @@ func (g *GitClient) GetOriginCommit(branchName string) (string, error) {
 	log.Info("✅ Origin commit for %s: %s", branchName, commitHash[:8])
 	return commitHash, nil
 }
+
+// MoveWorktree moves a worktree to a new path using git worktree move.
+// This properly updates git's internal tracking unlike a simple os.Rename.
+func (g *GitClient) MoveWorktree(oldPath, newPath string) error {
+	log.Info("📋 Starting to move worktree from %s to %s", oldPath, newPath)
+
+	cmd := exec.Command("git", "worktree", "move", oldPath, newPath)
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Error("❌ Failed to move worktree: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to move worktree: %w\nOutput: %s", err, string(output))
+	}
+
+	log.Info("✅ Successfully moved worktree to %s", newPath)
+	return nil
+}

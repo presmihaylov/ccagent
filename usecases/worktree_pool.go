@@ -111,22 +111,23 @@ func (p *WorktreePool) Acquire(jobID, branchName string) (string, error) {
 		}
 	}
 
-	// Rename directory: pool-{uuid} -> {jobID}
+	// Move worktree: pool-{uuid} -> {jobID}
+	// Use git worktree move instead of os.Rename to properly update git's internal tracking
 	newPath := filepath.Join(p.basePath, jobID)
-	if err := os.Rename(pooledWT.Path, newPath); err != nil {
-		// Failed to rename - try to clean up and return error
-		log.Error("❌ Failed to rename worktree directory from %s to %s: %v", pooledWT.Path, newPath, err)
+	if err := p.gitClient.MoveWorktree(pooledWT.Path, newPath); err != nil {
+		// Failed to move - try to clean up and return error
+		log.Error("❌ Failed to move worktree from %s to %s: %v", pooledWT.Path, newPath, err)
 		// Attempt to remove the broken worktree
 		p.cleanupFailedWorktree(pooledWT.Path, pooledWT.BranchName)
-		return "", fmt.Errorf("failed to rename worktree directory: %w", err)
+		return "", fmt.Errorf("failed to move worktree: %w", err)
 	}
 
 	// Rename branch: ccagent/pool-ready-{uuid} -> ccagent/{branchName}
 	if err := p.renameBranch(newPath, pooledWT.BranchName, branchName); err != nil {
 		log.Error("❌ Failed to rename branch from %s to %s: %v", pooledWT.BranchName, branchName, err)
-		// Try to revert the directory rename
-		if revertErr := os.Rename(newPath, pooledWT.Path); revertErr != nil {
-			log.Error("❌ Failed to revert directory rename: %v", revertErr)
+		// Try to revert the worktree move
+		if revertErr := p.gitClient.MoveWorktree(newPath, pooledWT.Path); revertErr != nil {
+			log.Error("❌ Failed to revert worktree move: %v", revertErr)
 		}
 		return "", fmt.Errorf("failed to rename branch: %w", err)
 	}
