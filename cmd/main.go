@@ -517,28 +517,27 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 
 		worktreeBasePath, err := gitUseCase.GetWorktreeBasePath()
 		if err != nil {
-			log.Error("❌ Failed to get worktree base path: %v", err)
-			// Don't fail startup - pool is optional
-		} else {
-			worktreePool := usecases.NewWorktreePool(
-				gitUseCase.GetGitClient(),
-				worktreeBasePath,
-				poolSize,
-			)
-			gitUseCase.SetWorktreePool(worktreePool)
-
-			// Create context for pool lifecycle
-			cr.poolCtx, cr.poolCancel = context.WithCancel(context.Background())
-
-			// Reclaim any orphaned pool worktrees from previous crash
-			if err := worktreePool.ReclaimOrphanedPoolWorktrees(); err != nil {
-				log.Warn("⚠️ Failed to reclaim orphaned pool worktrees: %v", err)
-			}
-
-			// Start the pool replenisher
-			worktreePool.Start(cr.poolCtx)
-			log.Info("🏊 Worktree pool initialized (target size: %d)", poolSize)
+			return nil, fmt.Errorf("failed to get worktree base path: %w", err)
 		}
+
+		worktreePool := usecases.NewWorktreePool(
+			gitUseCase.GetGitClient(),
+			worktreeBasePath,
+			poolSize,
+		)
+		gitUseCase.SetWorktreePool(worktreePool)
+
+		// Create context for pool lifecycle
+		cr.poolCtx, cr.poolCancel = context.WithCancel(context.Background())
+
+		// Reclaim any orphaned pool worktrees from previous crash
+		if err := worktreePool.ReclaimOrphanedPoolWorktrees(); err != nil {
+			log.Warn("⚠️ Failed to reclaim orphaned pool worktrees: %v", err)
+		}
+
+		// Start the pool replenisher
+		worktreePool.Start(cr.poolCtx)
+		log.Info("🏊 Worktree pool initialized (target size: %d)", poolSize)
 	}
 
 	// Register GitHub token update hook
@@ -751,6 +750,13 @@ func main() {
 	tokenCtx, tokenCancel := context.WithCancel(context.Background())
 	defer tokenCancel()
 	cmdRunner.startTokenMonitoringRoutine(tokenCtx, cmdRunner.blockingWorkerPool)
+
+	// Start periodic cleanup routine (runs every 10 minutes) - only in repo mode
+	if repoCtx.IsRepoMode {
+		cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+		defer cleanupCancel()
+		cmdRunner.startCleanupRoutine(cleanupCtx)
+	}
 
 	// Set up deferred cleanup
 	defer func() {
@@ -1101,6 +1107,29 @@ func (cr *CmdRunner) startTokenMonitoringRoutine(ctx context.Context, blockingWo
 					}
 					cr.messageHandler.HandleMessage(refreshMsg)
 				})
+			}
+		}
+	}()
+}
+
+func (cr *CmdRunner) startCleanupRoutine(ctx context.Context) {
+	log.Info("🧹 Starting periodic cleanup routine (every 10 minutes)")
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("🧹 Cleanup routine stopped")
+				return
+			case <-ticker.C:
+				log.Info("🧹 Running periodic cleanup...")
+				if err := cr.gitUseCase.CleanupOrphanedWorktrees(); err != nil {
+					log.Warn("⚠️ Periodic worktree cleanup failed: %v", err)
+				}
+				if err := cr.gitUseCase.CleanupStaleBranches(); err != nil {
+					log.Warn("⚠️ Periodic branch cleanup failed: %v", err)
+				}
 			}
 		}
 	}()

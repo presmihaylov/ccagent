@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -882,6 +883,12 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 			continue
 		}
 
+		// Skip pool worktree branches (managed by worktree pool)
+		if strings.HasPrefix(branch, "ccagent/pool-ready-") {
+			log.Info("⚠️ Skipping pool branch: %s", branch)
+			continue
+		}
+
 		// This branch is stale - mark for deletion
 		branchesToDelete = append(branchesToDelete, branch)
 	}
@@ -1184,7 +1191,11 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 			log.Info("🏊 Acquired worktree from pool: %s", worktreePath)
 			return branchName, worktreePath, nil
 		}
-		log.Info("ℹ️ Pool acquire failed (%v), falling back to sync creation", err)
+		if !errors.Is(err, ErrPoolEmpty) {
+			// Unexpected error - fail fast
+			return "", "", fmt.Errorf("pool acquire failed: %w", err)
+		}
+		log.Info("ℹ️ Pool empty, creating worktree synchronously")
 	}
 
 	// Fallback: create synchronously (existing logic)

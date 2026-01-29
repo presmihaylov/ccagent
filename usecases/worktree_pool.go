@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,10 @@ import (
 	"ccagent/clients"
 	"ccagent/core/log"
 )
+
+// ErrPoolEmpty is returned when the pool has no available worktrees.
+// This is an expected condition during initial fill or high load.
+var ErrPoolEmpty = errors.New("pool is empty")
 
 // PooledWorktree represents a pre-created worktree ready for use
 type PooledWorktree struct {
@@ -82,7 +87,7 @@ func (p *WorktreePool) Acquire(jobID, branchName string) (string, error) {
 	p.mutex.Lock()
 	if len(p.ready) == 0 {
 		p.mutex.Unlock()
-		return "", fmt.Errorf("pool is empty")
+		return "", ErrPoolEmpty
 	}
 
 	// Pop first available worktree
