@@ -207,6 +207,14 @@ Fork the repository and open a pull request. Contributions are welcome!
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
+## Haiku
+
+```
+Wings of light descend,
+Whispers soft through endless sky—
+Angels guard our dreams.
+```
+
 ## Support
 
 Contact us at support@claudecontrol.com
