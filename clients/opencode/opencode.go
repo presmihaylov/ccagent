@@ -1,6 +1,8 @@
 package opencode
 
 import (
+	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -37,17 +39,21 @@ func (c *OpenCodeClient) StartNewSession(prompt string, options *clients.OpenCod
 	log.Info("Starting new OpenCode session with prompt: %s", prompt)
 	log.Info("Command arguments: %v", args)
 
-	var cmd *exec.Cmd
-	if options != nil && options.WorkDir != "" {
-		log.Info("Using working directory: %s", options.WorkDir)
-		cmd = clients.BuildAgentCommandWithWorkDir(options.WorkDir, "opencode", args...)
-	} else {
-		cmd = clients.BuildAgentCommand("opencode", args...)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), clients.DefaultSessionTimeout)
+	defer cancel()
 
-	log.Info("Running OpenCode command")
+	var cmd = buildCommand(ctx, options, args)
+
+	log.Info("Running OpenCode command (timeout: %s)", clients.DefaultSessionTimeout)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Error("⏰ OpenCode session timed out after %s", clients.DefaultSessionTimeout)
+			return "", &core.ErrClaudeCommandErr{
+				Err:    fmt.Errorf("session timed out after %s: %w", clients.DefaultSessionTimeout, err),
+				Output: string(output),
+			}
+		}
 		return "", &core.ErrClaudeCommandErr{
 			Err:    err,
 			Output: string(output),
@@ -81,17 +87,21 @@ func (c *OpenCodeClient) ContinueSession(sessionID, prompt string, options *clie
 	log.Info("Executing OpenCode command with sessionID: %s, prompt: %s", sessionID, prompt)
 	log.Info("Command arguments: %v", args)
 
-	var cmd *exec.Cmd
-	if options != nil && options.WorkDir != "" {
-		log.Info("Using working directory: %s", options.WorkDir)
-		cmd = clients.BuildAgentCommandWithWorkDir(options.WorkDir, "opencode", args...)
-	} else {
-		cmd = clients.BuildAgentCommand("opencode", args...)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), clients.DefaultSessionTimeout)
+	defer cancel()
 
-	log.Info("Running OpenCode command")
+	var cmd = buildCommand(ctx, options, args)
+
+	log.Info("Running OpenCode command (timeout: %s)", clients.DefaultSessionTimeout)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Error("⏰ OpenCode session timed out after %s", clients.DefaultSessionTimeout)
+			return "", &core.ErrClaudeCommandErr{
+				Err:    fmt.Errorf("session timed out after %s: %w", clients.DefaultSessionTimeout, err),
+				Output: string(output),
+			}
+		}
 		return "", &core.ErrClaudeCommandErr{
 			Err:    err,
 			Output: string(output),
@@ -102,4 +112,13 @@ func (c *OpenCodeClient) ContinueSession(sessionID, prompt string, options *clie
 	log.Info("OpenCode command completed successfully, outputLength: %d", len(result))
 	log.Info("📋 Completed successfully - continued OpenCode session")
 	return result, nil
+}
+
+// buildCommand creates the appropriate exec.Cmd with context based on options
+func buildCommand(ctx context.Context, options *clients.OpenCodeOptions, args []string) *exec.Cmd {
+	if options != nil && options.WorkDir != "" {
+		log.Info("Using working directory: %s", options.WorkDir)
+		return clients.BuildAgentCommandWithContextAndWorkDir(ctx, options.WorkDir, "opencode", args...)
+	}
+	return clients.BuildAgentCommandWithContext(ctx, "opencode", args...)
 }

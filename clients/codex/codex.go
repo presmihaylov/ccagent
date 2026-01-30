@@ -1,6 +1,8 @@
 package codex
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
 	"ccagent/clients"
@@ -29,14 +31,24 @@ func (c *CodexClient) StartNewSession(prompt string, options *clients.CodexOptio
 	log.Info("Starting new Codex session with prompt: %s", prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := clients.BuildAgentCommand("codex", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), clients.DefaultSessionTimeout)
+	defer cancel()
+
+	cmd := clients.BuildAgentCommandWithContext(ctx, "codex", args...)
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
 	}
 
-	log.Info("Running Codex command")
+	log.Info("Running Codex command (timeout: %s)", clients.DefaultSessionTimeout)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Error("⏰ Codex session timed out after %s", clients.DefaultSessionTimeout)
+			return "", &core.ErrClaudeCommandErr{
+				Err:    fmt.Errorf("session timed out after %s: %w", clients.DefaultSessionTimeout, err),
+				Output: string(output),
+			}
+		}
 		return "", &core.ErrClaudeCommandErr{
 			Err:    err,
 			Output: string(output),
@@ -61,14 +73,24 @@ func (c *CodexClient) ContinueSession(threadID, prompt string, options *clients.
 	log.Info("Executing Codex command with threadID: %s, prompt: %s", threadID, prompt)
 	log.Info("Command arguments: %v", args)
 
-	cmd := clients.BuildAgentCommand("codex", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), clients.DefaultSessionTimeout)
+	defer cancel()
+
+	cmd := clients.BuildAgentCommandWithContext(ctx, "codex", args...)
 	if c.workDir != "" {
 		cmd.Dir = c.workDir
 	}
 
-	log.Info("Running Codex command")
+	log.Info("Running Codex command (timeout: %s)", clients.DefaultSessionTimeout)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Error("⏰ Codex session timed out after %s", clients.DefaultSessionTimeout)
+			return "", &core.ErrClaudeCommandErr{
+				Err:    fmt.Errorf("session timed out after %s: %w", clients.DefaultSessionTimeout, err),
+				Output: string(output),
+			}
+		}
 		return "", &core.ErrClaudeCommandErr{
 			Err:    err,
 			Output: string(output),

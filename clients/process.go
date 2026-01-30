@@ -2,11 +2,17 @@
 package clients
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
+
+// DefaultSessionTimeout is the maximum duration an agent CLI session can run
+// before being killed. This prevents hung processes from blocking the worker pool.
+const DefaultSessionTimeout = 1 * time.Hour
 
 // BlockedEnvVars lists environment variables that should never be passed to agent processes.
 // These contain sensitive credentials that agents should not have access to.
@@ -97,6 +103,51 @@ func BuildAgentCommand(name string, args ...string) *exec.Cmd {
 // This is useful for running commands in git worktrees or other specific directories.
 func BuildAgentCommandWithWorkDir(workDir, name string, args ...string) *exec.Cmd {
 	cmd := BuildAgentCommand(name, args...)
+	if workDir != "" {
+		cmd.Dir = workDir
+	}
+	return cmd
+}
+
+// BuildAgentCommandWithContext creates an exec.Cmd bound to a context for timeout/cancellation.
+// When the context expires, the process is killed automatically.
+func BuildAgentCommandWithContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	execUser := AgentExecUser()
+	filteredEnv := FilterEnvForAgent(os.Environ())
+
+	// Inject HTTP proxy settings for agent processes if configured
+	filteredEnv = InjectProxyEnv(filteredEnv)
+
+	log.Printf("[BuildAgentCommandWithContext] execUser=%q, name=%q", execUser, name)
+
+	if execUser == "" {
+		// Self-hosted mode: run as current user
+		log.Printf("[BuildAgentCommandWithContext] Self-hosted mode: running %s as current user", name)
+		cmd := exec.CommandContext(ctx, name, args...)
+		cmd.Env = filteredEnv
+		return cmd
+	}
+
+	// Managed mode: run as specified user via sudo
+	filteredEnv = UpdateHomeForUser(filteredEnv, execUser)
+
+	shellCmd := buildShellCommand(name, args)
+	envArgs := make([]string, 0, len(filteredEnv)+1)
+	envArgs = append(envArgs, "env", "-i")
+	envArgs = append(envArgs, filteredEnv...)
+	envCmd := strings.Join(envArgs, " ") + " " + shellCmd
+
+	bashScript := "umask 002 && exec " + envCmd
+	sudoArgs := []string{"-u", execUser, "bash", "-c", bashScript}
+
+	log.Printf("[BuildAgentCommandWithContext] Managed mode: running sudo -u %s bash -c '...' (cmd=%s)", execUser, name)
+	cmd := exec.CommandContext(ctx, "sudo", sudoArgs...)
+	return cmd
+}
+
+// BuildAgentCommandWithContextAndWorkDir creates a context-bound exec.Cmd in the specified working directory.
+func BuildAgentCommandWithContextAndWorkDir(ctx context.Context, workDir, name string, args ...string) *exec.Cmd {
+	cmd := BuildAgentCommandWithContext(ctx, name, args...)
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
