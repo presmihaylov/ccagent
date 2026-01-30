@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ type GitUseCase struct {
 	claudeService services.CLIAgent
 	appState      *models.AppState
 	lastGHToken   string
+	worktreePool  *WorktreePool
 }
 
 type CLIAgentResult struct {
@@ -881,6 +883,12 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 			continue
 		}
 
+		// Skip pool worktree branches (managed by worktree pool)
+		if strings.HasPrefix(branch, "ccagent/pool-ready-") {
+			log.Info("⚠️ Skipping pool branch: %s", branch)
+			continue
+		}
+
 		// This branch is stale - mark for deletion
 		branchesToDelete = append(branchesToDelete, branch)
 	}
@@ -1153,6 +1161,10 @@ func (g *GitUseCase) ShouldUseWorktrees() bool {
 // PrepareForNewConversationWithWorktree creates a worktree for a new conversation
 // Returns (branchName, worktreePath, error)
 // This is used when MAX_CONCURRENCY > 1 for concurrent job processing
+//
+// If a worktree pool is configured, this function will first try to acquire
+// a pre-warmed worktree from the pool for instant assignment. If the pool
+// is empty or acquisition fails, it falls back to synchronous creation.
 func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHint string) (string, string, error) {
 	log.Info("📋 Starting to prepare worktree for new conversation (jobID: %s)", jobID)
 
@@ -1171,6 +1183,23 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 	}
 
 	log.Info("🌿 Generated branch name: %s", branchName)
+
+	// Try to acquire from pool first (if pool is configured)
+	if g.worktreePool != nil {
+		worktreePath, err := g.worktreePool.Acquire(jobID, branchName)
+		if err == nil {
+			log.Info("🏊 Acquired worktree from pool: %s", worktreePath)
+			return branchName, worktreePath, nil
+		}
+		if !errors.Is(err, ErrPoolEmpty) {
+			// Unexpected error - fail fast
+			return "", "", fmt.Errorf("pool acquire failed: %w", err)
+		}
+		log.Info("ℹ️ Pool empty, creating worktree synchronously")
+	}
+
+	// Fallback: create synchronously (existing logic)
+	log.Info("🔨 Creating worktree synchronously...")
 
 	// Fetch latest from origin (safe for concurrent calls)
 	if err := g.gitClient.FetchOrigin(); err != nil {
@@ -1209,6 +1238,21 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 
 	log.Info("✅ Successfully created worktree at %s for branch %s", worktreePath, branchName)
 	return branchName, worktreePath, nil
+}
+
+// SetWorktreePool sets the worktree pool for fast worktree acquisition
+func (g *GitUseCase) SetWorktreePool(pool *WorktreePool) {
+	g.worktreePool = pool
+}
+
+// GetWorktreePool returns the worktree pool (may be nil if not configured)
+func (g *GitUseCase) GetWorktreePool() *WorktreePool {
+	return g.worktreePool
+}
+
+// GetGitClient returns the underlying git client (for pool initialization)
+func (g *GitUseCase) GetGitClient() *clients.GitClient {
+	return g.gitClient
 }
 
 // PrepareWorktreeForJob validates and prepares an existing worktree for continuing a job
@@ -1336,6 +1380,13 @@ func (g *GitUseCase) CleanupOrphanedWorktrees() error {
 	orphanedCount := 0
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+
+		// Skip pool-* directories - these are managed by the worktree pool
+		// and will be reclaimed or cleaned up by the pool itself
+		if strings.HasPrefix(entry.Name(), "pool-") {
+			log.Debug("⏭️ Skipping pool worktree: %s (managed by pool)", entry.Name())
 			continue
 		}
 
