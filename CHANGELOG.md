@@ -1,3 +1,21 @@
+## [v0.0.51] - 2026-01-31
+
+### Features
+
+- Add worktree pool for fast job assignment ([#104](https://github.com/presmihaylov/ccagent/pull/104))
+  - Pre-creates a pool of git worktrees for instant job assignment
+  - Eliminates worktree creation latency when new jobs arrive
+  - Manages worktree lifecycle with automatic cleanup and replenishment
+  - Includes comprehensive test coverage for pool operations
+
+### Bugfixes
+
+- Replace bufio.Scanner with bufio.Reader to eliminate token-too-long errors ([#107](https://github.com/presmihaylov/ccagent/pull/107))
+  - Switches from Scanner to Reader for Claude output parsing
+  - Removes the 64KB line length limitation that caused token-too-long errors
+  - Simplifies message parsing logic with cleaner implementation
+  - Improves reliability when handling large tool results
+
 ## [v0.0.50] - 2026-01-27
 
 ### Features
