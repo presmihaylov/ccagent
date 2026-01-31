@@ -1,3 +1,13 @@
+## [v0.0.52] - 2026-01-31
+
+### Bugfixes
+
+- Add 1-hour timeout to all CLI agent session executions ([#124](https://github.com/presmihaylov/ccagent/pull/124))
+  - Enforces a 1-hour timeout on all CLI agent sessions (Claude, Codex, Cursor, OpenCode)
+  - Prevents runaway sessions from blocking agent resources indefinitely
+  - Moves timeout responsibility from the generic process layer to each client implementation
+  - Improves system reliability in production multi-agent deployments
+
 ## [v0.0.51] - 2026-01-31
 
 ### Features
