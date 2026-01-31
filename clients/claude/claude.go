@@ -1,6 +1,8 @@
 package claude
 
 import (
+	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -44,17 +46,21 @@ func (c *ClaudeClient) StartNewSession(prompt string, options *clients.ClaudeOpt
 	log.Info("Starting new Claude session with prompt: %s", prompt)
 	log.Info("Command arguments: %v", args)
 
-	var cmd *exec.Cmd
-	if options != nil && options.WorkDir != "" {
-		log.Info("Using working directory: %s", options.WorkDir)
-		cmd = clients.BuildAgentCommandWithWorkDir(options.WorkDir, "claude", args...)
-	} else {
-		cmd = clients.BuildAgentCommand("claude", args...)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), clients.DefaultSessionTimeout)
+	defer cancel()
 
-	log.Info("Running Claude command")
+	var cmd = c.buildCommand(ctx, options, args)
+
+	log.Info("Running Claude command (timeout: %s)", clients.DefaultSessionTimeout)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Error("⏰ Claude session timed out after %s", clients.DefaultSessionTimeout)
+			return "", &core.ErrClaudeCommandErr{
+				Err:    fmt.Errorf("session timed out after %s: %w", clients.DefaultSessionTimeout, err),
+				Output: string(output),
+			}
+		}
 		return "", &core.ErrClaudeCommandErr{
 			Err:    err,
 			Output: string(output),
@@ -93,17 +99,21 @@ func (c *ClaudeClient) ContinueSession(sessionID, prompt string, options *client
 	log.Info("Executing Claude command with sessionID: %s, prompt: %s", sessionID, prompt)
 	log.Info("Command arguments: %v", args)
 
-	var cmd *exec.Cmd
-	if options != nil && options.WorkDir != "" {
-		log.Info("Using working directory: %s", options.WorkDir)
-		cmd = clients.BuildAgentCommandWithWorkDir(options.WorkDir, "claude", args...)
-	} else {
-		cmd = clients.BuildAgentCommand("claude", args...)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), clients.DefaultSessionTimeout)
+	defer cancel()
 
-	log.Info("Running Claude command")
+	var cmd = c.buildCommand(ctx, options, args)
+
+	log.Info("Running Claude command (timeout: %s)", clients.DefaultSessionTimeout)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Error("⏰ Claude session timed out after %s", clients.DefaultSessionTimeout)
+			return "", &core.ErrClaudeCommandErr{
+				Err:    fmt.Errorf("session timed out after %s: %w", clients.DefaultSessionTimeout, err),
+				Output: string(output),
+			}
+		}
 		return "", &core.ErrClaudeCommandErr{
 			Err:    err,
 			Output: string(output),
@@ -114,4 +124,13 @@ func (c *ClaudeClient) ContinueSession(sessionID, prompt string, options *client
 	log.Info("Claude command completed successfully, outputLength: %d", len(result))
 	log.Info("📋 Completed successfully - continued Claude session")
 	return result, nil
+}
+
+// buildCommand creates the appropriate exec.Cmd with context based on options
+func (c *ClaudeClient) buildCommand(ctx context.Context, options *clients.ClaudeOptions, args []string) *exec.Cmd {
+	if options != nil && options.WorkDir != "" {
+		log.Info("Using working directory: %s", options.WorkDir)
+		return clients.BuildAgentCommandWithContextAndWorkDir(ctx, options.WorkDir, "claude", args...)
+	}
+	return clients.BuildAgentCommandWithContext(ctx, "claude", args...)
 }
