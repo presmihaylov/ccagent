@@ -312,8 +312,8 @@ func (o *OpenCodeService) AgentName() string {
 	return "opencode"
 }
 
-// FetchAndRefreshAgentTokens is a no-op for OpenCode since it doesn't require token management
-func (o *OpenCodeService) FetchAndRefreshAgentTokens() error {
+// FetchAndSetAgentToken is a no-op for OpenCode since it doesn't require token management
+func (o *OpenCodeService) FetchAndSetAgentToken() error {
 	// OpenCode doesn't require token management, so this is a no-op
 	return nil
 }
