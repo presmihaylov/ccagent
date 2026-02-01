@@ -2,7 +2,7 @@
 
 ## What is ccagent?
 
-ccagent is a Go-based CLI application that serves as a bridge between AI coding assistants (Claude Code, Cursor, Codex, OpenCode) and team collaboration platforms (Slack, Discord) through the Claude Control platform. It enables teams to interact with AI coding assistants directly from their chat platforms while maintaining proper git workflow and branch management.
+ccagent is a Go-based CLI application that serves as a bridge between AI coding assistants (Claude Code, Cursor, Codex, OpenCode) and team collaboration platforms (Slack, Discord) through the eksec platform. It enables teams to interact with AI coding assistants directly from their chat platforms while maintaining proper git workflow and branch management.
 
 ## Core Architecture
 
@@ -75,7 +75,7 @@ The release process includes:
 
 ## Environment Requirements
 
-- `CCAGENT_API_KEY`: Required API key from Claude Control platform
+- `CCAGENT_API_KEY`: Required API key from eksec platform
 - `CCAGENT_WS_API_URL`: Optional WebSocket URL (defaults to production)
 - Git and GitHub CLI (`gh`) must be configured
 - Go 1.24+ for building from source
