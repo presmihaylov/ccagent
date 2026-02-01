@@ -80,33 +80,26 @@ func (d *JobDispatcher) processJobMessages(jobID string, ch chan models.BaseMess
 	// Ensure channel is cleaned up when we exit
 	defer d.cleanup(jobID)
 
-	for {
-		select {
-		case msg, ok := <-ch:
-			if !ok {
-				// Channel closed externally
-				log.Info("📤 Message processor for job %s exited (channel closed)", jobID)
-				return
-			}
+	for msg := range ch {
+		log.Info("🔧 Processing message for job %s", jobID)
+		d.handler.HandleMessage(msg)
 
-			log.Info("🔧 Processing message for job %s", jobID)
-			d.handler.HandleMessage(msg)
+		// Check if job was removed from AppState
+		jobData, exists := d.appState.GetJobData(jobID)
+		if !exists {
+			log.Info("✅ Job %s removed, exiting processor", jobID)
+			return
+		}
 
-			// Check if job was removed from AppState
-			jobData, exists := d.appState.GetJobData(jobID)
-			if !exists {
-				log.Info("✅ Job %s removed, exiting processor", jobID)
-				return
-			}
-
-			// If job is completed AND no more messages buffered, exit
-			// This ensures we process all queued messages before exiting
-			if jobData.Status == models.JobStatusCompleted && len(ch) == 0 {
-				log.Info("✅ Job %s completed and channel empty, exiting processor", jobID)
-				return
-			}
+		// If job is completed AND no more messages buffered, exit
+		// This ensures we process all queued messages before exiting
+		if jobData.Status == models.JobStatusCompleted && len(ch) == 0 {
+			log.Info("✅ Job %s completed and channel empty, exiting processor", jobID)
+			return
 		}
 	}
+
+	log.Info("📤 Message processor for job %s exited (channel closed)", jobID)
 }
 
 // cleanup removes a job's channel from the activeJobs map
