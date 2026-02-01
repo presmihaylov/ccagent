@@ -1,3 +1,13 @@
+## [v0.0.56] - 2026-02-01
+
+### Features
+
+- Add message deduplication to JobDispatcher ([#135](https://github.com/eksecai/eksecd/pull/135))
+  - Prevents duplicate messages from being processed multiple times
+  - Tracks seen message IDs with a 5-minute TTL for deduplication
+  - Automatic cleanup of expired entries to prevent memory leaks
+  - Improves reliability in scenarios with message retransmissions
+
 ## [v0.0.55] - 2026-02-01
 
 ### Bugfixes
