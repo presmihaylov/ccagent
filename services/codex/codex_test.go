@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"eksec/clients"
-	"eksec/services"
+	"eksecd/clients"
+	"eksecd/services"
 )
 
 func TestNewCodexService(t *testing.T) {

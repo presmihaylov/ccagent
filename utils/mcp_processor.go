@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"eksec/core/log"
+	"eksecd/core/log"
 )
 
 // writeFileAsTargetUser writes content to a file, using sudo if necessary.

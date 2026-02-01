@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"eksec/core/log"
+	"eksecd/core/log"
 
 	"github.com/cenkalti/backoff/v4"
 )

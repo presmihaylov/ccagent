@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"eksec/clients"
-	"eksec/core"
-	"eksec/services"
+	"eksecd/clients"
+	"eksecd/core"
+	"eksecd/services"
 )
 
 func TestNewClaudeService(t *testing.T) {

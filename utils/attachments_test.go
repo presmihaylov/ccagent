@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"eksec/clients"
+	"eksecd/clients"
 )
 
 // Test magic bytes detection for various file types
@@ -400,7 +400,7 @@ func TestFormatAttachmentsText_NilList(t *testing.T) {
 // Test home directory expansion
 
 func TestExpandHomeDir_WithTilde(t *testing.T) {
-	path := "~/.config/eksec/rules/test.md"
+	path := "~/.config/eksecd/rules/test.md"
 	expanded, err := ExpandHomeDir(path)
 
 	if err != nil {
@@ -413,8 +413,8 @@ func TestExpandHomeDir_WithTilde(t *testing.T) {
 	}
 
 	// Should end with the relative part
-	if !strings.HasSuffix(expanded, ".config/eksec/rules/test.md") {
-		t.Errorf("Expected path to end with .config/eksec/rules/test.md, got: %s", expanded)
+	if !strings.HasSuffix(expanded, ".config/eksecd/rules/test.md") {
+		t.Errorf("Expected path to end with .config/eksecd/rules/test.md, got: %s", expanded)
 	}
 }
 

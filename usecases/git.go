@@ -12,10 +12,10 @@ import (
 
 	"github.com/lucasepe/codename"
 
-	"eksec/clients"
-	"eksec/core/log"
-	"eksec/models"
-	"eksec/services"
+	"eksecd/clients"
+	"eksecd/core/log"
+	"eksecd/models"
+	"eksecd/services"
 )
 
 type GitUseCase struct {
@@ -461,7 +461,7 @@ func (g *GitUseCase) generateRandomBranchName() (string, error) {
 
 	randomName := codename.Generate(rng, 0)
 	timestamp := time.Now().Format("20060102-150405")
-	finalBranchName := fmt.Sprintf("eksec/%s-%s", randomName, timestamp)
+	finalBranchName := fmt.Sprintf("eksecd/%s-%s", randomName, timestamp)
 
 	log.Info("🎲 Generated random name: %s", finalBranchName)
 	return finalBranchName, nil
@@ -860,7 +860,7 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 
 	for _, branch := range localBranches {
 		// Only process eksec/ branches
-		if !strings.HasPrefix(branch, "eksec/") {
+		if !strings.HasPrefix(branch, "eksecd/") {
 			continue
 		}
 
@@ -884,7 +884,7 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 		}
 
 		// Skip pool worktree branches (managed by worktree pool)
-		if strings.HasPrefix(branch, "eksec/pool-ready-") {
+		if strings.HasPrefix(branch, "eksecd/pool-ready-") {
 			log.Info("⚠️ Skipping pool branch: %s", branch)
 			continue
 		}

@@ -543,7 +543,7 @@ Write tests for everything.`
 		t.Errorf("Expected 1 instruction, got: %d", len(config.Instructions))
 	}
 
-	expectedInstruction := "~/.config/eksec/rules/*.md"
+	expectedInstruction := "~/.config/eksecd/rules/*.md"
 	if len(config.Instructions) > 0 && config.Instructions[0] != expectedInstruction {
 		t.Errorf("Expected instruction '%s', got: '%s'", expectedInstruction, config.Instructions[0])
 	}

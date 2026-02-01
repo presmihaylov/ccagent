@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"eksec/clients"
-	"eksec/core"
-	"eksec/core/env"
-	"eksec/core/log"
-	"eksec/models"
-	"eksec/services"
-	"eksec/usecases"
-	"eksec/utils"
+	"eksecd/clients"
+	"eksecd/core"
+	"eksecd/core/env"
+	"eksecd/core/log"
+	"eksecd/models"
+	"eksecd/services"
+	"eksecd/usecases"
+	"eksecd/utils"
 )
 
 type MessageHandler struct {

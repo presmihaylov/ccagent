@@ -6,9 +6,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"eksec/clients"
-	"eksec/core"
-	"eksec/core/log"
+	"eksecd/clients"
+	"eksecd/core"
+	"eksecd/core/log"
 )
 
 type ClaudeClient struct {

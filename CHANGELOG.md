@@ -2,7 +2,7 @@
 
 ### Bugfixes
 
-- Add 1-hour timeout to all CLI agent session executions ([#124](https://github.com/presmihaylov/eksec/pull/124))
+- Add 1-hour timeout to all CLI agent session executions ([#124](https://github.com/presmihaylov/eksecd/pull/124))
   - Enforces a 1-hour timeout on all CLI agent sessions (Claude, Codex, Cursor, OpenCode)
   - Prevents runaway sessions from blocking agent resources indefinitely
   - Moves timeout responsibility from the generic process layer to each client implementation
@@ -12,7 +12,7 @@
 
 ### Features
 
-- Add worktree pool for fast job assignment ([#104](https://github.com/presmihaylov/eksec/pull/104))
+- Add worktree pool for fast job assignment ([#104](https://github.com/presmihaylov/eksecd/pull/104))
   - Pre-creates a pool of git worktrees for instant job assignment
   - Eliminates worktree creation latency when new jobs arrive
   - Manages worktree lifecycle with automatic cleanup and replenishment
@@ -20,7 +20,7 @@
 
 ### Bugfixes
 
-- Replace bufio.Scanner with bufio.Reader to eliminate token-too-long errors ([#107](https://github.com/presmihaylov/eksec/pull/107))
+- Replace bufio.Scanner with bufio.Reader to eliminate token-too-long errors ([#107](https://github.com/presmihaylov/eksecd/pull/107))
   - Switches from Scanner to Reader for Claude output parsing
   - Removes the 64KB line length limitation that caused token-too-long errors
   - Simplifies message parsing logic with cleaner implementation
@@ -30,14 +30,14 @@
 
 ### Features
 
-- Add X-AGENT-ID header to artifacts API calls ([#106](https://github.com/presmihaylov/eksec/pull/106))
+- Add X-AGENT-ID header to artifacts API calls ([#106](https://github.com/presmihaylov/eksecd/pull/106))
   - Includes agent identification in artifact API requests
   - Enables server-side tracking of which agent uploaded artifacts
   - Improves observability for multi-agent deployments
 
 ### Bugfixes
 
-- Fix OpenCode directory permissions for agentrunner user ([#105](https://github.com/presmihaylov/eksec/pull/105))
+- Fix OpenCode directory permissions for agentrunner user ([#105](https://github.com/presmihaylov/eksecd/pull/105))
   - Fixes MCP config directory creation with proper ownership for non-root users
   - Ensures permissions and rules processors use correct user paths
   - Resolves directory permission errors in managed execution mode
@@ -46,7 +46,7 @@
 
 ### Features
 
-- Add concurrent job processing with git worktrees ([#83](https://github.com/presmihaylov/eksec/pull/83))
+- Add concurrent job processing with git worktrees ([#83](https://github.com/presmihaylov/eksecd/pull/83))
   - Enables agents to process multiple jobs simultaneously using isolated git worktrees
   - Each concurrent job runs in its own worktree with separate branches
   - Improves throughput for repositories with multiple pending tasks
@@ -56,7 +56,7 @@
 
 ### Bugfixes
 
-- Fix parsing failure for large MCP tool results ([#82](https://github.com/presmihaylov/eksec/pull/82))
+- Fix parsing failure for large MCP tool results ([#82](https://github.com/presmihaylov/eksecd/pull/82))
   - Adds handler for large `text` fields in `tool_use_result` arrays
   - MCP tools (like `mcp__postgres__query`) return results in a different format than regular tools
   - Truncates text fields over 100KB to prevent bufio.Scanner "token too long" errors
@@ -66,7 +66,7 @@
 
 ### Bugfixes
 
-- Set umask 002 when spawning agent processes in managed mode ([#81](https://github.com/presmihaylov/eksec/pull/81))
+- Set umask 002 when spawning agent processes in managed mode ([#81](https://github.com/presmihaylov/eksecd/pull/81))
   - Wraps agent commands in bash with umask 002 for group-writable file permissions
   - Enables eksec to delete files created by agent during git clean operations
   - Fixes "Permission denied" errors on git operations with agentrunner-created files
@@ -75,7 +75,7 @@
 
 ### Bugfixes
 
-- Fix: write .claude.json as target user via sudo ([#80](https://github.com/presmihaylov/eksec/pull/80))
+- Fix: write .claude.json as target user via sudo ([#80](https://github.com/presmihaylov/eksecd/pull/80))
   - Writes .claude.json configuration file with proper ownership when running as non-root
   - Uses sudo to ensure file is created with target user permissions
   - Fixes permission issues when deploying MCP server configurations
@@ -84,7 +84,7 @@
 
 ### Bugfixes
 
-- Fix deploy artifacts to agent user's home directory ([#79](https://github.com/presmihaylov/eksec/pull/79))
+- Fix deploy artifacts to agent user's home directory ([#79](https://github.com/presmihaylov/eksecd/pull/79))
   - Deploys MCP servers, rules, permissions, and skills to the agent user's home directory
   - Ensures proper file ownership and permissions for agent processes
   - Improves reliability when running agents as non-root users
@@ -93,7 +93,7 @@
 
 ### Features
 
-- Add process isolation support for agent execution ([#77](https://github.com/presmihaylov/eksec/pull/77))
+- Add process isolation support for agent execution ([#77](https://github.com/presmihaylov/eksecd/pull/77))
   - Enables process isolation for running multiple agent instances
   - Provides better resource isolation and security boundaries
   - Supports isolated execution environments for agent processes
@@ -101,7 +101,7 @@
 
 ### Bugfixes
 
-- Fix extractSessionID to handle non-JSON output before session data ([#76](https://github.com/presmihaylov/eksec/pull/76))
+- Fix extractSessionID to handle non-JSON output before session data ([#76](https://github.com/presmihaylov/eksecd/pull/76))
   - Properly handles Claude Code output that contains non-JSON content before session data
   - Improves parsing reliability when output includes warnings or other text
   - Adds test coverage for edge cases in session ID extraction
@@ -110,12 +110,12 @@
 
 ### Bugfixes
 
-- Fix checkout remote branch on container redeploy ([#73](https://github.com/presmihaylov/eksec/pull/73))
+- Fix checkout remote branch on container redeploy ([#73](https://github.com/presmihaylov/eksecd/pull/73))
   - Properly checks out the remote branch when containers are redeployed
   - Ensures agents start on the correct branch after container restart
   - Improves reliability for container orchestration workflows
 
-- Fix parsing failure for large tool_result outputs ([#75](https://github.com/presmihaylov/eksec/pull/75))
+- Fix parsing failure for large tool_result outputs ([#75](https://github.com/presmihaylov/eksecd/pull/75))
   - Resolves parsing issues when tool results contain very large outputs
   - Improves handling of buffer sizes for tool result processing
   - Enhances stability for operations with verbose tool outputs
@@ -129,7 +129,7 @@
   - Prevents buffer overflow errors during heavy tool usage
   - Improves reliability for complex operations with verbose output
 
-- Handle detached HEAD state in GetCurrentBranch ([#72](https://github.com/presmihaylov/eksec/pull/72))
+- Handle detached HEAD state in GetCurrentBranch ([#72](https://github.com/presmihaylov/eksecd/pull/72))
   - Properly handles repositories in detached HEAD state
   - Prevents errors when working with specific commits instead of branches
   - Improves robustness of branch detection logic
@@ -138,7 +138,7 @@
 
 ### Features
 
-- Add --repo flag to decouple repo from PWD ([#71](https://github.com/presmihaylov/eksec/pull/71))
+- Add --repo flag to decouple repo from PWD ([#71](https://github.com/presmihaylov/eksecd/pull/71))
   - Enables specifying repository path via --repo flag
   - Decouples repository location from current working directory
   - Improves flexibility for running agents from any directory
@@ -148,24 +148,24 @@
 
 ### Features
 
-- Add X-AGENT-ID header with environment variable support ([#70](https://github.com/presmihaylov/eksec/pull/70))
+- Add X-AGENT-ID header with environment variable support ([#70](https://github.com/presmihaylov/eksecd/pull/70))
   - Adds X-AGENT-ID header to API requests for agent identification
-  - Supports EKSEC_AGENT_ID environment variable for custom agent IDs
+  - Supports EKSECD_AGENT_ID environment variable for custom agent IDs
   - Improves agent tracing and debugging capabilities
 
 ### Bugfixes
 
-- Extract results from tool_use messages when no text response ([#68](https://github.com/presmihaylov/eksec/pull/68))
+- Extract results from tool_use messages when no text response ([#68](https://github.com/presmihaylov/eksecd/pull/68))
   - Fixes handling of API responses that contain only tool_use blocks
   - Properly extracts results from tool_use message content
   - Improves reliability of agent response processing
 
-- Simplify PR title prompts for smaller model compatibility ([#69](https://github.com/presmihaylov/eksec/pull/69))
+- Simplify PR title prompts for smaller model compatibility ([#69](https://github.com/presmihaylov/eksecd/pull/69))
   - Streamlines PR title generation prompts for better compatibility
   - Improves support for smaller language models
   - Reduces prompt complexity while maintaining quality
 
-- Handle empty repository on startup gracefully ([#67](https://github.com/presmihaylov/eksec/pull/67))
+- Handle empty repository on startup gracefully ([#67](https://github.com/presmihaylov/eksecd/pull/67))
   - Fixes crash when starting agent on empty repositories
   - Adds graceful handling of repositories without commits
   - Improves agent startup reliability
@@ -174,7 +174,7 @@
 
 ### Features
 
-- Add permissions processor to enable yolo mode for OpenCode ([#66](https://github.com/presmihaylov/eksec/pull/66))
+- Add permissions processor to enable yolo mode for OpenCode ([#66](https://github.com/presmihaylov/eksecd/pull/66))
   - Adds new permissions processor to enable yolo mode for OpenCode client
   - Allows OpenCode agents to run with fewer confirmation prompts
   - Improves agent autonomy and workflow efficiency
@@ -183,7 +183,7 @@
 
 ### Features
 
-- Add skills support for coding agents ([#65](https://github.com/presmihaylov/eksec/pull/65))
+- Add skills support for coding agents ([#65](https://github.com/presmihaylov/eksecd/pull/65))
   - Enables skills loading from repository configuration
   - Supports custom skill definitions for enhanced agent capabilities
   - Allows agents to utilize specialized skills during conversations
@@ -193,7 +193,7 @@
 
 ### Bugfixes
 
-- Transform MCP configs for OpenCode compatibility ([#64](https://github.com/presmihaylov/eksec/pull/64))
+- Transform MCP configs for OpenCode compatibility ([#64](https://github.com/presmihaylov/eksecd/pull/64))
   - Fixes MCP server configuration handling for OpenCode client
   - Transforms MCP config format to be compatible with OpenCode
   - Ensures proper MCP server integration across both Claude Code and OpenCode clients
@@ -202,7 +202,7 @@
 
 ### Features
 
-- Add MCP server configuration support ([#63](https://github.com/presmihaylov/eksec/pull/63))
+- Add MCP server configuration support ([#63](https://github.com/presmihaylov/eksecd/pull/63))
   - Enables configuration of MCP (Model Context Protocol) servers for agents
   - Supports defining custom MCP servers in repository configuration
   - Allows agents to interact with external tools and data sources via MCP
@@ -212,7 +212,7 @@
 
 ### Improvements
 
-- Store Claude Code rules in ~/.claude/rules ([#62](https://github.com/presmihaylov/eksec/pull/62))
+- Store Claude Code rules in ~/.claude/rules ([#62](https://github.com/presmihaylov/eksecd/pull/62))
   - Moves rule storage location to ~/.claude/rules directory
   - Aligns with Claude Code's standard rules location
   - Improves compatibility with Claude Code's rules management
@@ -221,7 +221,7 @@
 
 ### Improvements
 
-- Simplify OpenCode rules and add cleanup ([#61](https://github.com/presmihaylov/eksec/pull/61))
+- Simplify OpenCode rules and add cleanup ([#61](https://github.com/presmihaylov/eksecd/pull/61))
   - Streamlines OpenCode rules processing for better maintainability
   - Adds cleanup functionality for temporary rule files
   - Improves code organization and reduces complexity
@@ -230,7 +230,7 @@
 
 ### Features
 
-- Add agent-specific rules processing ([#60](https://github.com/presmihaylov/eksec/pull/60))
+- Add agent-specific rules processing ([#60](https://github.com/presmihaylov/eksecd/pull/60))
   - Enables processing of agent-specific CLAUDE.md rules from repository
   - Supports custom agent behavior configuration per repository
   - Allows repository owners to define agent-specific instructions and constraints
@@ -240,14 +240,14 @@
 
 ### Features
 
-- Add agent artifacts API support ([#59](https://github.com/presmihaylov/eksec/pull/59))
+- Add agent artifacts API support ([#59](https://github.com/presmihaylov/eksecd/pull/59))
   - Enables agents to upload and manage artifacts via API
   - Supports storing and retrieving files generated during agent sessions
   - Provides foundation for artifact sharing between agents and users
 
 ### Improvements
 
-- Increase job inactivity timeout to 25h ([#58](https://github.com/presmihaylov/eksec/pull/58))
+- Increase job inactivity timeout to 25h ([#58](https://github.com/presmihaylov/eksecd/pull/58))
   - Extends job inactivity timeout from previous limit to 25 hours
   - Prevents premature job termination for long-running tasks
   - Improves reliability for complex, time-consuming operations
@@ -256,7 +256,7 @@
 
 ### Features
 
-- Add model flag support for Claude agent ([#57](https://github.com/presmihaylov/eksec/pull/57))
+- Add model flag support for Claude agent ([#57](https://github.com/presmihaylov/eksecd/pull/57))
   - Enables model selection via --model flag for Claude client
   - Allows specifying different Claude models (e.g., claude-sonnet-4-5-20250514)
   - Provides flexibility in choosing model based on task requirements
@@ -265,7 +265,7 @@
 
 ### Bugfixes
 
-- Handle non-JSON opencode output as raw error ([#56](https://github.com/presmihaylov/eksec/pull/56))
+- Handle non-JSON opencode output as raw error ([#56](https://github.com/presmihaylov/eksecd/pull/56))
   - Properly handles error responses from OpenCode that aren't valid JSON
   - Returns raw output as error message for better debugging
   - Improves reliability when working with OpenCode client
@@ -274,7 +274,7 @@
 
 ### Improvements
 
-- Consolidate model flags into --model ([#53](https://github.com/presmihaylov/eksec/pull/53))
+- Consolidate model flags into --model ([#53](https://github.com/presmihaylov/eksecd/pull/53))
   - Simplifies CLI by replacing multiple model flags with a single --model flag
   - Improves developer experience with cleaner command syntax
   - Reduces flag complexity for model selection
@@ -283,29 +283,29 @@
 
 ### Features
 
-- Add support for OpenCode client ([#48](https://github.com/presmihaylov/eksec/pull/48))
+- Add support for OpenCode client ([#48](https://github.com/presmihaylov/eksecd/pull/48))
   - Integrates OpenCode as a new supported AI coding client
   - Expands agent compatibility with additional coding assistants
   - Provides seamless integration for OpenCode users
 
-- Add automatic PR title trimming ([#49](https://github.com/presmihaylov/eksec/pull/49))
+- Add automatic PR title trimming ([#49](https://github.com/presmihaylov/eksecd/pull/49))
   - Automatically trims PR titles that exceed GitHub's character limit
   - Prevents PR creation failures due to overly long titles
   - Improves reliability of automated PR workflows
 
-- Show the correct platform in PR description footer ([#51](https://github.com/presmihaylov/eksec/pull/51))
+- Show the correct platform in PR description footer ([#51](https://github.com/presmihaylov/eksecd/pull/51))
   - Displays the actual platform (Slack, Discord) in PR footers
   - Improves traceability of PR origins
   - Enhances multi-platform integration clarity
 
-- Skip token operations for self-hosted ([#52](https://github.com/presmihaylov/eksec/pull/52))
+- Skip token operations for self-hosted ([#52](https://github.com/presmihaylov/eksecd/pull/52))
   - Skips unnecessary token operations in self-hosted deployments
   - Reduces overhead for self-managed installations
   - Improves startup performance for self-hosted agents
 
 ### Bugfixes
 
-- Increase API client timeout to 60s ([#50](https://github.com/presmihaylov/eksec/pull/50))
+- Increase API client timeout to 60s ([#50](https://github.com/presmihaylov/eksecd/pull/50))
   - Extends API client timeout from default to 60 seconds
   - Prevents timeout errors during slow API responses
   - Improves reliability for complex operations
@@ -314,7 +314,7 @@
 
 ### Bugfixes
 
-- Abandon job when remote branch deleted ([#47](https://github.com/presmihaylov/eksec/pull/47))
+- Abandon job when remote branch deleted ([#47](https://github.com/presmihaylov/eksecd/pull/47))
   - Automatically detects when a remote branch has been deleted
   - Gracefully abandons jobs that can no longer be completed
   - Prevents agents from getting stuck on deleted branches
@@ -324,12 +324,12 @@
 
 ### Improvements
 
-- Increase response limit and add context guidelines ([#45](https://github.com/presmihaylov/eksec/pull/45))
+- Increase response limit and add context guidelines ([#45](https://github.com/presmihaylov/eksecd/pull/45))
   - Expands response limits for more detailed agent outputs
   - Adds context guidelines for improved response quality
   - Enhances user experience with more comprehensive answers
 
-- Reduce system prompt char limit to 800 ([#46](https://github.com/presmihaylov/eksec/pull/46))
+- Reduce system prompt char limit to 800 ([#46](https://github.com/presmihaylov/eksecd/pull/46))
   - Optimizes system prompt length for better performance
   - Reduces token overhead while maintaining functionality
   - Improves efficiency of agent initialization
@@ -338,7 +338,7 @@
 
 ### Features
 
-- Add ask/execute mode to control file edits ([#43](https://github.com/presmihaylov/eksec/pull/43))
+- Add ask/execute mode to control file edits ([#43](https://github.com/presmihaylov/eksecd/pull/43))
   - Introduces ask/execute mode for controlled file editing operations
   - Allows users to review and approve file changes before they are applied
   - Enhances safety and control over agent-initiated file modifications
@@ -347,7 +347,7 @@
 
 ### Bugfixes
 
-- Return message instead of error on no response ([#42](https://github.com/presmihaylov/eksec/pull/42))
+- Return message instead of error on no response ([#42](https://github.com/presmihaylov/eksecd/pull/42))
   - Improves handling of cases where Claude returns no response
   - Returns informative message instead of throwing error
   - Enhances robustness for edge cases in conversation handling
@@ -356,7 +356,7 @@
 
 ### Features
 
-- Add PR template support to descriptions ([#41](https://github.com/presmihaylov/eksec/pull/41))
+- Add PR template support to descriptions ([#41](https://github.com/presmihaylov/eksecd/pull/41))
   - Supports custom PR description templates for enhanced pull request workflows
   - Enables teams to standardize PR formatting and content
   - Improves consistency across repository contributions
@@ -365,7 +365,7 @@
 
 ### Bugfixes
 
-- Fix: Collect all assistant messages in conversation response ([#38](https://github.com/presmihaylov/eksec/pull/38))
+- Fix: Collect all assistant messages in conversation response ([#38](https://github.com/presmihaylov/eksecd/pull/38))
   - Ensures all assistant messages are properly collected in multi-turn conversations
   - Fixes message loss issues in conversation responses
   - Improves reliability of conversation handling
@@ -374,7 +374,7 @@
 
 ### Features
 
-- Add support for codex ([#37](https://github.com/presmihaylov/eksec/pull/37))
+- Add support for codex ([#37](https://github.com/presmihaylov/eksecd/pull/37))
   - Integrates codex functionality for enhanced code analysis
   - Expands agent capabilities with advanced code understanding
   - Improves code-related task performance
@@ -390,7 +390,7 @@
 
 ### Bugfixes
 
-- Always sync token to environment manager ([#34](https://github.com/presmihaylov/eksec/pull/34))
+- Always sync token to environment manager ([#34](https://github.com/presmihaylov/eksecd/pull/34))
   - Ensures OAuth tokens are always synchronized to the environment manager
   - Fixes token sync inconsistencies that could cause authentication failures
   - Improves reliability of token management across agent lifecycle
@@ -400,7 +400,7 @@
 
 ### Features
 
-- Refresh tokens before conversations ([#33](https://github.com/presmihaylov/eksec/pull/33))
+- Refresh tokens before conversations ([#33](https://github.com/presmihaylov/eksecd/pull/33))
   - Ensures OAuth tokens are refreshed before starting new conversations
   - Prevents mid-conversation authentication failures
   - Improves reliability for long-running agents
@@ -408,7 +408,7 @@
 
 ### Improvements
 
-- Decouple token monitoring from socketio retry ([#32](https://github.com/presmihaylov/eksec/pull/32))
+- Decouple token monitoring from socketio retry ([#32](https://github.com/presmihaylov/eksecd/pull/32))
   - Separates token refresh logic from WebSocket connection management
   - Improves system reliability and error handling
   - Reduces coupling between authentication and communication layers
@@ -418,7 +418,7 @@
 
 ### Features
 
-- Add token management with auto-refresh ([#31](https://github.com/presmihaylov/eksec/pull/31))
+- Add token management with auto-refresh ([#31](https://github.com/presmihaylov/eksecd/pull/31))
   - Implements automatic OAuth token refreshing
   - Improves authentication reliability
   - Reduces manual token management overhead
@@ -428,7 +428,7 @@
 
 ### Features
 
-- Add thread context support for conversations ([#30](https://github.com/presmihaylov/eksec/pull/30))
+- Add thread context support for conversations ([#30](https://github.com/presmihaylov/eksecd/pull/30))
   - Implements thread context tracking for multi-turn conversations
   - Improves conversation continuity and context management
   - Enhances agent's ability to maintain conversation state
@@ -438,7 +438,7 @@
 
 ### Features
 
-- Add EKSEC_CONFIG_DIR environment variable ([#28](https://github.com/presmihaylov/eksec/pull/28))
+- Add EKSECD_CONFIG_DIR environment variable ([#28](https://github.com/presmihaylov/eksecd/pull/28))
   - Allows custom configuration directory path
   - Improves deployment flexibility
   - Enables better multi-instance management
@@ -449,7 +449,7 @@
   - Resolves issues with handling large image attachments
   - Improves response parsing stability
   - Enhances reliability for image-heavy workflows
-- Reduce Socket.IO reconnect max backoff to 10s ([#29](https://github.com/presmihaylov/eksec/pull/29))
+- Reduce Socket.IO reconnect max backoff to 10s ([#29](https://github.com/presmihaylov/eksecd/pull/29))
   - Faster reconnection during network issues
   - Reduces downtime during connectivity problems
   - Improves overall agent responsiveness
@@ -458,14 +458,14 @@
 
 ### Features
 
-- Add attachment support with magic bytes ([#26](https://github.com/presmihaylov/eksec/pull/26))
+- Add attachment support with magic bytes ([#26](https://github.com/presmihaylov/eksecd/pull/26))
   - Implements automatic file type detection using magic bytes
   - Supports attachments in agent communication
   - Enhances file handling capabilities
 
 ### Bugfix
 
-- Prevent job recovery on socket reconnect ([#27](https://github.com/presmihaylov/eksec/pull/27))
+- Prevent job recovery on socket reconnect ([#27](https://github.com/presmihaylov/eksecd/pull/27))
   - Fixes duplicate job recovery attempts during reconnection
   - Ensures clean reconnection without state conflicts
   - Improves stability during network interruptions
@@ -474,11 +474,11 @@
 
 ### Improvements
 
-- Extend job inactivity timeout to 24 hours ([#23](https://github.com/presmihaylov/eksec/pull/23))
+- Extend job inactivity timeout to 24 hours ([#23](https://github.com/presmihaylov/eksecd/pull/23))
   - Jobs now remain active for 24 hours instead of 1 hour
   - Prevents premature job termination for long-running tasks
   - Improves reliability for extended coding sessions
-- Prevent reconnect blocking by persisting worker pools ([#24](https://github.com/presmihaylov/eksec/pull/24))
+- Prevent reconnect blocking by persisting worker pools ([#24](https://github.com/presmihaylov/eksecd/pull/24))
   - Worker pools now persist across socket reconnections
   - Eliminates blocking during reconnection events
   - Ensures continuous operation without interruption
@@ -487,7 +487,7 @@
 
 ### Features
 
-- Add message queue for reliable reconnection ([#22](https://github.com/presmihaylov/eksec/pull/22))
+- Add message queue for reliable reconnection ([#22](https://github.com/presmihaylov/eksecd/pull/22))
   - Implements message queue to prevent message loss during reconnection
   - Ensures reliable message delivery with automatic retry mechanism
   - Dramatically improves agent stability and reliability during network interruptions
@@ -495,7 +495,7 @@
 ### Documentation
 
 - Add comprehensive release process documentation
-  - Detailed release guide in docs/release_eksec.md
+  - Detailed release guide in docs/release_eksecd.md
   - Step-by-step instructions for version bumping and changelog updates
   - Release notes template with emoji formatting examples
   - Troubleshooting section and complete workflow documentation
@@ -504,11 +504,11 @@
 
 ### Features
 
-- Add persistent state with job restoration ([#20](https://github.com/presmihaylov/eksec/pull/20))
+- Add persistent state with job restoration ([#20](https://github.com/presmihaylov/eksecd/pull/20))
   - Implements state persistence across agent restarts
   - Automatic job restoration on startup
   - Enhanced recovery handling for interrupted tasks
-- Add startup logging for config and environment ([#19](https://github.com/presmihaylov/eksec/pull/19))
+- Add startup logging for config and environment ([#19](https://github.com/presmihaylov/eksecd/pull/19))
   - Improved visibility into agent configuration at startup
   - Environment variable logging for debugging
 - Support custom release notes in build script
@@ -516,7 +516,7 @@
 
 ### Documentation
 
-- Add Claude Control context to prompts ([#18](https://github.com/presmihaylov/eksec/pull/18))
+- Add Claude Control context to prompts ([#18](https://github.com/presmihaylov/eksecd/pull/18))
   - Enhanced prompt templates with Claude Control-specific context
 
 ## [0.0.3] - 2025-08-22
@@ -529,11 +529,11 @@
 
 ### Documentation
 
-- Add project overview and architecture guide ([#1](https://github.com/your-org/eksec/issues/1))
+- Add project overview and architecture guide ([#1](https://github.com/your-org/eksecd/issues/1))
 
 ### Refactor
 
-- Improve session context and clean Git methods ([#2](https://github.com/your-org/eksec/issues/2))
+- Improve session context and clean Git methods ([#2](https://github.com/your-org/eksecd/issues/2))
 
 ## [0.0.1] - 2025-08-12
 
@@ -542,7 +542,7 @@
 - Testing
 - Generate PR titles with git-cliff conventions out of the box
 - Add homebrew installation
-- Initial eksec release
+- Initial eksecd release
 
 ### Miscellaneous Tasks
 

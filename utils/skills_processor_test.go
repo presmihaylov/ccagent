@@ -286,14 +286,14 @@ func findSubstring(s, substr string) bool {
 }
 
 func TestGetSkillFiles(t *testing.T) {
-	// Create a temporary directory to simulate ~/.config/eksec/skills/
+	// Create a temporary directory to simulate ~/.config/eksecd/skills/
 	tmpDir := t.TempDir()
 
 	// Override the home directory for testing
 	originalHome := os.Getenv("HOME")
 	t.Setenv("HOME", tmpDir)
 
-	// Create the .config/eksec/skills structure
+	// Create the .config/eksecd/skills structure
 	eksecSkillsDir := filepath.Join(tmpDir, ".config", "eksec", "skills")
 	if err := os.MkdirAll(eksecSkillsDir, 0755); err != nil {
 		t.Fatalf("Failed to create skills directory: %v", err)

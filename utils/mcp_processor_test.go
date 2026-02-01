@@ -1039,7 +1039,7 @@ func TestOpenCodeMCPProcessor_PreservesExistingConfig(t *testing.T) {
 	// Create existing opencode.json with other keys (e.g., instructions)
 	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
 	existingConfig := map[string]interface{}{
-		"instructions": []string{"~/.config/eksec/rules/*.md"},
+		"instructions": []string{"~/.config/eksecd/rules/*.md"},
 		"theme":        "dark",
 	}
 	existingJSON, _ := json.Marshal(existingConfig)

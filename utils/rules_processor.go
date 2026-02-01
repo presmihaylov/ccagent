@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"eksec/core/log"
+	"eksecd/core/log"
 )
 
 // RuleFrontMatter represents the parsed front matter from a rule file
@@ -297,7 +297,7 @@ func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
 
 	config := OpenCodeConfig{
-		Instructions: []string{"~/.config/eksec/rules/*.md"},
+		Instructions: []string{"~/.config/eksecd/rules/*.md"},
 	}
 
 	configJSON, err := json.MarshalIndent(config, "", "  ")

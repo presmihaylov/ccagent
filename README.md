@@ -1,6 +1,6 @@
-# eksec
+# eksecd
 
-A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [eksec platform](https://eksec.ai).
+A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [eksecd platform](https://eksecd.ai).
 
 ### Supported AI Assistants
 
@@ -11,30 +11,30 @@ A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team c
 
 ### Supported Platforms
 
-eksec runs on **macOS**, **Linux**, and **Windows** with native binaries for both Intel and ARM architectures.
+eksecd runs on **macOS**, **Linux**, and **Windows** with native binaries for both Intel and ARM architectures.
 
 ## Installation
 
 ### Via Homebrew (Recommended)
 
 ```bash
-brew install presmihaylov/taps/eksec
+brew install presmihaylov/taps/eksecd
 ```
 
 To upgrade to the latest version:
 ```bash
-brew upgrade presmihaylov/taps/eksec
+brew upgrade presmihaylov/taps/eksecd
 ```
 
 ### From Source
 You will need to have Go 1.24 installed:
 ```bash
-git clone https://github.com/presmihaylov/eksec.git
-cd eksec
+git clone https://github.com/presmihaylov/eksecd.git
+cd eksecd
 make build
 ```
 
-The compiled binary will be available at `bin/eksec`.
+The compiled binary will be available at `bin/eksecd`.
 
 ## Usage
 
@@ -42,19 +42,19 @@ The compiled binary will be available at `bin/eksec`.
 
 - Git
 - GitHub CLI (`gh`) - [Install here](https://cli.github.com/)
-- eksec account (sign up [here](https://eksec.ai))
+- eksecd account (sign up [here](https://eksecd.ai))
 
 ### Basic Usage
 
 #### Repository Setup
 
-**Important**: eksec will autonomously create branches, make changes, and create pull requests. To avoid conflicts with your main development workflow, it's **strongly recommended** to clone your repository separately for eksec use.
+**Important**: eksecd will autonomously create branches, make changes, and create pull requests. To avoid conflicts with your main development workflow, it's **strongly recommended** to clone your repository separately for eksecd use.
 
 #### Prerequisites Setup
 
-Before running eksec, ensure you have:
+Before running eksecd, ensure you have:
 
-1. **GitHub CLI Authentication**: eksec uses the GitHub CLI to create pull requests
+1. **GitHub CLI Authentication**: eksecd uses the GitHub CLI to create pull requests
    ```bash
    # Login to GitHub
    gh auth login
@@ -70,31 +70,31 @@ Before running eksec, ensure you have:
 
 #### GitHub Account Options
 
-You can use eksec with:
-- **Your personal GitHub account**: eksec will create PRs on your behalf
-- **Dedicated bot account**: Create a separate GitHub account for eksec to use (recommended for teams)
+You can use eksecd with:
+- **Your personal GitHub account**: eksecd will create PRs on your behalf
+- **Dedicated bot account**: Create a separate GitHub account for eksecd to use (recommended for teams)
 
 #### Environment Setup
 
-eksec requires the following environment variables:
+eksecd requires the following environment variables:
 
 ```bash
-# Required: API key from your eksec organization
-export EKSEC_API_KEY=your_api_key_here
+# Required: API key from your eksecd organization
+export EKSECD_API_KEY=your_api_key_here
 ```
 
-You can generate an API key from the eksec dashboard.
+You can generate an API key from the eksecd dashboard.
 
-#### Running eksec
+#### Running eksecd
 
-Once setup is complete, run eksec in your repository directory.
+Once setup is complete, run eksecd in your repository directory.
 
-By default, eksec uses Claude Code as the AI assistant with `acceptEdits` permission mode.
+By default, eksecd uses Claude Code as the AI assistant with `acceptEdits` permission mode.
 
 ### Command Line Options
 
 ```bash
-eksec [OPTIONS]
+eksecd [OPTIONS]
 
 Options:
   --agent=[claude|cursor|codex|opencode]  AI assistant to use (default: claude)
@@ -109,46 +109,46 @@ Options:
 #### Claude Code Agent (Default)
 ```bash
 # Standard mode - requires approval for file edits
-eksec --agent claude
+eksecd --agent claude
 
 # Use specific model (options: sonnet, haiku, opus, or full model names like claude-sonnet-4-5-20250929)
-eksec --agent claude --model haiku
+eksecd --agent claude --model haiku
 
 # Bypass permissions (Recommended in a secure sandbox environment only)
-eksec --agent claude --claude-bypass-permissions
+eksecd --agent claude --claude-bypass-permissions
 ```
 
 #### Cursor Agent
 ```bash
 # Use Cursor with specific model (options: gpt-5, sonnet-4, sonnet-4-thinking)
-eksec --agent cursor --model sonnet-4
+eksecd --agent cursor --model sonnet-4
 ```
 
 #### Codex Agent
 ```bash
 # Standard mode - requires approval for file edits
-eksec --agent codex
+eksecd --agent codex
 
 # Bypass permissions (Recommended in a secure sandbox environment only)
-eksec --agent codex --claude-bypass-permissions
+eksecd --agent codex --claude-bypass-permissions
 
 # Use specific model (default: gpt-5, accepts any model string)
-eksec --agent codex --model gpt-5
+eksecd --agent codex --model gpt-5
 ```
 
 #### OpenCode Agent
 ```bash
 # OpenCode requires bypass permissions mode (default model: opencode/grok-code)
-eksec --agent opencode --claude-bypass-permissions
+eksecd --agent opencode --claude-bypass-permissions
 
 # Use specific provider/model (format: provider/model)
-eksec --agent opencode --claude-bypass-permissions --model anthropic/claude-3-5-sonnet
+eksecd --agent opencode --claude-bypass-permissions --model anthropic/claude-3-5-sonnet
 ```
 
 **Note**: OpenCode only supports `bypassPermissions` mode. The `--claude-bypass-permissions` flag is required.
 
 ### Logging
-eksec automatically creates log files in `~/.config/eksec/logs/` with timestamp-based naming. Logs are written to both stdout and files for debugging.
+eksecd automatically creates log files in `~/.config/eksecd/logs/` with timestamp-based naming. Logs are written to both stdout and files for debugging.
 
 ## Development
 
@@ -184,12 +184,12 @@ make lint-fix
 
 ## Security Recommendations
 
-eksec operates in different permission modes depending on the AI assistant and configuration:
+eksecd operates in different permission modes depending on the AI assistant and configuration:
 
 ### Secure Mode (Recommended)
 - **Claude Code (default)**: Runs in `acceptEdits` mode, requiring explicit approval for all file modifications
 - **Codex (default)**: Runs in `acceptEdits` mode with sandbox protections
-- **Best Practice**: Use this mode when running eksec on your local development machine
+- **Best Practice**: Use this mode when running eksecd on your local development machine
 
 ### Bypass Permissions Mode
 - **Claude Code with `--claude-bypass-permissions`**: Allows unrestricted system access
@@ -209,4 +209,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
-Contact us at support@eksec.ai
+Contact us at support@eksecd.ai

@@ -10,9 +10,9 @@ import (
 func TestFilterEnvForAgent(t *testing.T) {
 	env := []string{
 		"PATH=/usr/bin",
-		"EKSEC_API_KEY=secret_api_key",
+		"EKSECD_API_KEY=secret_api_key",
 		"ANTHROPIC_API_KEY=sk-ant-xxx",
-		"EKSEC_WS_API_URL=wss://api.example.com",
+		"EKSECD_WS_API_URL=wss://api.example.com",
 		"AGENT_EXEC_USER=agentrunner",
 		"HOME=/home/user",
 	}

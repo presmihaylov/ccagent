@@ -6,7 +6,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/zishang520/socket.io-client-go/socket"
 
-	"eksec/core/log"
+	"eksecd/core/log"
 )
 
 // OutgoingMessage represents a message to be sent via Socket.IO

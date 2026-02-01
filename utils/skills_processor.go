@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"eksec/core/log"
+	"eksecd/core/log"
 )
 
 // SkillsProcessor defines the interface for processing agent-specific skills

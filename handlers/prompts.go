@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"eksec/models"
+	"eksecd/models"
 	"fmt"
 )
 

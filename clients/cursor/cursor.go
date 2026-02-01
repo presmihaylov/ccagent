@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"eksec/clients"
-	"eksec/core"
-	"eksec/core/log"
+	"eksecd/clients"
+	"eksecd/core"
+	"eksecd/core/log"
 )
 
 type CursorClient struct {

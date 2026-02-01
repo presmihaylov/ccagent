@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"eksec/clients"
+	"eksecd/clients"
 )
 
 // DetermineFileExtensionFromMagicBytes inspects the first few bytes of content
