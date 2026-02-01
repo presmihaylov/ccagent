@@ -57,6 +57,9 @@ type CmdRunner struct {
 	blockingWorkerPool *workerpool.WorkerPool
 	instantWorkerPool  *workerpool.WorkerPool
 
+	// Job dispatcher for per-job message sequencing
+	dispatcher *handlers.JobDispatcher
+
 	// Worktree pool for fast worktree acquisition
 	poolCtx    context.Context
 	poolCancel context.CancelFunc
@@ -505,6 +508,14 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	cr.blockingWorkerPool = workerpool.New(maxConcurrency) // concurrent conversation processing
 	cr.instantWorkerPool = workerpool.New(5)               // parallel PR status checks
 
+	// Initialize job dispatcher for per-job message sequencing
+	cr.dispatcher = handlers.NewJobDispatcher(
+		cr.messageHandler,
+		cr.blockingWorkerPool,
+		cr.appState,
+	)
+	log.Info("🔀 Initialized job dispatcher for per-job message sequencing")
+
 	// Initialize worktree pool if concurrency enabled and in repo mode
 	// Note: repoContext is already set above, we just refresh it here
 	repoContext = appState.GetRepositoryContext()
@@ -551,7 +562,7 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	handlers.RecoverJobs(
 		appState,
 		gitUseCase,
-		cr.blockingWorkerPool,
+		cr.dispatcher,
 		messageHandler,
 	)
 
@@ -889,7 +900,6 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	log.Info("📤 Started MessageSender goroutine")
 
 	// Use persistent worker pools across reconnects
-	blockingWorkerPool := cr.blockingWorkerPool
 	instantWorkerPool := cr.instantWorkerPool
 
 	// Track connection state for auth failure detection
@@ -952,28 +962,24 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 
 		log.Info("📨 Received message type: %s", msg.Type)
 
-		// Route messages to appropriate worker pool
+		// Route messages to appropriate handler
 		switch msg.Type {
 		case models.MessageTypeStartConversation, models.MessageTypeUserMessage:
-			// Persist message to queue BEFORE submitting to worker pool for crash recovery
+			// Persist message to queue BEFORE submitting for crash recovery
 			if err := cr.messageHandler.PersistQueuedMessage(msg); err != nil {
 				log.Error("❌ Failed to persist queued message: %v", err)
 			}
 
-			// Conversation messages need sequential processing
-			blockingWorkerPool.Submit(func() {
-				cr.messageHandler.HandleMessage(msg)
-			})
+			// Route through dispatcher for per-job sequential processing
+			cr.dispatcher.Dispatch(msg)
 		case models.MessageTypeCheckIdleJobs:
 			// PR status checks can run in parallel without blocking conversations
 			instantWorkerPool.Submit(func() {
 				cr.messageHandler.HandleMessage(msg)
 			})
 		default:
-			// Fallback to blocking pool for any unhandled message types
-			blockingWorkerPool.Submit(func() {
-				cr.messageHandler.HandleMessage(msg)
-			})
+			// Route other message types through dispatcher
+			cr.dispatcher.Dispatch(msg)
 		}
 	})
 	utils.AssertInvariant(err == nil, fmt.Sprintf("Failed to set up cc_message handler: %v", err))
