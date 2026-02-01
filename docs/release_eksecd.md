@@ -141,7 +141,7 @@ Edit the CHANGELOG.md file to add the new version section at the top, after the 
 ```bash
 # Configure git if needed
 git config user.name "eksecd"
-git config user.email "agent@eksecd.ai"
+git config user.email "agent@eksec.ai"
 
 # Stage and commit the version bump
 git add core/VERSION CHANGELOG.md
@@ -390,7 +390,7 @@ make version-patch
 
 # 5. Commit and push
 git config user.name "eksecd"
-git config user.email "agent@eksecd.ai"
+git config user.email "agent@eksec.ai"
 git add core/VERSION CHANGELOG.md
 git commit -m "chore: bump version to $(cat core/VERSION) and update changelog"
 git push origin main

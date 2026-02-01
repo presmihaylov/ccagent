@@ -1,6 +1,6 @@
 # eksecd
 
-A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [eksecd platform](https://eksecd.ai).
+The eksec daemon - runs your AI coding agents and connects them to the [eksec platform](https://eksec.ai). eksecd bridges AI assistants (Claude Code, Cursor, Codex, OpenCode) with team collaboration platforms like Slack and Discord.
 
 ### Supported AI Assistants
 
@@ -42,7 +42,7 @@ The compiled binary will be available at `bin/eksecd`.
 
 - Git
 - GitHub CLI (`gh`) - [Install here](https://cli.github.com/)
-- eksecd account (sign up [here](https://eksecd.ai))
+- eksec account (sign up [here](https://eksec.ai))
 
 ### Basic Usage
 
@@ -79,11 +79,11 @@ You can use eksecd with:
 eksecd requires the following environment variables:
 
 ```bash
-# Required: API key from your eksecd organization
+# Required: API key from your eksec organization
 export EKSEC_API_KEY=your_api_key_here
 ```
 
-You can generate an API key from the eksecd dashboard.
+You can generate an API key from the eksec dashboard.
 
 #### Running eksecd
 
@@ -209,4 +209,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
-Contact us at support@eksecd.ai
+Contact us at support@eksec.ai
