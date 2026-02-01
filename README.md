@@ -1,6 +1,6 @@
 # ccagent
 
-A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [Claude Control platform](https://claudecontrol.com).
+A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [eksec platform](https://eksec.ai).
 
 ### Supported AI Assistants
 
@@ -42,7 +42,7 @@ The compiled binary will be available at `bin/ccagent`.
 
 - Git
 - GitHub CLI (`gh`) - [Install here](https://cli.github.com/)
-- Claude Control account (sign up [here](https://claudecontrol.com))
+- eksec account (sign up [here](https://eksec.ai))
 
 ### Basic Usage
 
@@ -79,11 +79,11 @@ You can use ccagent with:
 ccagent requires the following environment variables:
 
 ```bash
-# Required: API key from your Claude Control organization
+# Required: API key from your eksec organization
 export CCAGENT_API_KEY=your_api_key_here
 ```
 
-You can generate an API key from the Claude Control dashboard.
+You can generate an API key from the eksec dashboard.
 
 #### Running ccagent
 
@@ -209,4 +209,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
-Contact us at support@claudecontrol.com
+Contact us at support@eksec.ai
