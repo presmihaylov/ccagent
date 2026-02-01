@@ -368,12 +368,12 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	envManager.StartPeriodicRefresh(1 * time.Minute)
 
 	// Get API key and WS URL for agents API client
-	eksecAPIKey := envManager.Get("EKSECD_API_KEY")
+	eksecAPIKey := envManager.Get("EKSEC_API_KEY")
 	if eksecAPIKey == "" {
-		return nil, fmt.Errorf("EKSECD_API_KEY environment variable is required but not set")
+		return nil, fmt.Errorf("EKSEC_API_KEY environment variable is required but not set")
 	}
 
-	wsURL := envManager.Get("EKSECD_WS_API_URL")
+	wsURL := envManager.Get("EKSEC_WS_API_URL")
 	if wsURL == "" {
 		wsURL = "https://claudecontrol.onrender.com/socketio/"
 	}
@@ -381,7 +381,7 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	// Extract base URL for API client (remove /socketio/ suffix)
 	apiBaseURL := strings.TrimSuffix(wsURL, "/socketio/")
 	// Get agent ID for X-AGENT-ID header (used to disambiguate containers sharing API keys)
-	agentIDForAPI := envManager.Get("EKSECD_AGENT_ID")
+	agentIDForAPI := envManager.Get("EKSEC_AGENT_ID")
 	agentsApiClient := clients.NewAgentsApiClient(eksecAPIKey, apiBaseURL, agentIDForAPI)
 	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
 
@@ -861,16 +861,16 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	repoIdentifier := repoContext.RepositoryIdentifier
 
 	// Determine agent ID value - use env var if set, otherwise use repo identifier
-	agentID := cr.envManager.Get("EKSECD_AGENT_ID")
+	agentID := cr.envManager.Get("EKSEC_AGENT_ID")
 	if agentID == "" {
 		if repoIdentifier != "" {
 			agentID = repoIdentifier
 			log.Info("📋 Using repository identifier as agent ID: %s", agentID)
 		} else {
-			return fmt.Errorf("EKSECD_AGENT_ID environment variable is required in no-repo mode")
+			return fmt.Errorf("EKSEC_AGENT_ID environment variable is required in no-repo mode")
 		}
 	} else {
-		log.Info("📋 Using EKSECD_AGENT_ID from environment: %s", agentID)
+		log.Info("📋 Using EKSEC_AGENT_ID from environment: %s", agentID)
 	}
 
 	// Set authentication headers

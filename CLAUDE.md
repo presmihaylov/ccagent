@@ -75,8 +75,8 @@ The release process includes:
 
 ## Environment Requirements
 
-- `EKSECD_API_KEY`: Required API key from eksecd platform
-- `EKSECD_WS_API_URL`: Optional WebSocket URL (defaults to production)
+- `EKSEC_API_KEY`: Required API key from eksecd platform
+- `EKSEC_WS_API_URL`: Optional WebSocket URL (defaults to production)
 - Git and GitHub CLI (`gh`) must be configured
 - Go 1.24+ for building from source
 

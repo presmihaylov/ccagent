@@ -191,12 +191,12 @@ func TestEnvManager_MissingFile(t *testing.T) {
 }
 
 func TestGetConfigDir_Default(t *testing.T) {
-	// Ensure EKSECD_CONFIG_DIR is not set
-	originalValue := os.Getenv("EKSECD_CONFIG_DIR")
-	os.Unsetenv("EKSECD_CONFIG_DIR")
+	// Ensure EKSEC_CONFIG_DIR is not set
+	originalValue := os.Getenv("EKSEC_CONFIG_DIR")
+	os.Unsetenv("EKSEC_CONFIG_DIR")
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("EKSECD_CONFIG_DIR", originalValue)
+			os.Setenv("EKSEC_CONFIG_DIR", originalValue)
 		}
 	}()
 
@@ -231,13 +231,13 @@ func TestGetConfigDir_CustomAbsolute(t *testing.T) {
 
 	// Set custom config directory
 	customDir := filepath.Join(tempDir, "custom-config")
-	originalValue := os.Getenv("EKSECD_CONFIG_DIR")
-	os.Setenv("EKSECD_CONFIG_DIR", customDir)
+	originalValue := os.Getenv("EKSEC_CONFIG_DIR")
+	os.Setenv("EKSEC_CONFIG_DIR", customDir)
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("EKSECD_CONFIG_DIR", originalValue)
+			os.Setenv("EKSEC_CONFIG_DIR", originalValue)
 		} else {
-			os.Unsetenv("EKSECD_CONFIG_DIR")
+			os.Unsetenv("EKSEC_CONFIG_DIR")
 		}
 	}()
 
@@ -258,13 +258,13 @@ func TestGetConfigDir_CustomAbsolute(t *testing.T) {
 
 func TestGetConfigDir_CustomTilde(t *testing.T) {
 	// Set custom config directory with tilde
-	originalValue := os.Getenv("EKSECD_CONFIG_DIR")
-	os.Setenv("EKSECD_CONFIG_DIR", "~/.eksecd-custom")
+	originalValue := os.Getenv("EKSEC_CONFIG_DIR")
+	os.Setenv("EKSEC_CONFIG_DIR", "~/.eksecd-custom")
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("EKSECD_CONFIG_DIR", originalValue)
+			os.Setenv("EKSEC_CONFIG_DIR", originalValue)
 		} else {
-			os.Unsetenv("EKSECD_CONFIG_DIR")
+			os.Unsetenv("EKSEC_CONFIG_DIR")
 		}
 	}()
 

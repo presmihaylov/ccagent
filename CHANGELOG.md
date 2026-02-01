@@ -150,7 +150,7 @@
 
 - Add X-AGENT-ID header with environment variable support ([#70](https://github.com/presmihaylov/eksecd/pull/70))
   - Adds X-AGENT-ID header to API requests for agent identification
-  - Supports EKSECD_AGENT_ID environment variable for custom agent IDs
+  - Supports EKSEC_AGENT_ID environment variable for custom agent IDs
   - Improves agent tracing and debugging capabilities
 
 ### Bugfixes
@@ -438,7 +438,7 @@
 
 ### Features
 
-- Add EKSECD_CONFIG_DIR environment variable ([#28](https://github.com/presmihaylov/eksecd/pull/28))
+- Add EKSEC_CONFIG_DIR environment variable ([#28](https://github.com/presmihaylov/eksecd/pull/28))
   - Allows custom configuration directory path
   - Improves deployment flexibility
   - Enables better multi-instance management

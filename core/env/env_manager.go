@@ -42,11 +42,11 @@ func NewEnvManager() (*EnvManager, error) {
 	return em, nil
 }
 
-// GetConfigDir returns the config directory path, either from EKSECD_CONFIG_DIR
+// GetConfigDir returns the config directory path, either from EKSEC_CONFIG_DIR
 // environment variable or the default ~/.config/eksecd
 func GetConfigDir() (string, error) {
-	// Check if EKSECD_CONFIG_DIR is set
-	if configDir := os.Getenv("EKSECD_CONFIG_DIR"); configDir != "" {
+	// Check if EKSEC_CONFIG_DIR is set
+	if configDir := os.Getenv("EKSEC_CONFIG_DIR"); configDir != "" {
 		// Expand ~ if present
 		if len(configDir) >= 2 && configDir[:2] == "~/" {
 			homeDir, err := os.UserHomeDir()

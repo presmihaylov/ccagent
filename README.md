@@ -80,7 +80,7 @@ eksecd requires the following environment variables:
 
 ```bash
 # Required: API key from your eksecd organization
-export EKSECD_API_KEY=your_api_key_here
+export EKSEC_API_KEY=your_api_key_here
 ```
 
 You can generate an API key from the eksecd dashboard.
