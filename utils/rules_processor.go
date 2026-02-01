@@ -307,7 +307,7 @@ func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 
 	log.Info("📋 Creating opencode.json at: %s", opencodeConfigPath)
 
-	if err := os.WriteFile(opencodeConfigPath, configJSON, 0644); err != nil {
+	if err := writeFileAsTargetUser(opencodeConfigPath, configJSON, 0644); err != nil {
 		return fmt.Errorf("failed to write opencode.json: %w", err)
 	}
 

@@ -101,7 +101,7 @@ func (p *OpenCodePermissionsProcessor) ProcessPermissions(targetHomeDir string) 
 
 	log.Info("🔓 Updating opencode.json with permissions at: %s", opencodeConfigPath)
 
-	if err := os.WriteFile(opencodeConfigPath, configJSON, 0644); err != nil {
+	if err := writeFileAsTargetUser(opencodeConfigPath, configJSON, 0644); err != nil {
 		return fmt.Errorf("failed to write opencode.json: %w", err)
 	}
 
