@@ -1,3 +1,11 @@
+## [v0.0.55] - 2026-02-01
+
+### Bugfixes
+
+- Fix opencode.json permission denied for agentrunner user ([#134](https://github.com/eksecai/eksecd/pull/134))
+  - Fixes file permission issue when writing opencode.json and rules in process isolation mode
+  - Ensures configuration files are written to the correct user's home directory
+
 ## [v0.0.54] - 2026-02-01
 
 ### Bugfixes
