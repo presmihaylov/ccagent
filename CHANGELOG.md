@@ -1,3 +1,11 @@
+## [v0.0.54] - 2026-02-01
+
+### Bugfixes
+
+- Fix bug with parallel work trees ([#133](https://github.com/eksecai/eksecd/pull/133))
+  - Adds a dispatcher layer for proper job-to-worktree routing
+  - Fixes race conditions when multiple jobs run concurrently across worktrees
+
 ## [v0.0.53] - 2026-02-01
 
 ### Refactoring
