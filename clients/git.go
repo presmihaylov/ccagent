@@ -150,8 +150,20 @@ func (g *GitClient) PullLatest() error {
 		// This happens when branch was pushed but later deleted remotely (e.g., after PR merge)
 		if strings.Contains(outputStr, "no such ref was fetched") ||
 			strings.Contains(outputStr, "couldn't find remote ref") {
+			// Check if branch was ever pushed (has upstream tracking)
+			hasPushed, trackErr := g.HasUpstreamTracking()
+			if trackErr != nil {
+				log.Warn("⚠️ Failed to check upstream tracking: %v", trackErr)
+			}
+
+			if !hasPushed {
+				// Branch was never pushed - this is not an error, just nothing to pull
+				log.Info("ℹ️ Branch has no upstream - never pushed, nothing to pull")
+				return nil
+			}
+
+			// Branch was pushed but now deleted on remote
 			log.Warn("⚠️ Remote branch has been deleted - this may indicate the PR was merged or branch was manually removed")
-			// Return a special error that the caller can handle by switching to default branch
 			return fmt.Errorf("remote branch deleted: %w", err)
 		}
 
@@ -206,6 +218,51 @@ func (g *GitClient) hasCommits() (bool, error) {
 	// If command succeeds, HEAD exists (repository has commits)
 	// If it fails, HEAD doesn't exist (empty repository)
 	return err == nil, nil
+}
+
+// HasUpstreamTracking checks if the current branch has upstream tracking configured.
+// Returns true if the branch has been pushed and is tracking a remote branch.
+func (g *GitClient) HasUpstreamTracking() (bool, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "@{u}")
+	g.setWorkDir(cmd)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		outputStr := strings.ToLower(string(output))
+		// These errors indicate no upstream is configured (branch never pushed)
+		if strings.Contains(outputStr, "no upstream") ||
+			strings.Contains(outputStr, "does not point to a branch") ||
+			strings.Contains(outputStr, "no such branch") {
+			return false, nil
+		}
+		// Other errors are actual failures
+		return false, fmt.Errorf("failed to check upstream tracking: %w", err)
+	}
+
+	// If we got output without error, upstream exists
+	return strings.TrimSpace(string(output)) != "", nil
+}
+
+// HasUpstreamTrackingInWorktree checks if the current branch in a worktree has upstream tracking.
+func (g *GitClient) HasUpstreamTrackingInWorktree(worktreePath string) (bool, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "@{u}")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		outputStr := strings.ToLower(string(output))
+		// These errors indicate no upstream is configured (branch never pushed)
+		if strings.Contains(outputStr, "no upstream") ||
+			strings.Contains(outputStr, "does not point to a branch") ||
+			strings.Contains(outputStr, "no such branch") {
+			return false, nil
+		}
+		// Other errors are actual failures
+		return false, fmt.Errorf("failed to check upstream tracking in worktree: %w", err)
+	}
+
+	// If we got output without error, upstream exists
+	return strings.TrimSpace(string(output)) != "", nil
 }
 
 func (g *GitClient) CleanUntracked() error {
@@ -1379,6 +1436,19 @@ func (g *GitClient) PullLatestInWorktree(worktreePath string) error {
 		// Check if error is due to remote branch being deleted
 		if strings.Contains(outputStr, "no such ref was fetched") ||
 			strings.Contains(outputStr, "couldn't find remote ref") {
+			// Check if branch was ever pushed (has upstream tracking)
+			hasPushed, trackErr := g.HasUpstreamTrackingInWorktree(worktreePath)
+			if trackErr != nil {
+				log.Warn("⚠️ Failed to check upstream tracking in worktree: %v", trackErr)
+			}
+
+			if !hasPushed {
+				// Branch was never pushed - this is not an error, just nothing to pull
+				log.Info("ℹ️ Branch in worktree has no upstream - never pushed, nothing to pull")
+				return nil
+			}
+
+			// Branch was pushed but now deleted on remote
 			log.Warn("⚠️ Remote branch has been deleted for worktree")
 			return fmt.Errorf("remote branch deleted: %w", err)
 		}

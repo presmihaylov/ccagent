@@ -4,8 +4,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gammazero/workerpool"
-
 	"eksecd/core"
 	"eksecd/core/log"
 	"eksecd/models"
@@ -19,7 +17,7 @@ import (
 func RecoverJobs(
 	appState *models.AppState,
 	gitUseCase *usecases.GitUseCase,
-	blockingWorkerPool *workerpool.WorkerPool,
+	dispatcher *JobDispatcher,
 	messageHandler *MessageHandler,
 ) {
 	log.Info("🔄 Starting job and message recovery process")
@@ -129,10 +127,8 @@ func RecoverJobs(
 			}
 		}
 
-		// Submit to blocking worker pool for processing
-		blockingWorkerPool.Submit(func() {
-			messageHandler.HandleMessage(msg)
-		})
+		// Route through dispatcher for per-job sequential processing
+		dispatcher.Dispatch(msg)
 
 		recoveredJobsCount++
 	}
@@ -200,10 +196,8 @@ func RecoverJobs(
 				continue
 			}
 
-			// Submit to blocking worker pool for processing
-			blockingWorkerPool.Submit(func() {
-				messageHandler.HandleMessage(msg)
-			})
+			// Route through dispatcher for per-job sequential processing
+			dispatcher.Dispatch(msg)
 
 			recoveredQueuedCount++
 		}
