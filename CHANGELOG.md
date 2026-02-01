@@ -1,3 +1,18 @@
+## [v0.0.53] - 2026-02-01
+
+### Refactoring
+
+- Rebrand to eksec in all prompts ([#126](https://github.com/eksecai/eksecd/pull/126))
+  - Updates all user-facing prompt text from ccagent to eksec branding
+- Rename ccagent to eksec across codebase ([#127](https://github.com/eksecai/eksecd/pull/127))
+  - Renames binary from ccagent to eksecd
+  - Updates config directory from ~/.config/ccagent/ to ~/.config/eksecd/
+  - Changes environment variables from CCAGENT_* to EKSEC_* prefix
+  - Updates all internal references and documentation
+- Rename eksec to eksecd across codebase ([#128](https://github.com/eksecai/eksecd/pull/128))
+  - Finalizes binary and package naming to eksecd
+  - Ensures consistent naming across all code paths
+
 ## [v0.0.52] - 2026-01-31
 
 ### Bugfixes
