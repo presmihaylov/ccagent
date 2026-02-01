@@ -1,4 +1,4 @@
-module ccagent
+module eksec
 
 go 1.24.1
 

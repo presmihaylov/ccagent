@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"ccagent/core/log"
+	"eksec/core/log"
 
 	"github.com/cenkalti/backoff/v4"
 )
@@ -451,7 +451,7 @@ func (g *GitClient) IsGitRepositoryRoot() error {
 	if gitRoot != targetDir {
 		log.Error("❌ Not at Git repository root. Target: %s, Git root: %s", targetDir, gitRoot)
 		return fmt.Errorf(
-			"ccagent must be run from the Git repository root directory. Target: %s, Git root: %s",
+			"eksec must be run from the Git repository root directory. Target: %s, Git root: %s",
 			targetDir,
 			gitRoot,
 		)

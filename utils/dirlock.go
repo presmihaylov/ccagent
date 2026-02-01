@@ -67,15 +67,15 @@ func NewDirLock(path string) (*DirLock, error) {
 	// Get system temp directory
 	tempDir := os.TempDir()
 
-	// Create ccagent subdirectory in temp
-	ccagentTempDir := filepath.Join(tempDir, "ccagent")
-	if err := os.MkdirAll(ccagentTempDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create ccagent temp directory: %w", err)
+	// Create eksec subdirectory in temp
+	eksecTempDir := filepath.Join(tempDir, "eksec")
+	if err := os.MkdirAll(eksecTempDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create eksec temp directory: %w", err)
 	}
 
 	// Create lock file path using sanitized directory name
 	lockFileName := fmt.Sprintf("%s.lock", sanitizedDir)
-	lockPath := filepath.Join(ccagentTempDir, lockFileName)
+	lockPath := filepath.Join(eksecTempDir, lockFileName)
 
 	// Create flock instance
 	lockFile := flock.New(lockPath)
@@ -95,7 +95,7 @@ func (dl *DirLock) TryLock() error {
 	}
 
 	if !locked {
-		return fmt.Errorf("another ccagent instance is already running in this path")
+		return fmt.Errorf("another eksec instance is already running in this path")
 	}
 
 	return nil

@@ -90,7 +90,7 @@ func TestOpenCodePermissionsProcessor_PreservesExistingConfig(t *testing.T) {
 				"enabled": true,
 			},
 		},
-		"instructions": []string{"~/.config/ccagent/rules/*.md"},
+		"instructions": []string{"~/.config/eksec/rules/*.md"},
 	}
 
 	existingJSON, _ := json.MarshalIndent(existingConfig, "", "  ")
@@ -132,7 +132,7 @@ func TestOpenCodePermissionsProcessor_PreservesExistingConfig(t *testing.T) {
 	if !ok {
 		t.Fatalf("Expected 'instructions' key to be preserved, got: %v", config)
 	}
-	if len(instructions) == 0 || instructions[0] != "~/.config/ccagent/rules/*.md" {
+	if len(instructions) == 0 || instructions[0] != "~/.config/eksec/rules/*.md" {
 		t.Error("Expected instructions to be preserved")
 	}
 

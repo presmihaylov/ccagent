@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"ccagent/core/log"
+	"eksec/core/log"
 	"github.com/joho/godotenv"
 )
 
@@ -42,11 +42,11 @@ func NewEnvManager() (*EnvManager, error) {
 	return em, nil
 }
 
-// GetConfigDir returns the config directory path, either from CCAGENT_CONFIG_DIR
-// environment variable or the default ~/.config/ccagent
+// GetConfigDir returns the config directory path, either from EKSEC_CONFIG_DIR
+// environment variable or the default ~/.config/eksec
 func GetConfigDir() (string, error) {
-	// Check if CCAGENT_CONFIG_DIR is set
-	if configDir := os.Getenv("CCAGENT_CONFIG_DIR"); configDir != "" {
+	// Check if EKSEC_CONFIG_DIR is set
+	if configDir := os.Getenv("EKSEC_CONFIG_DIR"); configDir != "" {
 		// Expand ~ if present
 		if len(configDir) >= 2 && configDir[:2] == "~/" {
 			homeDir, err := os.UserHomeDir()
@@ -63,13 +63,13 @@ func GetConfigDir() (string, error) {
 		return configDir, nil
 	}
 
-	// Default to ~/.config/ccagent
+	// Default to ~/.config/eksec
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	configDir := filepath.Join(homeDir, ".config", "ccagent")
+	configDir := filepath.Join(homeDir, ".config", "eksec")
 
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create config directory: %w", err)

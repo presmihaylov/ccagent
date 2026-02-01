@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"ccagent/clients"
-	"ccagent/services"
+	"eksec/clients"
+	"eksec/services"
 )
 
 func TestNewOpenCodeService(t *testing.T) {

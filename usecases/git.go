@@ -12,10 +12,10 @@ import (
 
 	"github.com/lucasepe/codename"
 
-	"ccagent/clients"
-	"ccagent/core/log"
-	"ccagent/models"
-	"ccagent/services"
+	"eksec/clients"
+	"eksec/core/log"
+	"eksec/models"
+	"eksec/services"
 )
 
 type GitUseCase struct {
@@ -100,13 +100,13 @@ func (g *GitUseCase) ValidateGitEnvironment() error {
 	// Check if we're in a Git repository
 	if err := g.gitClient.IsGitRepository(); err != nil {
 		log.Error("❌ Not in a Git repository: %v", err)
-		return fmt.Errorf("ccagent must be run from within a Git repository: %w", err)
+		return fmt.Errorf("eksec must be run from within a Git repository: %w", err)
 	}
 
 	// Check if we're at the Git repository root
 	if err := g.gitClient.IsGitRepositoryRoot(); err != nil {
 		log.Error("❌ Not at Git repository root: %v", err)
-		return fmt.Errorf("ccagent must be run from the Git repository root: %w", err)
+		return fmt.Errorf("eksec must be run from the Git repository root: %w", err)
 	}
 
 	// Check if remote repository exists
@@ -461,7 +461,7 @@ func (g *GitUseCase) generateRandomBranchName() (string, error) {
 
 	randomName := codename.Generate(rng, 0)
 	timestamp := time.Now().Format("20060102-150405")
-	finalBranchName := fmt.Sprintf("ccagent/%s-%s", randomName, timestamp)
+	finalBranchName := fmt.Sprintf("eksec/%s-%s", randomName, timestamp)
 
 	log.Info("🎲 Generated random name: %s", finalBranchName)
 	return finalBranchName, nil
@@ -815,7 +815,7 @@ func (g *GitUseCase) CheckPRStatusByID(prID string) (string, error) {
 }
 
 func (g *GitUseCase) CleanupStaleBranches() error {
-	log.Info("📋 Starting to cleanup stale ccagent branches")
+	log.Info("📋 Starting to cleanup stale eksec branches")
 
 	// Check if we're in repo mode
 	repoContext := g.appState.GetRepositoryContext()
@@ -859,8 +859,8 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 	protectedBranches := []string{"main", "master", currentBranch, defaultBranch}
 
 	for _, branch := range localBranches {
-		// Only process ccagent/ branches
-		if !strings.HasPrefix(branch, "ccagent/") {
+		// Only process eksec/ branches
+		if !strings.HasPrefix(branch, "eksec/") {
 			continue
 		}
 
@@ -884,7 +884,7 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 		}
 
 		// Skip pool worktree branches (managed by worktree pool)
-		if strings.HasPrefix(branch, "ccagent/pool-ready-") {
+		if strings.HasPrefix(branch, "eksec/pool-ready-") {
 			log.Info("⚠️ Skipping pool branch: %s", branch)
 			continue
 		}
@@ -894,12 +894,12 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 	}
 
 	if len(branchesToDelete) == 0 {
-		log.Info("✅ No stale ccagent branches found")
+		log.Info("✅ No stale eksec branches found")
 		log.Info("📋 Completed successfully - no stale branches to cleanup")
 		return nil
 	}
 
-	log.Info("🧹 Found %d stale ccagent branches to delete", len(branchesToDelete))
+	log.Info("🧹 Found %d stale eksec branches to delete", len(branchesToDelete))
 
 	// Delete each stale branch
 	deletedCount := 0
@@ -913,7 +913,7 @@ func (g *GitUseCase) CleanupStaleBranches() error {
 		log.Info("🗑️ Deleted stale branch: %s", branch)
 	}
 
-	log.Info("✅ Successfully deleted %d out of %d stale ccagent branches", deletedCount, len(branchesToDelete))
+	log.Info("✅ Successfully deleted %d out of %d stale eksec branches", deletedCount, len(branchesToDelete))
 	log.Info("📋 Completed successfully - cleaned up stale branches")
 	return nil
 }
@@ -1130,15 +1130,15 @@ func (g *GitUseCase) AbandonJobAndCleanup(jobID, branchName string) error {
 // Worktree-based Concurrent Job Support
 // =============================================================================
 
-// GetWorktreeBasePath returns the base path for ccagent worktrees.
-// Worktrees are stored in ~/.ccagent_worktrees/
+// GetWorktreeBasePath returns the base path for eksec worktrees.
+// Worktrees are stored in ~/.eksec_worktrees/
 func (g *GitUseCase) GetWorktreeBasePath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	return filepath.Join(homeDir, ".ccagent_worktrees"), nil
+	return filepath.Join(homeDir, ".eksec_worktrees"), nil
 }
 
 // GetMaxConcurrency returns the max concurrency setting from environment

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"ccagent/clients"
-	"ccagent/core"
-	"ccagent/core/log"
+	"eksec/clients"
+	"eksec/core"
+	"eksec/core/log"
 )
 
 type CursorClient struct {

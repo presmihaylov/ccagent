@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"ccagent/clients"
+	"eksec/clients"
 )
 
 // DetermineFileExtensionFromMagicBytes inspects the first few bytes of content
@@ -141,7 +141,7 @@ func isPlainText(content []byte) bool {
 // GetAttachmentsDir returns the directory path for storing attachments for a given session
 // and creates the directory if it doesn't exist
 func GetAttachmentsDir(sessionID string) (string, error) {
-	dir := filepath.Join("/tmp", "ccagent", "attachments", sessionID)
+	dir := filepath.Join("/tmp", "eksec", "attachments", sessionID)
 
 	// Create directory if it doesn't exist
 	if err := os.MkdirAll(dir, 0755); err != nil {

@@ -1,6 +1,6 @@
 package services
 
-import "ccagent/clients"
+import "eksec/clients"
 
 // MockCodexClient implements the CodexClient interface for testing
 type MockCodexClient struct {

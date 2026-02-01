@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"ccagent/clients"
-	"ccagent/core"
-	"ccagent/services"
+	"eksec/clients"
+	"eksec/core"
+	"eksec/services"
 )
 
 func TestNewClaudeService(t *testing.T) {

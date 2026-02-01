@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ccagent/core/log"
+	"eksec/core/log"
 )
 
 // RuleFrontMatter represents the parsed front matter from a rule file
@@ -19,7 +19,7 @@ type RuleFrontMatter struct {
 
 // RulesProcessor defines the interface for processing agent-specific rules
 type RulesProcessor interface {
-	// ProcessRules processes rules from the ccagent rules directory
+	// ProcessRules processes rules from the eksec rules directory
 	// and copies them to the agent-specific location.
 	// targetHomeDir specifies the home directory to deploy rules to.
 	// If empty, uses the current user's home directory.
@@ -83,17 +83,17 @@ func ParseFrontMatter(filePath string) (*RuleFrontMatter, error) {
 	return frontMatter, nil
 }
 
-// GetCcagentRulesDir returns the path to the ccagent rules directory
+// GetCcagentRulesDir returns the path to the eksec rules directory
 func GetCcagentRulesDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	return filepath.Join(homeDir, ".config", "ccagent", "rules"), nil
+	return filepath.Join(homeDir, ".config", "eksec", "rules"), nil
 }
 
-// GetRuleFiles returns a list of markdown files in the ccagent rules directory
+// GetRuleFiles returns a list of markdown files in the eksec rules directory
 func GetRuleFiles() ([]string, error) {
 	rulesDir, err := GetCcagentRulesDir()
 	if err != nil {
@@ -127,7 +127,7 @@ func GetRuleFiles() ([]string, error) {
 	return ruleFiles, nil
 }
 
-// CleanCcagentRulesDir removes all files from the ccagent rules directory
+// CleanCcagentRulesDir removes all files from the eksec rules directory
 // This should be called before downloading new rules from the server to ensure
 // stale rules that were deleted on the server are also removed locally.
 func CleanCcagentRulesDir() error {
@@ -142,7 +142,7 @@ func CleanCcagentRulesDir() error {
 		return nil
 	}
 
-	log.Info("📋 Cleaning ccagent rules directory: %s", rulesDir)
+	log.Info("📋 Cleaning eksec rules directory: %s", rulesDir)
 
 	// Remove and recreate the directory to ensure a clean state
 	if err := os.RemoveAll(rulesDir); err != nil {
@@ -154,7 +154,7 @@ func CleanCcagentRulesDir() error {
 		return fmt.Errorf("failed to recreate rules directory: %w", err)
 	}
 
-	log.Info("✅ Successfully cleaned ccagent rules directory")
+	log.Info("✅ Successfully cleaned eksec rules directory")
 	return nil
 }
 
@@ -172,14 +172,14 @@ func NewClaudeCodeRulesProcessor(workDir string) *ClaudeCodeRulesProcessor {
 func (p *ClaudeCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 	log.Info("📋 Processing rules for Claude Code agent")
 
-	// Get rule files from ccagent directory
+	// Get rule files from eksec directory
 	ruleFiles, err := GetRuleFiles()
 	if err != nil {
 		return fmt.Errorf("failed to get rule files: %w", err)
 	}
 
 	if len(ruleFiles) == 0 {
-		log.Info("📋 No rules found in ccagent rules directory")
+		log.Info("📋 No rules found in eksec rules directory")
 		return nil
 	}
 
@@ -252,7 +252,7 @@ func NewOpenCodeRulesProcessor(workDir string) *OpenCodeRulesProcessor {
 }
 
 // ProcessRules implements RulesProcessor for OpenCode
-// It creates an opencode.json with an instructions array that references the ccagent
+// It creates an opencode.json with an instructions array that references the eksec
 // rules directory directly using a glob pattern. OpenCode will load rules from there
 // without needing to copy files.
 // targetHomeDir specifies the home directory to deploy config to.
@@ -260,14 +260,14 @@ func NewOpenCodeRulesProcessor(workDir string) *OpenCodeRulesProcessor {
 func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 	log.Info("📋 Processing rules for OpenCode agent")
 
-	// Get rule files from ccagent directory
+	// Get rule files from eksec directory
 	ruleFiles, err := GetRuleFiles()
 	if err != nil {
 		return fmt.Errorf("failed to get rule files: %w", err)
 	}
 
 	if len(ruleFiles) == 0 {
-		log.Info("📋 No rules found in ccagent rules directory")
+		log.Info("📋 No rules found in eksec rules directory")
 		return nil
 	}
 
@@ -292,12 +292,12 @@ func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 		return fmt.Errorf("failed to create OpenCode config directory: %w", err)
 	}
 
-	// Generate opencode.json with instructions pointing to the ccagent rules directory
+	// Generate opencode.json with instructions pointing to the eksec rules directory
 	// Using glob pattern with ~ prefix which OpenCode expands to home directory
 	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
 
 	config := OpenCodeConfig{
-		Instructions: []string{"~/.config/ccagent/rules/*.md"},
+		Instructions: []string{"~/.config/eksec/rules/*.md"},
 	}
 
 	configJSON, err := json.MarshalIndent(config, "", "  ")

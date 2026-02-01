@@ -1,4 +1,4 @@
-# ccagent
+# eksec
 
 A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team collaboration platforms like Slack and Discord through the [eksec platform](https://eksec.ai).
 
@@ -11,30 +11,30 @@ A Go-based CLI agent that connects AI assistants (Claude Code, Cursor) to team c
 
 ### Supported Platforms
 
-ccagent runs on **macOS**, **Linux**, and **Windows** with native binaries for both Intel and ARM architectures.
+eksec runs on **macOS**, **Linux**, and **Windows** with native binaries for both Intel and ARM architectures.
 
 ## Installation
 
 ### Via Homebrew (Recommended)
 
 ```bash
-brew install presmihaylov/taps/ccagent
+brew install presmihaylov/taps/eksec
 ```
 
 To upgrade to the latest version:
 ```bash
-brew upgrade presmihaylov/taps/ccagent
+brew upgrade presmihaylov/taps/eksec
 ```
 
 ### From Source
 You will need to have Go 1.24 installed:
 ```bash
-git clone https://github.com/presmihaylov/ccagent.git
-cd ccagent
+git clone https://github.com/presmihaylov/eksec.git
+cd eksec
 make build
 ```
 
-The compiled binary will be available at `bin/ccagent`.
+The compiled binary will be available at `bin/eksec`.
 
 ## Usage
 
@@ -48,13 +48,13 @@ The compiled binary will be available at `bin/ccagent`.
 
 #### Repository Setup
 
-**Important**: ccagent will autonomously create branches, make changes, and create pull requests. To avoid conflicts with your main development workflow, it's **strongly recommended** to clone your repository separately for ccagent use.
+**Important**: eksec will autonomously create branches, make changes, and create pull requests. To avoid conflicts with your main development workflow, it's **strongly recommended** to clone your repository separately for eksec use.
 
 #### Prerequisites Setup
 
-Before running ccagent, ensure you have:
+Before running eksec, ensure you have:
 
-1. **GitHub CLI Authentication**: ccagent uses the GitHub CLI to create pull requests
+1. **GitHub CLI Authentication**: eksec uses the GitHub CLI to create pull requests
    ```bash
    # Login to GitHub
    gh auth login
@@ -70,31 +70,31 @@ Before running ccagent, ensure you have:
 
 #### GitHub Account Options
 
-You can use ccagent with:
-- **Your personal GitHub account**: ccagent will create PRs on your behalf
-- **Dedicated bot account**: Create a separate GitHub account for ccagent to use (recommended for teams)
+You can use eksec with:
+- **Your personal GitHub account**: eksec will create PRs on your behalf
+- **Dedicated bot account**: Create a separate GitHub account for eksec to use (recommended for teams)
 
 #### Environment Setup
 
-ccagent requires the following environment variables:
+eksec requires the following environment variables:
 
 ```bash
 # Required: API key from your eksec organization
-export CCAGENT_API_KEY=your_api_key_here
+export EKSEC_API_KEY=your_api_key_here
 ```
 
 You can generate an API key from the eksec dashboard.
 
-#### Running ccagent
+#### Running eksec
 
-Once setup is complete, run ccagent in your repository directory.
+Once setup is complete, run eksec in your repository directory.
 
-By default, ccagent uses Claude Code as the AI assistant with `acceptEdits` permission mode.
+By default, eksec uses Claude Code as the AI assistant with `acceptEdits` permission mode.
 
 ### Command Line Options
 
 ```bash
-ccagent [OPTIONS]
+eksec [OPTIONS]
 
 Options:
   --agent=[claude|cursor|codex|opencode]  AI assistant to use (default: claude)
@@ -109,46 +109,46 @@ Options:
 #### Claude Code Agent (Default)
 ```bash
 # Standard mode - requires approval for file edits
-ccagent --agent claude
+eksec --agent claude
 
 # Use specific model (options: sonnet, haiku, opus, or full model names like claude-sonnet-4-5-20250929)
-ccagent --agent claude --model haiku
+eksec --agent claude --model haiku
 
 # Bypass permissions (Recommended in a secure sandbox environment only)
-ccagent --agent claude --claude-bypass-permissions
+eksec --agent claude --claude-bypass-permissions
 ```
 
 #### Cursor Agent
 ```bash
 # Use Cursor with specific model (options: gpt-5, sonnet-4, sonnet-4-thinking)
-ccagent --agent cursor --model sonnet-4
+eksec --agent cursor --model sonnet-4
 ```
 
 #### Codex Agent
 ```bash
 # Standard mode - requires approval for file edits
-ccagent --agent codex
+eksec --agent codex
 
 # Bypass permissions (Recommended in a secure sandbox environment only)
-ccagent --agent codex --claude-bypass-permissions
+eksec --agent codex --claude-bypass-permissions
 
 # Use specific model (default: gpt-5, accepts any model string)
-ccagent --agent codex --model gpt-5
+eksec --agent codex --model gpt-5
 ```
 
 #### OpenCode Agent
 ```bash
 # OpenCode requires bypass permissions mode (default model: opencode/grok-code)
-ccagent --agent opencode --claude-bypass-permissions
+eksec --agent opencode --claude-bypass-permissions
 
 # Use specific provider/model (format: provider/model)
-ccagent --agent opencode --claude-bypass-permissions --model anthropic/claude-3-5-sonnet
+eksec --agent opencode --claude-bypass-permissions --model anthropic/claude-3-5-sonnet
 ```
 
 **Note**: OpenCode only supports `bypassPermissions` mode. The `--claude-bypass-permissions` flag is required.
 
 ### Logging
-ccagent automatically creates log files in `~/.config/ccagent/logs/` with timestamp-based naming. Logs are written to both stdout and files for debugging.
+eksec automatically creates log files in `~/.config/eksec/logs/` with timestamp-based naming. Logs are written to both stdout and files for debugging.
 
 ## Development
 
@@ -184,12 +184,12 @@ make lint-fix
 
 ## Security Recommendations
 
-ccagent operates in different permission modes depending on the AI assistant and configuration:
+eksec operates in different permission modes depending on the AI assistant and configuration:
 
 ### Secure Mode (Recommended)
 - **Claude Code (default)**: Runs in `acceptEdits` mode, requiring explicit approval for all file modifications
 - **Codex (default)**: Runs in `acceptEdits` mode with sandbox protections
-- **Best Practice**: Use this mode when running ccagent on your local development machine
+- **Best Practice**: Use this mode when running eksec on your local development machine
 
 ### Bypass Permissions Mode
 - **Claude Code with `--claude-bypass-permissions`**: Allows unrestricted system access
