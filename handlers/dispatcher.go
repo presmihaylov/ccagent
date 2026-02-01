@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/gammazero/workerpool"
 
@@ -10,14 +11,23 @@ import (
 	"eksecd/models"
 )
 
+const (
+	// seenMessageTTL is how long we remember message IDs for deduplication
+	seenMessageTTL = 5 * time.Minute
+	// cleanupInterval is how often we run cleanup of old seen messages
+	cleanupInterval = 5 * time.Minute
+)
+
 // JobDispatcher routes messages to per-job channels to ensure sequential processing
 // for the same job while allowing different jobs to process in parallel.
 type JobDispatcher struct {
-	activeJobs map[string]chan models.BaseMessage
-	mutex      sync.Mutex
-	handler    *MessageHandler
-	workerPool *workerpool.WorkerPool
-	appState   *models.AppState
+	activeJobs   map[string]chan models.BaseMessage
+	seenMessages map[string]time.Time // ProcessedMessageID → first seen time
+	lastCleanup  time.Time
+	mutex        sync.Mutex
+	handler      *MessageHandler
+	workerPool   *workerpool.WorkerPool
+	appState     *models.AppState
 }
 
 // NewJobDispatcher creates a new JobDispatcher instance
@@ -27,16 +37,32 @@ func NewJobDispatcher(
 	appState *models.AppState,
 ) *JobDispatcher {
 	return &JobDispatcher{
-		activeJobs: make(map[string]chan models.BaseMessage),
-		handler:    handler,
-		workerPool: workerPool,
-		appState:   appState,
+		activeJobs:   make(map[string]chan models.BaseMessage),
+		seenMessages: make(map[string]time.Time),
+		lastCleanup:  time.Now(),
+		handler:      handler,
+		workerPool:   workerPool,
+		appState:     appState,
 	}
 }
 
 // Dispatch routes a message to the appropriate per-job channel.
 // If no channel exists for the job, it creates one and starts a worker goroutine.
 func (d *JobDispatcher) Dispatch(msg models.BaseMessage) {
+	// Deduplicate messages by ProcessedMessageID
+	processedMsgID := d.extractProcessedMessageID(msg)
+	if processedMsgID != "" {
+		d.mutex.Lock()
+		d.maybeCleanupSeenMessages()
+		if _, seen := d.seenMessages[processedMsgID]; seen {
+			d.mutex.Unlock()
+			log.Info("🔁 Duplicate message %s, skipping", processedMsgID)
+			return
+		}
+		d.seenMessages[processedMsgID] = time.Now()
+		d.mutex.Unlock()
+	}
+
 	jobID := d.extractJobID(msg)
 	if jobID == "" {
 		// No job ID - process directly via worker pool (e.g., CheckIdleJobs)
@@ -156,4 +182,44 @@ func (d *JobDispatcher) unmarshalPayload(payload any, target any) error {
 	}
 
 	return json.Unmarshal(payloadBytes, target)
+}
+
+// extractProcessedMessageID extracts the ProcessedMessageID from a message for deduplication
+func (d *JobDispatcher) extractProcessedMessageID(msg models.BaseMessage) string {
+	switch msg.Type {
+	case models.MessageTypeStartConversation:
+		var payload models.StartConversationPayload
+		if err := d.unmarshalPayload(msg.Payload, &payload); err != nil {
+			return ""
+		}
+		return payload.ProcessedMessageID
+
+	case models.MessageTypeUserMessage:
+		var payload models.UserMessagePayload
+		if err := d.unmarshalPayload(msg.Payload, &payload); err != nil {
+			return ""
+		}
+		return payload.ProcessedMessageID
+
+	default:
+		return ""
+	}
+}
+
+// maybeCleanupSeenMessages removes old entries from seenMessages if enough time has passed.
+// Must be called with mutex held.
+func (d *JobDispatcher) maybeCleanupSeenMessages() {
+	now := time.Now()
+	if now.Sub(d.lastCleanup) < cleanupInterval {
+		return
+	}
+
+	d.lastCleanup = now
+	cutoff := now.Add(-seenMessageTTL)
+	for msgID, seenAt := range d.seenMessages {
+		if seenAt.Before(cutoff) {
+			delete(d.seenMessages, msgID)
+		}
+	}
+	log.Info("🧹 Cleaned up seen messages, %d remaining", len(d.seenMessages))
 }
