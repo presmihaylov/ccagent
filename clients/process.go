@@ -19,6 +19,8 @@ const DefaultSessionTimeout = 1 * time.Hour
 var BlockedEnvVars = map[string]bool{
 	"EKSEC_API_KEY":    true,
 	"EKSEC_WS_API_URL": true,
+	"CCAGENT_API_KEY":    true, // Legacy env var
+	"CCAGENT_WS_API_URL": true, // Legacy env var
 	"AGENT_EXEC_USER":    true,
 	"AGENT_HTTP_PROXY":   true, // This is for eksec to read, not for agents
 }
