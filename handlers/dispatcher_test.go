@@ -65,10 +65,12 @@ func newTestableDispatcher(poolSize int, appState *models.AppState) *testableDis
 
 	// Create dispatcher with nil handler (we'll intercept calls)
 	dispatcher := &JobDispatcher{
-		activeJobs: make(map[string]chan models.BaseMessage),
-		handler:    nil, // Will be set via wrapper
-		workerPool: wp,
-		appState:   appState,
+		activeJobs:   make(map[string]chan models.BaseMessage),
+		seenMessages: make(map[string]time.Time),
+		lastCleanup:  time.Now(),
+		handler:      nil, // Will be set via wrapper
+		workerPool:   wp,
+		appState:     appState,
 	}
 
 	return &testableDispatcher{
@@ -102,6 +104,27 @@ func createTestMessage(msgType string, jobID string) models.BaseMessage {
 		payload = models.StartConversationPayload{JobID: jobID, Message: "test message"}
 	case models.MessageTypeUserMessage:
 		payload = models.UserMessagePayload{JobID: jobID, Message: "test message"}
+	default:
+		payload = nil
+	}
+	return models.BaseMessage{Type: msgType, Payload: payload}
+}
+
+func createTestMessageWithProcessedID(msgType, jobID, processedMsgID string) models.BaseMessage {
+	var payload any
+	switch msgType {
+	case models.MessageTypeStartConversation:
+		payload = models.StartConversationPayload{
+			JobID:              jobID,
+			Message:            "test message",
+			ProcessedMessageID: processedMsgID,
+		}
+	case models.MessageTypeUserMessage:
+		payload = models.UserMessagePayload{
+			JobID:              jobID,
+			Message:            "test message",
+			ProcessedMessageID: processedMsgID,
+		}
 	default:
 		payload = nil
 	}
@@ -552,5 +575,176 @@ func TestMultipleJobsProcessInParallel(t *testing.T) {
 	msgs := td.mockHandler.getHandledMessages()
 	if len(msgs) != 4 { // 2 messages per job
 		t.Errorf("Expected 4 messages processed, got %d", len(msgs))
+	}
+}
+
+func TestDispatcher_DuplicateStartConversation(t *testing.T) {
+	appState := createTestAppStateNoPath()
+	wp := workerpool.New(2)
+	defer wp.StopWait()
+
+	dispatcher := NewJobDispatcher(nil, wp, appState)
+
+	// Manually create channel to receive messages (skip actual processing)
+	ch := make(chan models.BaseMessage, 100)
+	dispatcher.mutex.Lock()
+	dispatcher.activeJobs["job-123"] = ch
+	dispatcher.mutex.Unlock()
+
+	// Dispatch same StartConversation twice (same ProcessedMessageID)
+	msg := createTestMessageWithProcessedID(
+		models.MessageTypeStartConversation,
+		"job-123",
+		"processed-msg-001",
+	)
+
+	dispatcher.Dispatch(msg)
+	dispatcher.Dispatch(msg) // duplicate
+
+	// Only one message should be in the channel
+	if len(ch) != 1 {
+		t.Errorf("Expected 1 message in channel (duplicate filtered), got %d", len(ch))
+	}
+}
+
+func TestDispatcher_DuplicateUserMessage(t *testing.T) {
+	appState := createTestAppStateNoPath()
+	wp := workerpool.New(2)
+	defer wp.StopWait()
+
+	dispatcher := NewJobDispatcher(nil, wp, appState)
+
+	ch := make(chan models.BaseMessage, 100)
+	dispatcher.mutex.Lock()
+	dispatcher.activeJobs["job-456"] = ch
+	dispatcher.mutex.Unlock()
+
+	// Dispatch same UserMessage twice
+	msg := createTestMessageWithProcessedID(
+		models.MessageTypeUserMessage,
+		"job-456",
+		"processed-msg-002",
+	)
+
+	dispatcher.Dispatch(msg)
+	dispatcher.Dispatch(msg) // duplicate
+
+	if len(ch) != 1 {
+		t.Errorf("Expected 1 message in channel (duplicate filtered), got %d", len(ch))
+	}
+}
+
+func TestDispatcher_DifferentMessagesNotDeduplicated(t *testing.T) {
+	appState := createTestAppStateNoPath()
+	wp := workerpool.New(2)
+	defer wp.StopWait()
+
+	dispatcher := NewJobDispatcher(nil, wp, appState)
+
+	ch := make(chan models.BaseMessage, 100)
+	dispatcher.mutex.Lock()
+	dispatcher.activeJobs["job-789"] = ch
+	dispatcher.mutex.Unlock()
+
+	// Dispatch two different messages (different ProcessedMessageIDs)
+	msg1 := createTestMessageWithProcessedID(
+		models.MessageTypeUserMessage,
+		"job-789",
+		"processed-msg-003",
+	)
+	msg2 := createTestMessageWithProcessedID(
+		models.MessageTypeUserMessage,
+		"job-789",
+		"processed-msg-004",
+	)
+
+	dispatcher.Dispatch(msg1)
+	dispatcher.Dispatch(msg2)
+
+	// Both messages should be in the channel
+	if len(ch) != 2 {
+		t.Errorf("Expected 2 messages in channel (different IDs), got %d", len(ch))
+	}
+}
+
+func TestDispatcher_SeenMessageCleanup(t *testing.T) {
+	appState := createTestAppStateNoPath()
+	wp := workerpool.New(2)
+	defer wp.StopWait()
+
+	dispatcher := NewJobDispatcher(nil, wp, appState)
+
+	ch := make(chan models.BaseMessage, 100)
+	dispatcher.mutex.Lock()
+	dispatcher.activeJobs["job-cleanup"] = ch
+	dispatcher.mutex.Unlock()
+
+	// Add a message to seenMessages with an old timestamp
+	dispatcher.mutex.Lock()
+	dispatcher.seenMessages["old-msg-id"] = time.Now().Add(-10 * time.Minute)
+	dispatcher.lastCleanup = time.Now().Add(-10 * time.Minute) // Force cleanup to run
+	dispatcher.mutex.Unlock()
+
+	// Dispatch a new message to trigger cleanup
+	msg := createTestMessageWithProcessedID(
+		models.MessageTypeUserMessage,
+		"job-cleanup",
+		"new-msg-id",
+	)
+	dispatcher.Dispatch(msg)
+
+	// Old message should be cleaned up, new message should exist
+	dispatcher.mutex.Lock()
+	_, oldExists := dispatcher.seenMessages["old-msg-id"]
+	_, newExists := dispatcher.seenMessages["new-msg-id"]
+	dispatcher.mutex.Unlock()
+
+	if oldExists {
+		t.Error("Expected old message to be cleaned up")
+	}
+	if !newExists {
+		t.Error("Expected new message to exist in seenMessages")
+	}
+}
+
+func TestDispatcher_EmptyProcessedMessageID(t *testing.T) {
+	appState := createTestAppStateNoPath()
+	wp := workerpool.New(2)
+	defer wp.StopWait()
+
+	dispatcher := NewJobDispatcher(nil, wp, appState)
+
+	ch := make(chan models.BaseMessage, 100)
+	dispatcher.mutex.Lock()
+	dispatcher.activeJobs["job-empty"] = ch
+	dispatcher.mutex.Unlock()
+
+	// Dispatch messages without ProcessedMessageID (empty string)
+	msg1 := createTestMessageWithProcessedID(
+		models.MessageTypeUserMessage,
+		"job-empty",
+		"", // empty ProcessedMessageID
+	)
+	msg2 := createTestMessageWithProcessedID(
+		models.MessageTypeUserMessage,
+		"job-empty",
+		"", // also empty
+	)
+
+	dispatcher.Dispatch(msg1)
+	dispatcher.Dispatch(msg2)
+
+	// Both should be processed (no dedup for empty IDs)
+	if len(ch) != 2 {
+		t.Errorf("Expected 2 messages (empty IDs not deduplicated), got %d", len(ch))
+	}
+
+	// seenMessages should not contain empty string
+	dispatcher.mutex.Lock()
+	_, exists := dispatcher.seenMessages[""]
+	dispatcher.mutex.Unlock()
+
+	if exists {
+		t.Error("Empty ProcessedMessageID should not be stored in seenMessages")
 	}
 }
