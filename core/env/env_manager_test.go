@@ -10,7 +10,7 @@ import (
 
 func TestEnvManager_Basic(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "eksec-test")
+	tempDir, err := os.MkdirTemp("", "eksecd-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestEnvManager_Basic(t *testing.T) {
 
 func TestEnvManager_Reload(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "eksec-test")
+	tempDir, err := os.MkdirTemp("", "eksecd-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestEnvManager_Reload(t *testing.T) {
 
 func TestEnvManager_ThreadSafety(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "eksec-test")
+	tempDir, err := os.MkdirTemp("", "eksecd-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestGetConfigDir_Default(t *testing.T) {
 		t.Fatalf("Failed to get home directory: %v", err)
 	}
 
-	expectedDir := filepath.Join(homeDir, ".config", "eksec")
+	expectedDir := filepath.Join(homeDir, ".config", "eksecd")
 	if configDir != expectedDir {
 		t.Errorf("Expected config dir '%s', got '%s'", expectedDir, configDir)
 	}
@@ -223,7 +223,7 @@ func TestGetConfigDir_Default(t *testing.T) {
 
 func TestGetConfigDir_CustomAbsolute(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "eksec-config-test")
+	tempDir, err := os.MkdirTemp("", "eksecd-config-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestGetConfigDir_CustomAbsolute(t *testing.T) {
 func TestGetConfigDir_CustomTilde(t *testing.T) {
 	// Set custom config directory with tilde
 	originalValue := os.Getenv("EKSEC_CONFIG_DIR")
-	os.Setenv("EKSEC_CONFIG_DIR", "~/.eksec-custom")
+	os.Setenv("EKSEC_CONFIG_DIR", "~/.eksecd-custom")
 	defer func() {
 		if originalValue != "" {
 			os.Setenv("EKSEC_CONFIG_DIR", originalValue)
@@ -278,7 +278,7 @@ func TestGetConfigDir_CustomTilde(t *testing.T) {
 		t.Fatalf("Failed to get home directory: %v", err)
 	}
 
-	expectedDir := filepath.Join(homeDir, ".eksec-custom")
+	expectedDir := filepath.Join(homeDir, ".eksecd-custom")
 	if configDir != expectedDir {
 		t.Errorf("Expected config dir '%s', got '%s'", expectedDir, configDir)
 	}

@@ -1,4 +1,4 @@
-module eksec
+module eksecd
 
 go 1.24.1
 

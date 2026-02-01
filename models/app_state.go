@@ -13,9 +13,9 @@ import (
 type RepositoryContext struct {
 	// RepoPath is the absolute path to the git repository (empty if no-repo mode)
 	RepoPath string
-	// IsRepoMode indicates whether eksec is operating in repository mode
+	// IsRepoMode indicates whether eksecd is operating in repository mode
 	IsRepoMode bool
-	// RepositoryIdentifier is the owner/repo-name format identifier (e.g., "anthropics/eksec")
+	// RepositoryIdentifier is the owner/repo-name format identifier (e.g., "anthropics/eksecd")
 	RepositoryIdentifier string
 }
 

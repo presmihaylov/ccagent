@@ -6,10 +6,10 @@ import (
 
 	"github.com/gammazero/workerpool"
 
-	"eksec/core"
-	"eksec/core/log"
-	"eksec/models"
-	"eksec/usecases"
+	"eksecd/core"
+	"eksecd/core/log"
+	"eksecd/models"
+	"eksecd/usecases"
 )
 
 // RecoverJobs recovers both in-progress jobs and queued messages after agent restart

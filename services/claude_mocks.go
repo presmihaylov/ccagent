@@ -1,6 +1,6 @@
 package services
 
-import "eksec/clients"
+import "eksecd/clients"
 
 // MockClaudeClient implements the ClaudeClient interface for testing
 type MockClaudeClient struct {

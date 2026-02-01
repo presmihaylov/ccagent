@@ -1,7 +1,7 @@
 package core
 
 import (
-	"eksec/utils"
+	"eksecd/utils"
 	"crypto/rand"
 	"strings"
 	"time"

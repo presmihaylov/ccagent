@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"eksec/clients"
+	"eksecd/clients"
 )
 
 // setupTestGitRepoWithRemote creates a temporary git repository with a local "remote" for testing.
@@ -193,7 +193,7 @@ func TestAcquire_EmptyPool(t *testing.T) {
 	gitClient := clients.NewGitClient()
 	pool := NewWorktreePool(gitClient, "/tmp/test", 3)
 
-	_, err := pool.Acquire("job-123", "eksec/test-branch")
+	_, err := pool.Acquire("job-123", "eksecd/test-branch")
 	if err == nil {
 		t.Error("Expected error when acquiring from empty pool, got nil")
 	}
@@ -239,7 +239,7 @@ func TestAcquire_FromPool(t *testing.T) {
 	t.Logf("Pool filled with %d worktrees", initialSize)
 
 	// Acquire a worktree
-	wtPath, err := pool.Acquire("job-test-123", "eksec/test-feature")
+	wtPath, err := pool.Acquire("job-test-123", "eksecd/test-feature")
 	if err != nil {
 		t.Fatalf("Failed to acquire worktree: %v", err)
 	}
@@ -264,8 +264,8 @@ func TestAcquire_FromPool(t *testing.T) {
 	}
 
 	branchName := strings.TrimSpace(string(output))
-	if branchName != "eksec/test-feature" {
-		t.Errorf("Expected branch 'eksec/test-feature', got '%s'", branchName)
+	if branchName != "eksecd/test-feature" {
+		t.Errorf("Expected branch 'eksecd/test-feature', got '%s'", branchName)
 	}
 
 	// Pool size should have decreased
@@ -320,7 +320,7 @@ func TestConcurrentAcquire(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			jobID := filepath.Base(worktreeBase) + "-concurrent-" + string(rune('a'+idx))
-			branchName := "eksec/concurrent-" + string(rune('a'+idx))
+			branchName := "eksecd/concurrent-" + string(rune('a'+idx))
 			path, err := pool.Acquire(jobID, branchName)
 			if err != nil {
 				errors <- err
@@ -384,7 +384,7 @@ func TestReplenish_AfterAcquire(t *testing.T) {
 	}
 
 	// Acquire one
-	_, acquireErr := pool.Acquire("job-replenish-test", "eksec/replenish-test")
+	_, acquireErr := pool.Acquire("job-replenish-test", "eksecd/replenish-test")
 	if acquireErr != nil {
 		t.Fatalf("Failed to acquire: %v", acquireErr)
 	}
@@ -471,7 +471,7 @@ func TestReclaimOrphanedPoolWorktrees(t *testing.T) {
 
 	// Create a pool worktree manually (simulating crash recovery)
 	poolPath := filepath.Join(worktreeBase, "pool-orphan123")
-	branchName := "eksec/pool-ready-orphan123"
+	branchName := "eksecd/pool-ready-orphan123"
 
 	// Use "main" directly since we set up the test repo with main branch
 	// (GetDefaultBranch may return "(unknown)" for local test remotes)

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"eksec/clients"
-	"eksec/core"
-	"eksec/core/log"
-	"eksec/services"
+	"eksecd/clients"
+	"eksecd/core"
+	"eksecd/core/log"
+	"eksecd/services"
 )
 
 type CodexService struct {

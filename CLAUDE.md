@@ -1,8 +1,8 @@
-# eksec Project Overview
+# eksecd Project Overview
 
-## What is eksec?
+## What is eksecd?
 
-eksec is a Go-based CLI application that serves as a bridge between AI coding assistants (Claude Code, Cursor, Codex, OpenCode) and team collaboration platforms (Slack, Discord) through the eksec platform. It enables teams to interact with AI coding assistants directly from their chat platforms while maintaining proper git workflow and branch management.
+eksecd is a Go-based CLI application that serves as a bridge between AI coding assistants (Claude Code, Cursor, Codex, OpenCode) and team collaboration platforms (Slack, Discord) through the eksecd platform. It enables teams to interact with AI coding assistants directly from their chat platforms while maintaining proper git workflow and branch management.
 
 ## Core Architecture
 
@@ -39,7 +39,7 @@ eksec is a Go-based CLI application that serves as a bridge between AI coding as
 
 ### Key Features
 
-- **Branch Management**: Auto-creates eksec-prefixed branches for each conversation
+- **Branch Management**: Auto-creates eksecd-prefixed branches for each conversation
 - **Permission Modes**:
   - `acceptEdits` (secure, requires approval) - supported by Claude Code and Codex
   - `bypassPermissions` (sandbox only, unrestricted access) - supported by all agents
@@ -51,7 +51,7 @@ eksec is a Go-based CLI application that serves as a bridge between AI coding as
 
 ## Development Commands
 
-- **Build**: `make build` - Creates binary in `bin/eksec`
+- **Build**: `make build` - Creates binary in `bin/eksecd`
 - **Test**: `make test` or `make test-verbose`
 - **Lint**: `make lint` or `make lint-fix`
 - **Clean**: `make clean` - Removes build artifacts
@@ -59,7 +59,7 @@ eksec is a Go-based CLI application that serves as a bridge between AI coding as
 
 ## Release Process
 
-**IMPORTANT**: When asked to create a new release for eksec, you MUST read and follow the detailed instructions in **[docs/release_eksec.md](docs/release_eksec.md)**.
+**IMPORTANT**: When asked to create a new release for eksecd, you MUST read and follow the detailed instructions in **[docs/release_eksecd.md](docs/release_eksecd.md)**.
 
 The release process includes:
 1. Cloning repository to temporary directory
@@ -75,7 +75,7 @@ The release process includes:
 
 ## Environment Requirements
 
-- `EKSEC_API_KEY`: Required API key from eksec platform
+- `EKSEC_API_KEY`: Required API key from eksecd platform
 - `EKSEC_WS_API_URL`: Optional WebSocket URL (defaults to production)
 - Git and GitHub CLI (`gh`) must be configured
 - Go 1.24+ for building from source
@@ -90,6 +90,6 @@ The release process includes:
 
 ## Log Management
 
-- Logs stored in `~/.config/eksec/logs/`
+- Logs stored in `~/.config/eksecd/logs/`
 - Automatic cleanup of logs older than 7 days
 - Both stdout and file logging for debugging

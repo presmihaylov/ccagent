@@ -92,7 +92,7 @@ func TestRemoteBranchExists_WithRemote(t *testing.T) {
 	}
 
 	client := NewGitClient()
-	// Use current directory (should be in eksec repo)
+	// Use current directory (should be in eksecd repo)
 	client.SetRepoPathProvider(func() string { return "" })
 
 	// Test with a branch name that likely doesn't exist

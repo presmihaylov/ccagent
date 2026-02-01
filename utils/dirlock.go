@@ -67,10 +67,10 @@ func NewDirLock(path string) (*DirLock, error) {
 	// Get system temp directory
 	tempDir := os.TempDir()
 
-	// Create eksec subdirectory in temp
-	eksecTempDir := filepath.Join(tempDir, "eksec")
+	// Create eksecd subdirectory in temp
+	eksecTempDir := filepath.Join(tempDir, "eksecd")
 	if err := os.MkdirAll(eksecTempDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create eksec temp directory: %w", err)
+		return nil, fmt.Errorf("failed to create eksecd temp directory: %w", err)
 	}
 
 	// Create lock file path using sanitized directory name
@@ -95,7 +95,7 @@ func (dl *DirLock) TryLock() error {
 	}
 
 	if !locked {
-		return fmt.Errorf("another eksec instance is already running in this path")
+		return fmt.Errorf("another eksecd instance is already running in this path")
 	}
 
 	return nil

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"eksec/clients"
-	"eksec/core"
-	"eksec/core/log"
-	"eksec/services"
+	"eksecd/clients"
+	"eksecd/core"
+	"eksecd/core/log"
+	"eksecd/services"
 )
 
 type ClaudeService struct {
@@ -523,7 +523,7 @@ func (c *ClaudeService) FetchAndRefreshAgentTokens() error {
 
 	// Skip token operations when running with secret proxy (managed container mode)
 	// In this mode, the secret proxy handles token fetching and injection via HTTP MITM.
-	// The eksec container only has placeholder env vars (e.g., ANTHROPIC_API_KEY=CCASECRET_ANTHROPIC_API_KEY)
+	// The eksecd container only has placeholder env vars (e.g., ANTHROPIC_API_KEY=CCASECRET_ANTHROPIC_API_KEY)
 	// and the proxy replaces these with real values at the network layer.
 	if clients.AgentHTTPProxy() != "" {
 		log.Info("🔒 Secret proxy mode detected, skipping token refresh (proxy handles secrets)")

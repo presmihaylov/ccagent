@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"eksec/core/log"
+	"eksecd/core/log"
 	"github.com/joho/godotenv"
 )
 
@@ -43,7 +43,7 @@ func NewEnvManager() (*EnvManager, error) {
 }
 
 // GetConfigDir returns the config directory path, either from EKSEC_CONFIG_DIR
-// environment variable or the default ~/.config/eksec
+// environment variable or the default ~/.config/eksecd
 func GetConfigDir() (string, error) {
 	// Check if EKSEC_CONFIG_DIR is set
 	if configDir := os.Getenv("EKSEC_CONFIG_DIR"); configDir != "" {
@@ -63,13 +63,13 @@ func GetConfigDir() (string, error) {
 		return configDir, nil
 	}
 
-	// Default to ~/.config/eksec
+	// Default to ~/.config/eksecd
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	configDir := filepath.Join(homeDir, ".config", "eksec")
+	configDir := filepath.Join(homeDir, ".config", "eksecd")
 
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create config directory: %w", err)

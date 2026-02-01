@@ -1,6 +1,6 @@
 package services
 
-import "eksec/clients"
+import "eksecd/clients"
 
 // MockOpenCodeClient implements the OpenCodeClient interface for testing
 type MockOpenCodeClient struct {

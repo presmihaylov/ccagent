@@ -219,8 +219,8 @@ func TestBuildAgentCommandWithContext_Managed(t *testing.T) {
 func TestUpdateHomeForUser(t *testing.T) {
 	env := []string{
 		"PATH=/usr/bin",
-		"HOME=/home/eksec",
-		"USER=eksec",
+		"HOME=/home/eksecd",
+		"USER=eksecd",
 	}
 
 	result := UpdateHomeForUser(env, "agentrunner")
@@ -237,7 +237,7 @@ func TestUpdateHomeForUser(t *testing.T) {
 		if e == "HOME=/home/agentrunner" {
 			hasNewHome = true
 		}
-		if e == "HOME=/home/eksec" {
+		if e == "HOME=/home/eksecd" {
 			hasOldHome = true
 		}
 	}
@@ -254,7 +254,7 @@ func TestUpdateHomeForUser_NoHomeInEnv(t *testing.T) {
 	// Test case where HOME is not in the environment at all
 	env := []string{
 		"PATH=/usr/bin",
-		"USER=eksec",
+		"USER=eksecd",
 	}
 
 	result := UpdateHomeForUser(env, "agentrunner")
