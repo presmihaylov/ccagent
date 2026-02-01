@@ -320,7 +320,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	if err != nil {
 		log.Info("❌ Error starting Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
-			fmt.Sprintf("eksec encountered error: %v", err),
+			fmt.Sprintf("eksecd encountered error: %v", err),
 			payload.ProcessedMessageID,
 			payload.JobID,
 		)
@@ -613,7 +613,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	if err != nil {
 		log.Info("❌ Error continuing Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
-			fmt.Sprintf("eksec encountered error: %v", err),
+			fmt.Sprintf("eksecd encountered error: %v", err),
 			payload.ProcessedMessageID,
 			payload.JobID,
 		)
@@ -916,7 +916,7 @@ func (mh *MessageHandler) sendSystemMessage(message, slackMessageID, jobID strin
 // sendErrorMessage sends an error as a system message. The Claude service handles
 // all error processing internally, so we just need to format and send the error.
 func (mh *MessageHandler) sendErrorMessage(err error, slackMessageID, jobID string) error {
-	messageToSend := fmt.Sprintf("eksec encountered error: %v", err)
+	messageToSend := fmt.Sprintf("eksecd encountered error: %v", err)
 	return mh.sendSystemMessage(messageToSend, slackMessageID, jobID)
 }
 

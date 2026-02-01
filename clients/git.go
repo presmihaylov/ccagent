@@ -451,7 +451,7 @@ func (g *GitClient) IsGitRepositoryRoot() error {
 	if gitRoot != targetDir {
 		log.Error("❌ Not at Git repository root. Target: %s, Git root: %s", targetDir, gitRoot)
 		return fmt.Errorf(
-			"eksec must be run from the Git repository root directory. Target: %s, Git root: %s",
+			"eksecd must be run from the Git repository root directory. Target: %s, Git root: %s",
 			targetDir,
 			gitRoot,
 		)

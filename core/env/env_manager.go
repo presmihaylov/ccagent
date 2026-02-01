@@ -69,7 +69,7 @@ func GetConfigDir() (string, error) {
 		return "", err
 	}
 
-	configDir := filepath.Join(homeDir, ".config", "eksec")
+	configDir := filepath.Join(homeDir, ".config", "eksecd")
 
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create config directory: %w", err)

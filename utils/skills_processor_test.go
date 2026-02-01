@@ -294,7 +294,7 @@ func TestGetSkillFiles(t *testing.T) {
 	t.Setenv("HOME", tmpDir)
 
 	// Create the .config/eksecd/skills structure
-	eksecSkillsDir := filepath.Join(tmpDir, ".config", "eksec", "skills")
+	eksecSkillsDir := filepath.Join(tmpDir, ".config", "eksecd", "skills")
 	if err := os.MkdirAll(eksecSkillsDir, 0755); err != nil {
 		t.Fatalf("Failed to create skills directory: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestGetSkillFiles(t *testing.T) {
 func TestClaudeCodeSkillsProcessor_Integration(t *testing.T) {
 	// Create temporary directories
 	tmpDir := t.TempDir()
-	eksecSkillsDir := filepath.Join(tmpDir, ".config", "eksec", "skills")
+	eksecSkillsDir := filepath.Join(tmpDir, ".config", "eksecd", "skills")
 	claudeSkillsDir := filepath.Join(tmpDir, ".claude", "skills")
 
 	// Override home directory
@@ -448,9 +448,9 @@ func TestClaudeCodeSkillsProcessor_Integration(t *testing.T) {
 	t.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", originalHome)
 
-	// Create eksec skills directory
+	// Create eksecd skills directory
 	if err := os.MkdirAll(eksecSkillsDir, 0755); err != nil {
-		t.Fatalf("Failed to create eksec skills directory: %v", err)
+		t.Fatalf("Failed to create eksecd skills directory: %v", err)
 	}
 
 	// Create a test skill ZIP file
@@ -492,7 +492,7 @@ func TestClaudeCodeSkillsProcessor_Integration(t *testing.T) {
 func TestOpenCodeSkillsProcessor_Integration(t *testing.T) {
 	// Create temporary directories
 	tmpDir := t.TempDir()
-	eksecSkillsDir := filepath.Join(tmpDir, ".config", "eksec", "skills")
+	eksecSkillsDir := filepath.Join(tmpDir, ".config", "eksecd", "skills")
 	opencodeSkillsDir := filepath.Join(tmpDir, ".config", "opencode", "skill")
 
 	// Override home directory
@@ -500,9 +500,9 @@ func TestOpenCodeSkillsProcessor_Integration(t *testing.T) {
 	t.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", originalHome)
 
-	// Create eksec skills directory
+	// Create eksecd skills directory
 	if err := os.MkdirAll(eksecSkillsDir, 0755); err != nil {
-		t.Fatalf("Failed to create eksec skills directory: %v", err)
+		t.Fatalf("Failed to create eksecd skills directory: %v", err)
 	}
 
 	// Create a test skill ZIP file with root directory
@@ -567,7 +567,7 @@ func TestCleanCcagentSkillsDir(t *testing.T) {
 	defer os.Setenv("HOME", originalHome)
 
 	// Create skills directory with some files
-	skillsDir := filepath.Join(tmpDir, ".config", "eksec", "skills")
+	skillsDir := filepath.Join(tmpDir, ".config", "eksecd", "skills")
 	if err := os.MkdirAll(skillsDir, 0755); err != nil {
 		t.Fatalf("Failed to create skills directory: %v", err)
 	}
@@ -615,7 +615,7 @@ func TestCleanCcagentSkillsDir_NonExistent(t *testing.T) {
 	}
 
 	// Verify directory was NOT created (function returns early if dir doesn't exist)
-	skillsDir := filepath.Join(tmpDir, ".config", "eksec", "skills")
+	skillsDir := filepath.Join(tmpDir, ".config", "eksecd", "skills")
 	if _, err := os.Stat(skillsDir); !os.IsNotExist(err) {
 		t.Error("Skills directory should not be created if it didn't exist (early return expected)")
 	}

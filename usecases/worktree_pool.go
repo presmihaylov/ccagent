@@ -26,7 +26,7 @@ var ErrPoolStopping = errors.New("pool is stopping")
 // PooledWorktree represents a pre-created worktree ready for use
 type PooledWorktree struct {
 	Path       string    // e.g., ~/.eksec_worktrees/pool-{uuid}
-	BranchName string    // e.g., eksec/pool-ready-{uuid}
+	BranchName string    // e.g., eksecd/pool-ready-{uuid}
 	BaseCommit string    // Commit hash when created (for staleness check)
 	CreatedAt  time.Time
 }
@@ -140,7 +140,7 @@ func (p *WorktreePool) Acquire(jobID, branchName string) (string, error) {
 		return "", fmt.Errorf("failed to move worktree: %w", err)
 	}
 
-	// Rename branch: eksec/pool-ready-{uuid} -> eksec/{branchName}
+	// Rename branch: eksecd/pool-ready-{uuid} -> eksecd/{branchName}
 	if err := p.renameBranch(newPath, pooledWT.BranchName, branchName); err != nil {
 		log.Error("❌ Failed to rename branch from %s to %s: %v", pooledWT.BranchName, branchName, err)
 		// Try to revert the worktree move

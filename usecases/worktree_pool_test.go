@@ -265,7 +265,7 @@ func TestAcquire_FromPool(t *testing.T) {
 
 	branchName := strings.TrimSpace(string(output))
 	if branchName != "eksecd/test-feature" {
-		t.Errorf("Expected branch 'eksec/test-feature', got '%s'", branchName)
+		t.Errorf("Expected branch 'eksecd/test-feature', got '%s'", branchName)
 	}
 
 	// Pool size should have decreased

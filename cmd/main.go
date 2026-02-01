@@ -138,15 +138,15 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 	// Clean up existing rules, MCP configs, and skills before downloading new ones
 	// This ensures stale items deleted on the server are removed locally
 	if err := utils.CleanCcagentRulesDir(); err != nil {
-		return fmt.Errorf("failed to clean eksec rules directory: %w", err)
+		return fmt.Errorf("failed to clean eksecd rules directory: %w", err)
 	}
 
 	if err := utils.CleanCcagentMCPDir(); err != nil {
-		return fmt.Errorf("failed to clean eksec MCP directory: %w", err)
+		return fmt.Errorf("failed to clean eksecd MCP directory: %w", err)
 	}
 
 	if err := utils.CleanCcagentSkillsDir(); err != nil {
-		return fmt.Errorf("failed to clean eksec skills directory: %w", err)
+		return fmt.Errorf("failed to clean eksecd skills directory: %w", err)
 	}
 
 	artifacts, err := agentsApiClient.FetchArtifacts()
@@ -181,7 +181,7 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 	return nil
 }
 
-// processAgentRules processes rules from eksec directory based on agent type
+// processAgentRules processes rules from eksecd directory based on agent type
 // targetHomeDir specifies the home directory to deploy rules to.
 // If empty, uses the current user's home directory.
 func processAgentRules(agentType, workDir, targetHomeDir string) error {
@@ -208,7 +208,7 @@ func processAgentRules(agentType, workDir, targetHomeDir string) error {
 	return nil
 }
 
-// processMCPConfigs processes MCP configs from eksec directory based on agent type
+// processMCPConfigs processes MCP configs from eksecd directory based on agent type
 // targetHomeDir specifies the home directory to deploy configs to.
 // If empty, uses the current user's home directory.
 func processMCPConfigs(agentType, workDir, targetHomeDir string) error {
@@ -235,7 +235,7 @@ func processMCPConfigs(agentType, workDir, targetHomeDir string) error {
 	return nil
 }
 
-// processSkills processes skills from eksec directory based on agent type
+// processSkills processes skills from eksecd directory based on agent type
 // targetHomeDir specifies the home directory to deploy skills to.
 // If empty, uses the current user's home directory.
 func processSkills(agentType, targetHomeDir string) error {
@@ -599,7 +599,7 @@ type Options struct {
 	Agent             string `long:"agent" description:"CLI agent to use (claude, cursor, codex, or opencode)" choice:"claude" choice:"cursor" choice:"codex" choice:"opencode" default:"claude"`
 	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
 	Model             string `long:"model" description:"Model to use (agent-specific: claude: sonnet/haiku/opus or full model name, cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
-	Repo              string `long:"repo" description:"Path to git repository (absolute or relative). If not provided, eksec runs in no-repo mode with git operations disabled"`
+	Repo              string `long:"repo" description:"Path to git repository (absolute or relative). If not provided, eksecd runs in no-repo mode with git operations disabled"`
 	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
@@ -626,7 +626,7 @@ func main() {
 	log.SetLevel(slog.LevelInfo)
 
 	// Log startup information
-	log.Info("🚀 eksec starting - version %s", core.GetVersion())
+	log.Info("🚀 eksecd starting - version %s", core.GetVersion())
 	log.Info("⚙️  Configuration: agent=%s, permission_mode=%s", opts.Agent, func() string {
 		if opts.BypassPermissions {
 			return "bypassPermissions"
@@ -1028,7 +1028,7 @@ func (cr *CmdRunner) setupProgramLogging() (string, error) {
 	rotatingWriter, err := log.NewRotatingWriter(log.RotatingWriterConfig{
 		LogDir:      logsDir,
 		MaxFileSize: 1024, // 10MB
-		FilePrefix:  "eksec",
+		FilePrefix:  "eksecd",
 		Stdout:      os.Stdout,
 	})
 	if err != nil {

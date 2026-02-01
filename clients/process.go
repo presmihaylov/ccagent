@@ -22,7 +22,7 @@ var BlockedEnvVars = map[string]bool{
 	"CCAGENT_API_KEY":    true, // Legacy env var
 	"CCAGENT_WS_API_URL": true, // Legacy env var
 	"AGENT_EXEC_USER":    true,
-	"AGENT_HTTP_PROXY":   true, // This is for eksec to read, not for agents
+	"AGENT_HTTP_PROXY":   true, // This is for eksecd to read, not for agents
 }
 
 // AgentExecUser returns the configured user for running agent processes.
@@ -141,7 +141,7 @@ func UpdateHomeForUser(env []string, username string) []string {
 
 // InjectProxyEnv adds HTTP_PROXY and HTTPS_PROXY to the environment if AGENT_HTTP_PROXY is set.
 // This ensures agent processes route their traffic through the secret proxy while the
-// eksec process itself does not use the proxy (allowing it to reach the backend).
+// eksecd process itself does not use the proxy (allowing it to reach the backend).
 func InjectProxyEnv(env []string) []string {
 	proxyURL := AgentHTTPProxy()
 	if proxyURL == "" {
