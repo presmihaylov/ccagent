@@ -1,8 +1,8 @@
-# ccagent Project Overview
+# eksec Project Overview
 
-## What is ccagent?
+## What is eksec?
 
-ccagent is a Go-based CLI application that serves as a bridge between AI coding assistants (Claude Code, Cursor, Codex, OpenCode) and team collaboration platforms (Slack, Discord) through the eksec platform. It enables teams to interact with AI coding assistants directly from their chat platforms while maintaining proper git workflow and branch management.
+eksec is a Go-based CLI application that serves as a bridge between AI coding assistants (Claude Code, Cursor, Codex, OpenCode) and team collaboration platforms (Slack, Discord) through the eksec platform. It enables teams to interact with AI coding assistants directly from their chat platforms while maintaining proper git workflow and branch management.
 
 ## Core Architecture
 
@@ -39,7 +39,7 @@ ccagent is a Go-based CLI application that serves as a bridge between AI coding 
 
 ### Key Features
 
-- **Branch Management**: Auto-creates ccagent-prefixed branches for each conversation
+- **Branch Management**: Auto-creates eksec-prefixed branches for each conversation
 - **Permission Modes**:
   - `acceptEdits` (secure, requires approval) - supported by Claude Code and Codex
   - `bypassPermissions` (sandbox only, unrestricted access) - supported by all agents
@@ -51,7 +51,7 @@ ccagent is a Go-based CLI application that serves as a bridge between AI coding 
 
 ## Development Commands
 
-- **Build**: `make build` - Creates binary in `bin/ccagent`
+- **Build**: `make build` - Creates binary in `bin/eksec`
 - **Test**: `make test` or `make test-verbose`
 - **Lint**: `make lint` or `make lint-fix`
 - **Clean**: `make clean` - Removes build artifacts
@@ -59,7 +59,7 @@ ccagent is a Go-based CLI application that serves as a bridge between AI coding 
 
 ## Release Process
 
-**IMPORTANT**: When asked to create a new release for ccagent, you MUST read and follow the detailed instructions in **[docs/release_ccagent.md](docs/release_ccagent.md)**.
+**IMPORTANT**: When asked to create a new release for eksec, you MUST read and follow the detailed instructions in **[docs/release_eksec.md](docs/release_eksec.md)**.
 
 The release process includes:
 1. Cloning repository to temporary directory
@@ -75,8 +75,8 @@ The release process includes:
 
 ## Environment Requirements
 
-- `CCAGENT_API_KEY`: Required API key from eksec platform
-- `CCAGENT_WS_API_URL`: Optional WebSocket URL (defaults to production)
+- `EKSEC_API_KEY`: Required API key from eksec platform
+- `EKSEC_WS_API_URL`: Optional WebSocket URL (defaults to production)
 - Git and GitHub CLI (`gh`) must be configured
 - Go 1.24+ for building from source
 
@@ -90,6 +90,6 @@ The release process includes:
 
 ## Log Management
 
-- Logs stored in `~/.config/ccagent/logs/`
+- Logs stored in `~/.config/eksec/logs/`
 - Automatic cleanup of logs older than 7 days
 - Both stdout and file logging for debugging

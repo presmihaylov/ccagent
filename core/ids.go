@@ -1,7 +1,7 @@
 package core
 
 import (
-	"ccagent/utils"
+	"eksec/utils"
 	"crypto/rand"
 	"strings"
 	"time"

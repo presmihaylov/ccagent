@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ccagent/core/log"
+	"eksec/core/log"
 )
 
 // writeFileAsTargetUser writes content to a file, using sudo if necessary.
 // When AGENT_EXEC_USER is set and the target path is in that user's home directory,
 // the file is written via 'sudo -u <user> tee' to ensure proper ownership and permissions.
-// This solves permission issues where ccagent (running as 'ccagent' user) needs to write
+// This solves permission issues where eksec (running as 'eksec' user) needs to write
 // files to the agent user's home directory (e.g., /home/agentrunner/.claude.json).
 func writeFileAsTargetUser(filePath string, content []byte, perm os.FileMode) error {
 	execUser := os.Getenv("AGENT_EXEC_USER")
@@ -52,7 +52,7 @@ func writeFileAsTargetUser(filePath string, content []byte, perm os.FileMode) er
 // mkdirAllAsTargetUser creates a directory (and all parent directories), using sudo if necessary.
 // When AGENT_EXEC_USER is set and the target path is in that user's home directory,
 // the directory is created via 'sudo -u <user> mkdir -p' to ensure proper ownership.
-// This solves permission issues where ccagent (running as 'ccagent' user) needs to create
+// This solves permission issues where eksec (running as 'eksec' user) needs to create
 // directories in the agent user's home directory (e.g., /home/agentrunner/.config/opencode).
 // The directory is created with mode 0775 to allow group write access.
 func mkdirAllAsTargetUser(dirPath string) error {
@@ -73,7 +73,7 @@ func mkdirAllAsTargetUser(dirPath string) error {
 
 	// Use sudo -u <user> mkdir -p to create the directory with correct ownership
 	// Use umask 002 to ensure directories are created with 775 permissions (group-writable)
-	// This allows both the agent user (owner) and ccagent (group member) to write to it
+	// This allows both the agent user (owner) and eksec (group member) to write to it
 	cmd := exec.Command("sudo", "-u", execUser, "bash", "-c", fmt.Sprintf("umask 002 && mkdir -p '%s'", dirPath))
 
 	var stderr bytes.Buffer
@@ -88,24 +88,24 @@ func mkdirAllAsTargetUser(dirPath string) error {
 
 // MCPProcessor defines the interface for processing agent-specific MCP configurations
 type MCPProcessor interface {
-	// ProcessMCPConfigs processes MCP configs from the ccagent MCP directory
+	// ProcessMCPConfigs processes MCP configs from the eksec MCP directory
 	// and applies them to the agent-specific location.
 	// targetHomeDir specifies the home directory to deploy configs to.
 	// If empty, uses the current user's home directory.
 	ProcessMCPConfigs(targetHomeDir string) error
 }
 
-// GetCcagentMCPDir returns the path to the ccagent MCP directory
+// GetCcagentMCPDir returns the path to the eksec MCP directory
 func GetCcagentMCPDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	return filepath.Join(homeDir, ".config", "ccagent", "mcp"), nil
+	return filepath.Join(homeDir, ".config", "eksec", "mcp"), nil
 }
 
-// GetMCPConfigFiles returns a list of JSON files in the ccagent MCP directory
+// GetMCPConfigFiles returns a list of JSON files in the eksec MCP directory
 func GetMCPConfigFiles() ([]string, error) {
 	mcpDir, err := GetCcagentMCPDir()
 	if err != nil {
@@ -139,7 +139,7 @@ func GetMCPConfigFiles() ([]string, error) {
 	return mcpFiles, nil
 }
 
-// CleanCcagentMCPDir removes all files from the ccagent MCP directory
+// CleanCcagentMCPDir removes all files from the eksec MCP directory
 // This should be called before downloading new MCP configs from the server to ensure
 // stale configs that were deleted on the server are also removed locally.
 func CleanCcagentMCPDir() error {
@@ -154,7 +154,7 @@ func CleanCcagentMCPDir() error {
 		return nil
 	}
 
-	log.Info("🔌 Cleaning ccagent MCP directory: %s", mcpDir)
+	log.Info("🔌 Cleaning eksec MCP directory: %s", mcpDir)
 
 	// Remove and recreate the directory to ensure a clean state
 	if err := os.RemoveAll(mcpDir); err != nil {
@@ -166,7 +166,7 @@ func CleanCcagentMCPDir() error {
 		return fmt.Errorf("failed to recreate MCP directory: %w", err)
 	}
 
-	log.Info("✅ Successfully cleaned ccagent MCP directory")
+	log.Info("✅ Successfully cleaned eksec MCP directory")
 	return nil
 }
 
@@ -249,7 +249,7 @@ func (p *ClaudeCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 	}
 
 	if len(mcpServers) == 0 {
-		log.Info("🔌 No MCP configs found in ccagent MCP directory")
+		log.Info("🔌 No MCP configs found in eksec MCP directory")
 		return nil
 	}
 
@@ -328,7 +328,7 @@ func (p *OpenCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 	}
 
 	if len(mcpServers) == 0 {
-		log.Info("🔌 No MCP configs found in ccagent MCP directory")
+		log.Info("🔌 No MCP configs found in eksec MCP directory")
 		return nil
 	}
 

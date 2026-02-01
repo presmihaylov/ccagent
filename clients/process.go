@@ -17,10 +17,12 @@ const DefaultSessionTimeout = 1 * time.Hour
 // BlockedEnvVars lists environment variables that should never be passed to agent processes.
 // These contain sensitive credentials that agents should not have access to.
 var BlockedEnvVars = map[string]bool{
-	"CCAGENT_API_KEY":    true,
-	"CCAGENT_WS_API_URL": true,
+	"EKSEC_API_KEY":    true,
+	"EKSEC_WS_API_URL": true,
+	"CCAGENT_API_KEY":    true, // Legacy env var
+	"CCAGENT_WS_API_URL": true, // Legacy env var
 	"AGENT_EXEC_USER":    true,
-	"AGENT_HTTP_PROXY":   true, // This is for ccagent to read, not for agents
+	"AGENT_HTTP_PROXY":   true, // This is for eksec to read, not for agents
 }
 
 // AgentExecUser returns the configured user for running agent processes.
@@ -95,7 +97,7 @@ func buildShellCommand(name string, args []string) string {
 }
 
 // FilterEnvForAgent removes sensitive variables from environment.
-// This prevents agent processes from accessing credentials like CCAGENT_API_KEY.
+// This prevents agent processes from accessing credentials like EKSEC_API_KEY.
 func FilterEnvForAgent(env []string) []string {
 	var filtered []string
 	for _, e := range env {
@@ -139,7 +141,7 @@ func UpdateHomeForUser(env []string, username string) []string {
 
 // InjectProxyEnv adds HTTP_PROXY and HTTPS_PROXY to the environment if AGENT_HTTP_PROXY is set.
 // This ensures agent processes route their traffic through the secret proxy while the
-// ccagent process itself does not use the proxy (allowing it to reach the backend).
+// eksec process itself does not use the proxy (allowing it to reach the backend).
 func InjectProxyEnv(env []string) []string {
 	proxyURL := AgentHTTPProxy()
 	if proxyURL == "" {

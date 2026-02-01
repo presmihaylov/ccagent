@@ -8,7 +8,7 @@ import (
 //go:embed VERSION
 var versionContent string
 
-// GetVersion returns the current version of ccagent
+// GetVersion returns the current version of eksec
 func GetVersion() string {
 	return strings.TrimSpace(versionContent)
 }

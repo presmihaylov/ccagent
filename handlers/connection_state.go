@@ -3,7 +3,7 @@ package handlers
 import (
 	"sync"
 
-	"ccagent/core/log"
+	"eksec/core/log"
 )
 
 // ConnectionState manages the Socket.IO connection state and provides

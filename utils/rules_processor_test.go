@@ -135,9 +135,9 @@ Description: Use this guide
 // Test GetRuleFiles
 
 func TestGetRuleFiles_EmptyDirectory(t *testing.T) {
-	// Create temporary ccagent rules directory
+	// Create temporary eksec rules directory
 	tempDir := t.TempDir()
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	rulesDir := filepath.Join(tempDir, ".config", "eksec", "rules")
 
 	if err := os.MkdirAll(rulesDir, 0755); err != nil {
 		t.Fatalf("Failed to create rules directory: %v", err)
@@ -160,9 +160,9 @@ func TestGetRuleFiles_EmptyDirectory(t *testing.T) {
 }
 
 func TestGetRuleFiles_WithMarkdownFiles(t *testing.T) {
-	// Create temporary ccagent rules directory
+	// Create temporary eksec rules directory
 	tempDir := t.TempDir()
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	rulesDir := filepath.Join(tempDir, ".config", "eksec", "rules")
 
 	if err := os.MkdirAll(rulesDir, 0755); err != nil {
 		t.Fatalf("Failed to create rules directory: %v", err)
@@ -221,9 +221,9 @@ func TestGetRuleFiles_NonexistentDirectory(t *testing.T) {
 // Test CleanCcagentRulesDir
 
 func TestCleanCcagentRulesDir_WithExistingRules(t *testing.T) {
-	// Create temporary ccagent rules directory with files
+	// Create temporary eksec rules directory with files
 	tempDir := t.TempDir()
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	rulesDir := filepath.Join(tempDir, ".config", "eksec", "rules")
 
 	if err := os.MkdirAll(rulesDir, 0755); err != nil {
 		t.Fatalf("Failed to create rules directory: %v", err)
@@ -275,9 +275,9 @@ func TestCleanCcagentRulesDir_NonexistentDirectory(t *testing.T) {
 }
 
 func TestCleanCcagentRulesDir_RecreatesDirectory(t *testing.T) {
-	// Create temporary ccagent rules directory
+	// Create temporary eksec rules directory
 	tempDir := t.TempDir()
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	rulesDir := filepath.Join(tempDir, ".config", "eksec", "rules")
 
 	if err := os.MkdirAll(rulesDir, 0755); err != nil {
 		t.Fatalf("Failed to create rules directory: %v", err)
@@ -337,7 +337,7 @@ func TestClaudeCodeRulesProcessor_WithRules(t *testing.T) {
 	// Create temporary directories
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "workspace")
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	rulesDir := filepath.Join(tempDir, ".config", "eksec", "rules")
 
 	if err := os.MkdirAll(workDir, 0755); err != nil {
 		t.Fatalf("Failed to create work directory: %v", err)
@@ -397,7 +397,7 @@ func TestClaudeCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
 	// Create temporary directories
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "workspace")
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	rulesDir := filepath.Join(tempDir, ".config", "eksec", "rules")
 	claudeRulesDir := filepath.Join(tempDir, ".claude", "rules")
 
 	if err := os.MkdirAll(workDir, 0755); err != nil {
@@ -418,7 +418,7 @@ func TestClaudeCodeRulesProcessor_RemovesStaleRules(t *testing.T) {
 		t.Fatalf("Failed to create stale rule: %v", err)
 	}
 
-	// Create a fresh rule in ccagent rules directory
+	// Create a fresh rule in eksec rules directory
 	freshRulePath := filepath.Join(rulesDir, "fresh-rule.md")
 	if err := os.WriteFile(freshRulePath, []byte("# Fresh"), 0644); err != nil {
 		t.Fatalf("Failed to create fresh rule: %v", err)
@@ -480,7 +480,7 @@ func TestOpenCodeRulesProcessor_WithRules(t *testing.T) {
 	// Create temporary directories
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "workspace")
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	rulesDir := filepath.Join(tempDir, ".config", "eksec", "rules")
 
 	if err := os.MkdirAll(workDir, 0755); err != nil {
 		t.Fatalf("Failed to create work directory: %v", err)
@@ -538,12 +538,12 @@ Write tests for everything.`
 		t.Fatalf("Failed to parse opencode.json: %v", err)
 	}
 
-	// Verify instructions array contains the glob pattern pointing to ccagent rules
+	// Verify instructions array contains the glob pattern pointing to eksec rules
 	if len(config.Instructions) != 1 {
 		t.Errorf("Expected 1 instruction, got: %d", len(config.Instructions))
 	}
 
-	expectedInstruction := "~/.config/ccagent/rules/*.md"
+	expectedInstruction := "~/.config/eksec/rules/*.md"
 	if len(config.Instructions) > 0 && config.Instructions[0] != expectedInstruction {
 		t.Errorf("Expected instruction '%s', got: '%s'", expectedInstruction, config.Instructions[0])
 	}
@@ -553,7 +553,7 @@ func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 	// Create temporary directories
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "workspace")
-	rulesDir := filepath.Join(tempDir, ".config", "ccagent", "rules")
+	rulesDir := filepath.Join(tempDir, ".config", "eksec", "rules")
 	opencodeRulesDir := filepath.Join(tempDir, ".config", "opencode", "rules")
 
 	if err := os.MkdirAll(workDir, 0755); err != nil {
@@ -574,7 +574,7 @@ func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 		t.Fatalf("Failed to create old rule: %v", err)
 	}
 
-	// Create a fresh rule in ccagent rules directory
+	// Create a fresh rule in eksec rules directory
 	freshRulePath := filepath.Join(rulesDir, "fresh-rule.md")
 	if err := os.WriteFile(freshRulePath, []byte("# Fresh"), 0644); err != nil {
 		t.Fatalf("Failed to create fresh rule: %v", err)
@@ -596,9 +596,9 @@ func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 		t.Errorf("Expected old opencode rules directory to be removed")
 	}
 
-	// Verify fresh rule still exists in ccagent rules directory
+	// Verify fresh rule still exists in eksec rules directory
 	if _, err := os.Stat(freshRulePath); os.IsNotExist(err) {
-		t.Errorf("Expected fresh rule in ccagent directory to still exist")
+		t.Errorf("Expected fresh rule in eksec directory to still exist")
 	}
 }
 

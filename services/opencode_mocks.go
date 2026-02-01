@@ -1,6 +1,6 @@
 package services
 
-import "ccagent/clients"
+import "eksec/clients"
 
 // MockOpenCodeClient implements the OpenCodeClient interface for testing
 type MockOpenCodeClient struct {

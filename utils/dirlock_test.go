@@ -38,18 +38,18 @@ func TestNewDirLock(t *testing.T) {
 
 	// Verify lock path contains expected components
 	lockPath := lock.GetLockPath()
-	if !strings.Contains(lockPath, "ccagent") {
-		t.Errorf("Lock path should contain 'ccagent': %s", lockPath)
+	if !strings.Contains(lockPath, "eksec") {
+		t.Errorf("Lock path should contain 'eksec': %s", lockPath)
 	}
 
 	if !strings.HasSuffix(lockPath, ".lock") {
 		t.Errorf("Lock path should end with '.lock': %s", lockPath)
 	}
 
-	// Verify the ccagent directory was created
-	ccagentDir := filepath.Dir(lockPath)
-	if _, err := os.Stat(ccagentDir); os.IsNotExist(err) {
-		t.Errorf("ccagent directory should be created: %s", ccagentDir)
+	// Verify the eksec directory was created
+	eksecDir := filepath.Dir(lockPath)
+	if _, err := os.Stat(eksecDir); os.IsNotExist(err) {
+		t.Errorf("eksec directory should be created: %s", eksecDir)
 	}
 }
 

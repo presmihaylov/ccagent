@@ -1,6 +1,6 @@
 # CCAgent Release Process
 
-This document describes the complete process for creating a new release of ccagent, including version bumping, changelog updates, binary builds, and GitHub release creation.
+This document describes the complete process for creating a new release of eksec, including version bumping, changelog updates, binary builds, and GitHub release creation.
 
 ## Prerequisites
 
@@ -8,7 +8,7 @@ Before starting, ensure you have:
 
 - **Go compiler** (version 1.23+) installed at `/usr/local/go/bin`
 - **GitHub CLI** (`gh`) installed and authenticated
-- **SSH access** to the presmihaylov/ccagent repository
+- **SSH access** to the presmihaylov/eksec repository
 - **Write permissions** to the repository
 
 ### Installing Go (if needed)
@@ -47,11 +47,11 @@ gh auth status
 ```bash
 # Create temp directory and clone
 TEMP_DIR=$(mktemp -d)
-git clone https://github.com/presmihaylov/ccagent.git $TEMP_DIR/ccagent
-cd $TEMP_DIR/ccagent
+git clone https://github.com/presmihaylov/eksec.git $TEMP_DIR/eksec
+cd $TEMP_DIR/eksec
 
 # Change remote to SSH for push access
-git remote set-url origin git@github.com:presmihaylov/ccagent.git
+git remote set-url origin git@github.com:presmihaylov/eksec.git
 ```
 
 ### 2. Analyze Changes Since Last Release
@@ -120,17 +120,17 @@ The changelog should follow the existing format and include:
 
 ### Features
 
-- Add persistent state with job restoration ([#20](https://github.com/presmihaylov/ccagent/pull/20))
+- Add persistent state with job restoration ([#20](https://github.com/presmihaylov/eksec/pull/20))
   - Implements state persistence across agent restarts
   - Automatic job restoration on startup
   - Enhanced recovery handling for interrupted tasks
-- Add startup logging for config and environment ([#19](https://github.com/presmihaylov/ccagent/pull/19))
+- Add startup logging for config and environment ([#19](https://github.com/presmihaylov/eksec/pull/19))
   - Improved visibility into agent configuration at startup
   - Environment variable logging for debugging
 
 ### Documentation
 
-- Add Claude Control context to prompts ([#18](https://github.com/presmihaylov/ccagent/pull/18))
+- Add Claude Control context to prompts ([#18](https://github.com/presmihaylov/eksec/pull/18))
   - Enhanced prompt templates with Claude Control-specific context
 ```
 
@@ -192,7 +192,7 @@ These improvements [summary of benefits]! 🎉
 ```markdown
 ## 🚀 What's New in v0.0.11
 
-This release **enhances reliability and observability** by implementing persistent state management, ensuring ccagent can seamlessly recover from restarts and providing better visibility into configuration and operations.
+This release **enhances reliability and observability** by implementing persistent state management, ensuring eksec can seamlessly recover from restarts and providing better visibility into configuration and operations.
 
 ### ✨ Key Improvements
 
@@ -214,7 +214,7 @@ This release **enhances reliability and observability** by implementing persiste
 - **feat**: support custom release notes in build script
 
 ---
-These improvements make ccagent more reliable in production environments, with better recovery mechanisms and visibility into agent operations! 🎉
+These improvements make eksec more reliable in production environments, with better recovery mechanisms and visibility into agent operations! 🎉
 ```
 
 Create this file before running the release build.
@@ -250,7 +250,7 @@ The script will:
 gh release view vX.X.X
 
 # Check the release URL
-echo "Release created at: https://github.com/presmihaylov/ccagent/releases/tag/vX.X.X"
+echo "Release created at: https://github.com/presmihaylov/eksec/releases/tag/vX.X.X"
 ```
 
 Verify:
@@ -313,7 +313,7 @@ gh auth login
 
 ```bash
 # Change remote to SSH
-git remote set-url origin git@github.com:presmihaylov/ccagent.git
+git remote set-url origin git@github.com:presmihaylov/eksec.git
 ```
 
 ### Tag Already Exists
@@ -362,7 +362,7 @@ The `scripts/build_binaries.sh` script:
 
 After successful release:
 
-1. Verify release is live at `https://github.com/presmihaylov/ccagent/releases/tag/vX.X.X`
+1. Verify release is live at `https://github.com/presmihaylov/eksec/releases/tag/vX.X.X`
 2. Test download and installation of at least one binary
 3. Update any deployment configurations to use new version
 4. Announce release in relevant channels (if applicable)
@@ -373,9 +373,9 @@ After successful release:
 ```bash
 # 1. Setup
 TEMP_DIR=$(mktemp -d)
-git clone https://github.com/presmihaylov/ccagent.git $TEMP_DIR/ccagent
-cd $TEMP_DIR/ccagent
-git remote set-url origin git@github.com:presmihaylov/ccagent.git
+git clone https://github.com/presmihaylov/eksec.git $TEMP_DIR/eksec
+cd $TEMP_DIR/eksec
+git remote set-url origin git@github.com:presmihaylov/eksec.git
 
 # 2. Analyze changes
 git tag -l | sort -V | tail -1  # Get last version

@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"ccagent/models"
+	"eksec/models"
 	"fmt"
 )
 

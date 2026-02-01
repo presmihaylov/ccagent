@@ -6,9 +6,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"ccagent/clients"
-	"ccagent/core"
-	"ccagent/core/log"
+	"eksec/clients"
+	"eksec/core"
+	"eksec/core/log"
 )
 
 type OpenCodeClient struct {

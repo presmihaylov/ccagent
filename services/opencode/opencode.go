@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"ccagent/clients"
-	"ccagent/core"
-	"ccagent/core/log"
-	"ccagent/services"
+	"eksec/clients"
+	"eksec/core"
+	"eksec/core/log"
+	"eksec/services"
 )
 
 type OpenCodeService struct {

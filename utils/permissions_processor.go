@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"ccagent/core/log"
+	"eksec/core/log"
 )
 
 // PermissionsProcessor defines the interface for processing agent-specific permissions

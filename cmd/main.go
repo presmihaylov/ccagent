@@ -19,23 +19,23 @@ import (
 	"github.com/zishang520/engine.io/v2/types"
 	"github.com/zishang520/socket.io-client-go/socket"
 
-	"ccagent/clients"
-	claudeclient "ccagent/clients/claude"
-	codexclient "ccagent/clients/codex"
-	cursorclient "ccagent/clients/cursor"
-	opencodeclient "ccagent/clients/opencode"
-	"ccagent/core"
-	"ccagent/core/env"
-	"ccagent/core/log"
-	"ccagent/handlers"
-	"ccagent/models"
-	"ccagent/services"
-	claudeservice "ccagent/services/claude"
-	codexservice "ccagent/services/codex"
-	cursorservice "ccagent/services/cursor"
-	opencodeservice "ccagent/services/opencode"
-	"ccagent/usecases"
-	"ccagent/utils"
+	"eksec/clients"
+	claudeclient "eksec/clients/claude"
+	codexclient "eksec/clients/codex"
+	cursorclient "eksec/clients/cursor"
+	opencodeclient "eksec/clients/opencode"
+	"eksec/core"
+	"eksec/core/env"
+	"eksec/core/log"
+	"eksec/handlers"
+	"eksec/models"
+	"eksec/services"
+	claudeservice "eksec/services/claude"
+	codexservice "eksec/services/codex"
+	cursorservice "eksec/services/cursor"
+	opencodeservice "eksec/services/opencode"
+	"eksec/usecases"
+	"eksec/utils"
 )
 
 type CmdRunner struct {
@@ -49,7 +49,7 @@ type CmdRunner struct {
 	agentID            string
 	agentsApiClient    *clients.AgentsApiClient
 	wsURL              string
-	ccagentAPIKey      string
+	eksecAPIKey      string
 	dirLock            *utils.DirLock
 	repoLock           *utils.DirLock
 
@@ -138,15 +138,15 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 	// Clean up existing rules, MCP configs, and skills before downloading new ones
 	// This ensures stale items deleted on the server are removed locally
 	if err := utils.CleanCcagentRulesDir(); err != nil {
-		return fmt.Errorf("failed to clean ccagent rules directory: %w", err)
+		return fmt.Errorf("failed to clean eksec rules directory: %w", err)
 	}
 
 	if err := utils.CleanCcagentMCPDir(); err != nil {
-		return fmt.Errorf("failed to clean ccagent MCP directory: %w", err)
+		return fmt.Errorf("failed to clean eksec MCP directory: %w", err)
 	}
 
 	if err := utils.CleanCcagentSkillsDir(); err != nil {
-		return fmt.Errorf("failed to clean ccagent skills directory: %w", err)
+		return fmt.Errorf("failed to clean eksec skills directory: %w", err)
 	}
 
 	artifacts, err := agentsApiClient.FetchArtifacts()
@@ -181,7 +181,7 @@ func fetchAndStoreArtifacts(agentsApiClient *clients.AgentsApiClient) error {
 	return nil
 }
 
-// processAgentRules processes rules from ccagent directory based on agent type
+// processAgentRules processes rules from eksec directory based on agent type
 // targetHomeDir specifies the home directory to deploy rules to.
 // If empty, uses the current user's home directory.
 func processAgentRules(agentType, workDir, targetHomeDir string) error {
@@ -208,7 +208,7 @@ func processAgentRules(agentType, workDir, targetHomeDir string) error {
 	return nil
 }
 
-// processMCPConfigs processes MCP configs from ccagent directory based on agent type
+// processMCPConfigs processes MCP configs from eksec directory based on agent type
 // targetHomeDir specifies the home directory to deploy configs to.
 // If empty, uses the current user's home directory.
 func processMCPConfigs(agentType, workDir, targetHomeDir string) error {
@@ -235,7 +235,7 @@ func processMCPConfigs(agentType, workDir, targetHomeDir string) error {
 	return nil
 }
 
-// processSkills processes skills from ccagent directory based on agent type
+// processSkills processes skills from eksec directory based on agent type
 // targetHomeDir specifies the home directory to deploy skills to.
 // If empty, uses the current user's home directory.
 func processSkills(agentType, targetHomeDir string) error {
@@ -368,12 +368,12 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	envManager.StartPeriodicRefresh(1 * time.Minute)
 
 	// Get API key and WS URL for agents API client
-	ccagentAPIKey := envManager.Get("CCAGENT_API_KEY")
-	if ccagentAPIKey == "" {
-		return nil, fmt.Errorf("CCAGENT_API_KEY environment variable is required but not set")
+	eksecAPIKey := envManager.Get("EKSEC_API_KEY")
+	if eksecAPIKey == "" {
+		return nil, fmt.Errorf("EKSEC_API_KEY environment variable is required but not set")
 	}
 
-	wsURL := envManager.Get("CCAGENT_WS_API_URL")
+	wsURL := envManager.Get("EKSEC_WS_API_URL")
 	if wsURL == "" {
 		wsURL = "https://claudecontrol.onrender.com/socketio/"
 	}
@@ -381,8 +381,8 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	// Extract base URL for API client (remove /socketio/ suffix)
 	apiBaseURL := strings.TrimSuffix(wsURL, "/socketio/")
 	// Get agent ID for X-AGENT-ID header (used to disambiguate containers sharing API keys)
-	agentIDForAPI := envManager.Get("CCAGENT_AGENT_ID")
-	agentsApiClient := clients.NewAgentsApiClient(ccagentAPIKey, apiBaseURL, agentIDForAPI)
+	agentIDForAPI := envManager.Get("EKSEC_AGENT_ID")
+	agentsApiClient := clients.NewAgentsApiClient(eksecAPIKey, apiBaseURL, agentIDForAPI)
 	log.Info("🔗 Configured agents API client with base URL: %s", apiBaseURL)
 
 	// Fetch and set Anthropic token BEFORE initializing anything else
@@ -489,7 +489,7 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 		agentID:          agentID,
 		agentsApiClient:  agentsApiClient,
 		wsURL:            wsURL,
-		ccagentAPIKey:    ccagentAPIKey,
+		eksecAPIKey:    eksecAPIKey,
 	}
 
 	// Initialize dual worker pools that persist for the app lifetime
@@ -599,7 +599,7 @@ type Options struct {
 	Agent             string `long:"agent" description:"CLI agent to use (claude, cursor, codex, or opencode)" choice:"claude" choice:"cursor" choice:"codex" choice:"opencode" default:"claude"`
 	BypassPermissions bool   `long:"claude-bypass-permissions" description:"Use bypassPermissions mode for Claude/Codex (only applies when --agent=claude or --agent=codex) (WARNING: Only use in controlled sandbox environments)"`
 	Model             string `long:"model" description:"Model to use (agent-specific: claude: sonnet/haiku/opus or full model name, cursor: gpt-5/sonnet-4/sonnet-4-thinking, codex: any model string, opencode: provider/model format)"`
-	Repo              string `long:"repo" description:"Path to git repository (absolute or relative). If not provided, ccagent runs in no-repo mode with git operations disabled"`
+	Repo              string `long:"repo" description:"Path to git repository (absolute or relative). If not provided, eksec runs in no-repo mode with git operations disabled"`
 	Version           bool   `long:"version" short:"v" description:"Show version information"`
 }
 
@@ -626,7 +626,7 @@ func main() {
 	log.SetLevel(slog.LevelInfo)
 
 	// Log startup information
-	log.Info("🚀 ccagent starting - version %s", core.GetVersion())
+	log.Info("🚀 eksec starting - version %s", core.GetVersion())
 	log.Info("⚙️  Configuration: agent=%s, permission_mode=%s", opts.Agent, func() string {
 		if opts.BypassPermissions {
 			return "bypassPermissions"
@@ -801,7 +801,7 @@ func main() {
 	}()
 
 	// Start Socket.IO client with backoff retry
-	err = cmdRunner.startSocketIOClientWithRetry(cmdRunner.wsURL, cmdRunner.ccagentAPIKey)
+	err = cmdRunner.startSocketIOClientWithRetry(cmdRunner.wsURL, cmdRunner.eksecAPIKey)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting WebSocket client after retries: %v\n", err)
 		os.Exit(1)
@@ -861,16 +861,16 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 	repoIdentifier := repoContext.RepositoryIdentifier
 
 	// Determine agent ID value - use env var if set, otherwise use repo identifier
-	agentID := cr.envManager.Get("CCAGENT_AGENT_ID")
+	agentID := cr.envManager.Get("EKSEC_AGENT_ID")
 	if agentID == "" {
 		if repoIdentifier != "" {
 			agentID = repoIdentifier
 			log.Info("📋 Using repository identifier as agent ID: %s", agentID)
 		} else {
-			return fmt.Errorf("CCAGENT_AGENT_ID environment variable is required in no-repo mode")
+			return fmt.Errorf("EKSEC_AGENT_ID environment variable is required in no-repo mode")
 		}
 	} else {
-		log.Info("📋 Using CCAGENT_AGENT_ID from environment: %s", agentID)
+		log.Info("📋 Using EKSEC_AGENT_ID from environment: %s", agentID)
 	}
 
 	// Set authentication headers
@@ -1028,7 +1028,7 @@ func (cr *CmdRunner) setupProgramLogging() (string, error) {
 	rotatingWriter, err := log.NewRotatingWriter(log.RotatingWriterConfig{
 		LogDir:      logsDir,
 		MaxFileSize: 1024, // 10MB
-		FilePrefix:  "ccagent",
+		FilePrefix:  "eksec",
 		Stdout:      os.Stdout,
 	})
 	if err != nil {

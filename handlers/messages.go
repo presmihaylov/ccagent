@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"ccagent/clients"
-	"ccagent/core"
-	"ccagent/core/env"
-	"ccagent/core/log"
-	"ccagent/models"
-	"ccagent/services"
-	"ccagent/usecases"
-	"ccagent/utils"
+	"eksec/clients"
+	"eksec/core"
+	"eksec/core/env"
+	"eksec/core/log"
+	"eksec/models"
+	"eksec/services"
+	"eksec/usecases"
+	"eksec/utils"
 )
 
 type MessageHandler struct {
@@ -320,7 +320,7 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	if err != nil {
 		log.Info("❌ Error starting Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
-			fmt.Sprintf("ccagent encountered error: %v", err),
+			fmt.Sprintf("eksec encountered error: %v", err),
 			payload.ProcessedMessageID,
 			payload.JobID,
 		)
@@ -613,7 +613,7 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	if err != nil {
 		log.Info("❌ Error continuing Claude session: %v", err)
 		systemErr := mh.sendSystemMessage(
-			fmt.Sprintf("ccagent encountered error: %v", err),
+			fmt.Sprintf("eksec encountered error: %v", err),
 			payload.ProcessedMessageID,
 			payload.JobID,
 		)
@@ -916,7 +916,7 @@ func (mh *MessageHandler) sendSystemMessage(message, slackMessageID, jobID strin
 // sendErrorMessage sends an error as a system message. The Claude service handles
 // all error processing internally, so we just need to format and send the error.
 func (mh *MessageHandler) sendErrorMessage(err error, slackMessageID, jobID string) error {
-	messageToSend := fmt.Sprintf("ccagent encountered error: %v", err)
+	messageToSend := fmt.Sprintf("eksec encountered error: %v", err)
 	return mh.sendSystemMessage(messageToSend, slackMessageID, jobID)
 }
 

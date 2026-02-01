@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build ccagent
+    name: Build eksec
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -19,11 +19,11 @@ jobs:
       with:
         go-version: '1.21'
 
-    - name: Build ccagent
+    - name: Build eksec
       run: make build
 
   test:
-    name: Test ccagent
+    name: Test eksec
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -34,11 +34,11 @@ jobs:
       with:
         go-version: '1.21'
 
-    - name: Run ccagent tests
+    - name: Run eksec tests
       run: make test
 
   lint:
-    name: Lint ccagent
+    name: Lint eksec
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -53,12 +53,12 @@ jobs:
         go install github.com/segmentio/golines@latest
         go install golang.org/x/tools/cmd/goimports@latest
         
-    - name: Run ccagent linting  
+    - name: Run eksec linting  
       run: |
         goimports -d .
         golines --max-len=120 --dry-run .
         
-    - name: Run golangci-lint on ccagent
+    - name: Run golangci-lint on eksec
       uses: golangci/golangci-lint-action@v6
       with:
         version: latest
