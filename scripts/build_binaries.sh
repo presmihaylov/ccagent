@@ -23,7 +23,7 @@ function create_build {
     fi
     
     echo "Building $BINARY..."
-    GOOS=$GOOS GOARCH=$GOARCH go build -o $TEMP_DIR/$BINARY cmd/*.go
+    CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o $TEMP_DIR/$BINARY cmd/*.go
     cd $TEMP_DIR && shasum -a 256 $BINARY > $BINARY.sha256 && cd - > /dev/null
 }
 

@@ -1,3 +1,12 @@
+## [v0.0.58] - 2026-02-03
+
+### Bugfixes
+
+- Fix binary compatibility with Alpine/musl-based containers
+  - Build release binaries with CGO_ENABLED=0 for static linking
+  - Fixes "required file not found" errors on Alpine Linux
+  - Ensures eksecd works in Docker containers using musl libc
+
 ## [v0.0.57] - 2026-02-03
 
 ### Bugfixes
