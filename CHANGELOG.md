@@ -1,3 +1,12 @@
+## [v0.0.57] - 2026-02-03
+
+### Bugfixes
+
+- Processor exits on job failure to prevent worker pool exhaustion ([#136](https://github.com/eksecai/eksecd/pull/136))
+  - Fixes issue where failed jobs could exhaust the worker pool
+  - Ensures processor properly exits on job failure
+  - Improves system stability and resource management
+
 ## [v0.0.56] - 2026-02-01
 
 ### Features
