@@ -91,7 +91,8 @@ func (td *testableDispatcher) processJobMessagesWithMock(jobID string, ch chan m
 			return
 		}
 
-		if jobData.Status == models.JobStatusCompleted && len(ch) == 0 {
+		// Exit on completed or failed status when channel is empty
+		if (jobData.Status == models.JobStatusCompleted || jobData.Status == models.JobStatusFailed) && len(ch) == 0 {
 			return
 		}
 	}
@@ -318,6 +319,67 @@ func TestProcessorExitsWhenJobCompleted(t *testing.T) {
 		// Good - processor exited
 	case <-time.After(2 * time.Second):
 		t.Error("Processor did not exit after job completed")
+	}
+
+	// Verify messages were processed
+	msgs := td.mockHandler.getHandledMessages()
+	if len(msgs) != 2 {
+		t.Errorf("Expected 2 messages processed, got %d", len(msgs))
+	}
+}
+
+func TestProcessorExitsWhenJobFailed(t *testing.T) {
+	appState := createTestAppState(t)
+
+	// Add a job that will be marked as failed
+	jobID := "job-123"
+	err := appState.UpdateJobData(jobID, models.JobData{
+		JobID:  jobID,
+		Status: models.JobStatusInProgress,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create job: %v", err)
+	}
+
+	td := newTestableDispatcher(2, appState)
+
+	ch := make(chan models.BaseMessage, 100)
+	td.mutex.Lock()
+	td.activeJobs[jobID] = ch
+	td.mutex.Unlock()
+
+	processorDone := make(chan struct{})
+
+	// Start processor in goroutine
+	go func() {
+		td.processJobMessagesWithMock(jobID, ch)
+		close(processorDone)
+	}()
+
+	// Send a message
+	ch <- createTestMessage(models.MessageTypeUserMessage, jobID)
+
+	// Wait a bit for message to be processed
+	time.Sleep(50 * time.Millisecond)
+
+	// Mark job as FAILED (simulating Claude session error)
+	err = appState.UpdateJobData(jobID, models.JobData{
+		JobID:  jobID,
+		Status: models.JobStatusFailed,
+	})
+	if err != nil {
+		t.Fatalf("Failed to update job: %v", err)
+	}
+
+	// Send another message - processor should exit after this
+	ch <- createTestMessage(models.MessageTypeUserMessage, jobID)
+
+	// Wait for processor to exit
+	select {
+	case <-processorDone:
+		// Good - processor exited after job failed
+	case <-time.After(2 * time.Second):
+		t.Error("Processor did not exit after job failed - this causes worker pool exhaustion!")
 	}
 
 	// Verify messages were processed

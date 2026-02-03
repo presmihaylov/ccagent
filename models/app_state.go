@@ -25,6 +25,7 @@ type JobStatus string
 const (
 	JobStatusInProgress JobStatus = "in_progress"
 	JobStatusCompleted  JobStatus = "completed"
+	JobStatusFailed     JobStatus = "failed" // Job failed due to unrecoverable error (e.g., Claude session crash)
 )
 
 // JobData tracks the state of a specific job/conversation

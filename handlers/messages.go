@@ -327,6 +327,26 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		if systemErr != nil {
 			log.Error("❌ Failed to send system message for Claude error: %v", systemErr)
 		}
+
+		// Mark job as failed so the processor goroutine can exit and free up a worker slot
+		if updateErr := mh.appState.UpdateJobData(payload.JobID, models.JobData{
+			JobID:              payload.JobID,
+			BranchName:         branchName,
+			WorktreePath:       worktreePath,
+			ClaudeSessionID:    "",
+			PullRequestID:      "",
+			LastMessage:        payload.Message,
+			ProcessedMessageID: payload.ProcessedMessageID,
+			MessageLink:        payload.MessageLink,
+			Status:             models.JobStatusFailed,
+			Mode:               payload.Mode,
+			UpdatedAt:          time.Now(),
+		}); updateErr != nil {
+			log.Error("❌ Failed to mark job as failed: %v", updateErr)
+		} else {
+			log.Info("💾 Marked job %s as failed due to Claude session error", payload.JobID)
+		}
+
 		return fmt.Errorf("error starting Claude session: %w", err)
 	}
 
@@ -620,6 +640,26 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		if systemErr != nil {
 			log.Error("❌ Failed to send system message for Claude error: %v", systemErr)
 		}
+
+		// Mark job as failed so the processor goroutine can exit and free up a worker slot
+		if updateErr := mh.appState.UpdateJobData(payload.JobID, models.JobData{
+			JobID:              payload.JobID,
+			BranchName:         jobData.BranchName,
+			WorktreePath:       jobData.WorktreePath,
+			ClaudeSessionID:    jobData.ClaudeSessionID,
+			PullRequestID:      jobData.PullRequestID,
+			LastMessage:        payload.Message,
+			ProcessedMessageID: payload.ProcessedMessageID,
+			MessageLink:        payload.MessageLink,
+			Status:             models.JobStatusFailed,
+			Mode:               jobData.Mode,
+			UpdatedAt:          time.Now(),
+		}); updateErr != nil {
+			log.Error("❌ Failed to mark job as failed: %v", updateErr)
+		} else {
+			log.Info("💾 Marked job %s as failed due to Claude session error", payload.JobID)
+		}
+
 		return fmt.Errorf("error continuing Claude session: %w", err)
 	}
 

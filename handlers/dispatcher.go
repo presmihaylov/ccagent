@@ -117,10 +117,10 @@ func (d *JobDispatcher) processJobMessages(jobID string, ch chan models.BaseMess
 			return
 		}
 
-		// If job is completed AND no more messages buffered, exit
+		// If job is completed or failed AND no more messages buffered, exit
 		// This ensures we process all queued messages before exiting
-		if jobData.Status == models.JobStatusCompleted && len(ch) == 0 {
-			log.Info("✅ Job %s completed and channel empty, exiting processor", jobID)
+		if (jobData.Status == models.JobStatusCompleted || jobData.Status == models.JobStatusFailed) && len(ch) == 0 {
+			log.Info("✅ Job %s %s and channel empty, exiting processor", jobID, jobData.Status)
 			return
 		}
 	}
