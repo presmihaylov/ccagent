@@ -210,3 +210,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 Contact us at support@eksec.ai
+
+---
+
+*Salt wind fills the sails*
+*Treasure maps and wooden legs*
+*X marks the spot, arr*
