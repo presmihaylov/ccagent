@@ -235,6 +235,14 @@ func (p *WorktreePool) replenish() error {
 		return fmt.Errorf("failed to create base directory: %w", err)
 	}
 
+	// Reset main repo to default branch before creating worktree to prevent
+	// cross-pollination of changes between worktrees. This ensures the main
+	// repository is in a clean, known state when spawning new worktrees.
+	if err := p.resetMainRepoToDefaultBranch(); err != nil {
+		log.Warn("⚠️ Failed to reset main repo before pool worktree creation: %v (continuing anyway)", err)
+		// Continue anyway - worktree creation from origin/<default> might still work
+	}
+
 	// Fetch latest from origin (safe for concurrent calls)
 	if err := p.gitClient.FetchOrigin(); err != nil {
 		return fmt.Errorf("failed to fetch from origin: %w", err)
@@ -349,6 +357,38 @@ func (p *WorktreePool) getCurrentOriginCommit() (string, error) {
 	}
 
 	return p.gitClient.GetOriginCommit(defaultBranch)
+}
+
+// resetMainRepoToDefaultBranch resets the main repository to the default branch.
+// This prevents cross-pollination of changes when creating new worktrees.
+func (p *WorktreePool) resetMainRepoToDefaultBranch() error {
+	// Reset hard to discard any uncommitted changes
+	if err := p.gitClient.ResetHard(); err != nil {
+		return fmt.Errorf("failed to reset hard: %w", err)
+	}
+
+	// Clean untracked files
+	if err := p.gitClient.CleanUntracked(); err != nil {
+		return fmt.Errorf("failed to clean untracked: %w", err)
+	}
+
+	// Get default branch
+	defaultBranch, err := p.gitClient.GetDefaultBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get default branch: %w", err)
+	}
+
+	// Checkout default branch
+	if err := p.gitClient.CheckoutBranch(defaultBranch); err != nil {
+		return fmt.Errorf("failed to checkout default branch: %w", err)
+	}
+
+	// Pull latest changes
+	if err := p.gitClient.PullLatest(); err != nil {
+		return fmt.Errorf("failed to pull latest: %w", err)
+	}
+
+	return nil
 }
 
 // cleanupFailedWorktree attempts to clean up a worktree that failed during acquisition.
