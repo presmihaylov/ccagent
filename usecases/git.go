@@ -1237,8 +1237,8 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 	// cross-pollination of changes between worktrees. This ensures the main
 	// repository is in a clean, known state when spawning new worktrees.
 	if err := g.resetAndPullDefaultBranch(); err != nil {
-		log.Warn("⚠️ Failed to reset main repo to default branch before worktree creation: %v (continuing anyway)", err)
-		// Continue anyway - worktree creation from origin/<default> might still work
+		log.Error("❌ Failed to reset main repo to default branch before worktree creation: %v", err)
+		return "", "", fmt.Errorf("failed to reset main repo before worktree creation: %w", err)
 	}
 
 	// Fetch latest from origin (safe for concurrent calls)
