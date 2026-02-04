@@ -1233,6 +1233,14 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 	// Fallback: create synchronously (existing logic)
 	log.Info("🔨 Creating worktree synchronously...")
 
+	// Reset main repo to default branch before creating worktree to prevent
+	// cross-pollination of changes between worktrees. This ensures the main
+	// repository is in a clean, known state when spawning new worktrees.
+	if err := g.resetAndPullDefaultBranch(); err != nil {
+		log.Error("❌ Failed to reset main repo to default branch before worktree creation: %v", err)
+		return "", "", fmt.Errorf("failed to reset main repo before worktree creation: %w", err)
+	}
+
 	// Fetch latest from origin (safe for concurrent calls)
 	if err := g.gitClient.FetchOrigin(); err != nil {
 		log.Error("❌ Failed to fetch from origin: %v", err)

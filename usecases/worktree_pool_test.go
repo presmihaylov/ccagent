@@ -543,3 +543,147 @@ func TestStartAndStop(t *testing.T) {
 		t.Error("Stop did not complete within timeout")
 	}
 }
+
+func TestResetMainRepoToDefaultBranch(t *testing.T) {
+	mainRepo, worktreeBase, cleanup := setupTestGitRepoWithRemote(t)
+	defer cleanup()
+
+	gitClient := clients.NewGitClient()
+	gitClient.SetRepoPathProvider(func() string { return mainRepo })
+
+	// Skip if GetDefaultBranch doesn't work (local bare repos return "(unknown)")
+	defaultBranch, err := gitClient.GetDefaultBranch()
+	if err != nil || defaultBranch == "(unknown)" {
+		t.Skip("Skipping test: GetDefaultBranch not working with local test remote")
+	}
+
+	pool := NewWorktreePool(gitClient, worktreeBase, 1)
+
+	// Create a feature branch and switch to it
+	featureBranch := "feature/test-branch"
+	cmd := exec.Command("git", "checkout", "-b", featureBranch)
+	cmd.Dir = mainRepo
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create feature branch: %v", err)
+	}
+
+	// Create some uncommitted changes
+	testFile := filepath.Join(mainRepo, "dirty-file.txt")
+	if err := os.WriteFile(testFile, []byte("uncommitted content"), 0644); err != nil {
+		t.Fatalf("Failed to create dirty file: %v", err)
+	}
+
+	// Verify we're on the feature branch with uncommitted changes
+	cmd = exec.Command("git", "branch", "--show-current")
+	cmd.Dir = mainRepo
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to get current branch: %v", err)
+	}
+	currentBranch := strings.TrimSpace(string(output))
+	if currentBranch != featureBranch {
+		t.Fatalf("Expected to be on %s, got %s", featureBranch, currentBranch)
+	}
+
+	// Call resetMainRepoToDefaultBranch
+	err = pool.resetMainRepoToDefaultBranch()
+	if err != nil {
+		t.Fatalf("resetMainRepoToDefaultBranch failed: %v", err)
+	}
+
+	// Verify we're back on the default branch
+	cmd = exec.Command("git", "branch", "--show-current")
+	cmd.Dir = mainRepo
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to get current branch after reset: %v", err)
+	}
+	currentBranch = strings.TrimSpace(string(output))
+	if currentBranch != defaultBranch {
+		t.Errorf("Expected to be on %s after reset, got %s", defaultBranch, currentBranch)
+	}
+
+	// Verify uncommitted changes were cleaned
+	cmd = exec.Command("git", "status", "--porcelain")
+	cmd.Dir = mainRepo
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to get git status: %v", err)
+	}
+	if strings.TrimSpace(string(output)) != "" {
+		t.Errorf("Expected clean working directory after reset, got: %s", string(output))
+	}
+}
+
+func TestReplenish_ResetsMainRepoBeforeCreatingWorktree(t *testing.T) {
+	mainRepo, worktreeBase, cleanup := setupTestGitRepoWithRemote(t)
+	defer cleanup()
+
+	gitClient := clients.NewGitClient()
+	gitClient.SetRepoPathProvider(func() string { return mainRepo })
+
+	// Skip if GetDefaultBranch doesn't work (local bare repos return "(unknown)")
+	defaultBranch, err := gitClient.GetDefaultBranch()
+	if err != nil || defaultBranch == "(unknown)" {
+		t.Skip("Skipping test: GetDefaultBranch not working with local test remote")
+	}
+
+	// Create a feature branch and switch to it (simulating a dirty main repo state)
+	featureBranch := "feature/dirty-state"
+	cmd := exec.Command("git", "checkout", "-b", featureBranch)
+	cmd.Dir = mainRepo
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create feature branch: %v", err)
+	}
+
+	// Add some uncommitted changes to make the repo "dirty"
+	testFile := filepath.Join(mainRepo, "uncommitted-change.txt")
+	if err := os.WriteFile(testFile, []byte("this should not leak"), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	pool := NewWorktreePool(gitClient, worktreeBase, 1)
+
+	// Start the pool - this will call replenish() which should reset the main repo
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool.Start(ctx)
+
+	// Wait for pool to fill
+	for i := 0; i < 30; i++ {
+		if pool.GetPoolSize() >= 1 {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
+	if pool.GetPoolSize() == 0 {
+		t.Fatal("Pool failed to fill within timeout")
+	}
+
+	// After replenish, the main repo should be on the default branch
+	cmd = exec.Command("git", "branch", "--show-current")
+	cmd.Dir = mainRepo
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to get current branch: %v", err)
+	}
+	currentBranch := strings.TrimSpace(string(output))
+	if currentBranch != defaultBranch {
+		t.Errorf("Expected main repo to be on %s after replenish, got %s", defaultBranch, currentBranch)
+	}
+
+	// And should have no uncommitted changes
+	cmd = exec.Command("git", "status", "--porcelain")
+	cmd.Dir = mainRepo
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to get git status: %v", err)
+	}
+	if strings.TrimSpace(string(output)) != "" {
+		t.Errorf("Expected clean working directory after replenish, got: %s", string(output))
+	}
+
+	pool.Stop()
+	_ = pool.CleanupPool()
+}
