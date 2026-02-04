@@ -1,3 +1,18 @@
+## [v0.0.59] - 2026-02-04
+
+### Bugfixes
+
+- Fix worktree cross-pollination by resetting main repo before creation ([#140](https://github.com/eksecai/eksecd/pull/140))
+  - Prevents newly created worktrees from picking up changes from other branches
+  - Resets main repository to default branch before worktree creation
+  - Applies to both synchronous worktree creation and worktree pool replenishment
+  - Properly propagates errors instead of silently continuing on failure
+
+- Cleanup existing worktree when duplicate jobID received ([#139](https://github.com/eksecai/eksecd/pull/139))
+  - Handles cases where start_conversation is sent multiple times for the same job
+  - Cleans up existing worktree before creating a new one for the same jobID
+  - Prevents resource leaks from duplicate job handling
+
 ## [v0.0.58] - 2026-02-03
 
 ### Bugfixes
