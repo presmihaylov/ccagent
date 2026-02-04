@@ -1165,6 +1165,9 @@ func (g *GitUseCase) ShouldUseWorktrees() bool {
 // If a worktree pool is configured, this function will first try to acquire
 // a pre-warmed worktree from the pool for instant assignment. If the pool
 // is empty or acquisition fails, it falls back to synchronous creation.
+//
+// If a worktree already exists for the given jobID (e.g., due to message retries),
+// it will be cleaned up first before creating/acquiring a new one.
 func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHint string) (string, string, error) {
 	log.Info("📋 Starting to prepare worktree for new conversation (jobID: %s)", jobID)
 
@@ -1173,6 +1176,35 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 	if !repoContext.IsRepoMode {
 		log.Info("📦 No-repo mode: Skipping worktree creation")
 		return "", "", nil
+	}
+
+	// Check if a worktree already exists for this jobID and clean it up
+	// This handles cases where start_conversation is sent multiple times for the same job
+	// (e.g., due to message retries or race conditions)
+	worktreeBasePath, err := g.GetWorktreeBasePath()
+	if err != nil {
+		log.Error("❌ Failed to get worktree base path: %v", err)
+		return "", "", fmt.Errorf("failed to get worktree base path: %w", err)
+	}
+
+	existingWorktreePath := filepath.Join(worktreeBasePath, jobID)
+	if g.gitClient.WorktreeExists(existingWorktreePath) {
+		log.Warn("⚠️ Worktree already exists for jobID %s at %s - cleaning up before creating new one", jobID, existingWorktreePath)
+
+		// Get the branch name from the existing worktree for cleanup
+		existingBranch, branchErr := g.gitClient.GetCurrentBranchInWorktree(existingWorktreePath)
+		if branchErr != nil {
+			log.Warn("⚠️ Failed to get branch name from existing worktree: %v", branchErr)
+			existingBranch = "" // Will skip branch deletion
+		}
+
+		// Clean up the existing worktree
+		if cleanupErr := g.CleanupJobWorktree(existingWorktreePath, existingBranch); cleanupErr != nil {
+			log.Error("❌ Failed to cleanup existing worktree for jobID %s: %v", jobID, cleanupErr)
+			return "", "", fmt.Errorf("failed to cleanup existing worktree: %w", cleanupErr)
+		}
+
+		log.Info("✅ Successfully cleaned up existing worktree for jobID %s", jobID)
 	}
 
 	// Generate random branch name
@@ -1222,14 +1254,8 @@ func (g *GitUseCase) PrepareForNewConversationWithWorktree(jobID, conversationHi
 		return "", "", fmt.Errorf("failed to get default branch: %w", err)
 	}
 
-	// Determine worktree path
-	worktreeBasePath, err := g.GetWorktreeBasePath()
-	if err != nil {
-		log.Error("❌ Failed to get worktree base path: %v", err)
-		return "", "", fmt.Errorf("failed to get worktree base path: %w", err)
-	}
-
 	// Create base directory if it doesn't exist
+	// Note: worktreeBasePath was already retrieved earlier for existing worktree check
 	if err := os.MkdirAll(worktreeBasePath, 0755); err != nil {
 		log.Error("❌ Failed to create worktree base directory: %v", err)
 		return "", "", fmt.Errorf("failed to create worktree base directory: %w", err)
