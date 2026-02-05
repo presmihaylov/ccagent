@@ -142,7 +142,18 @@ func (c *ClaudeService) StartNewConversationWithOptions(
 	rawOutput, err := c.claudeClient.StartNewSession(prompt, mergedOptions)
 	if err != nil {
 		log.Error("Failed to start new Claude session: %v", err)
-		return nil, c.handleClaudeClientError(err, "failed to start new Claude session")
+		handledErr := c.handleClaudeClientError(err, "failed to start new Claude session")
+
+		// Check if this is actually a successful response despite CLI exit code
+		if successResp, ok := core.IsClaudeCLISuccessfulResponse(handledErr); ok {
+			log.Info("📋 Recovered successful response from CLI error, session: %s", successResp.SessionID)
+			return &services.CLIAgentResult{
+				Output:    successResp.Result,
+				SessionID: successResp.SessionID,
+			}, nil
+		}
+
+		return nil, handledErr
 	}
 
 	// Always log the Claude session
@@ -239,7 +250,18 @@ func (c *ClaudeService) ContinueConversationWithOptions(
 	rawOutput, err := c.claudeClient.ContinueSession(sessionID, prompt, mergedOptions)
 	if err != nil {
 		log.Error("Failed to continue Claude session: %v", err)
-		return nil, c.handleClaudeClientError(err, "failed to continue Claude session")
+		handledErr := c.handleClaudeClientError(err, "failed to continue Claude session")
+
+		// Check if this is actually a successful response despite CLI exit code
+		if successResp, ok := core.IsClaudeCLISuccessfulResponse(handledErr); ok {
+			log.Info("📋 Recovered successful response from CLI error, session: %s", successResp.SessionID)
+			return &services.CLIAgentResult{
+				Output:    successResp.Result,
+				SessionID: successResp.SessionID,
+			}, nil
+		}
+
+		return nil, handledErr
 	}
 
 	// Always log the Claude session
@@ -456,6 +478,24 @@ func (c *ClaudeService) handleClaudeClientError(err error, operation string) err
 		return fmt.Errorf("%s: %w", operation, err)
 	}
 
+	// Check if this is actually a successful response despite CLI exit code.
+	// Claude CLI can exit non-zero due to bugs in finalization/cleanup even when
+	// the response was successful (is_error: false). See:
+	// https://github.com/anthropics/claude-code-action/issues/846
+	sessionID := c.extractSessionID(messages)
+	for i := len(messages) - 1; i >= 0; i-- {
+		if resultMsg, ok := messages[i].(services.ResultMessage); ok {
+			if !resultMsg.IsError && resultMsg.Result != "" {
+				log.Info("⚠️ CLI exited non-zero but is_error=false, treating as success. Session: %s", sessionID)
+				return &core.ErrClaudeCLISuccessfulResponse{
+					Result:    resultMsg.Result,
+					SessionID: sessionID,
+				}
+			}
+			break // Only check the last result message
+		}
+	}
+
 	// First priority: Try to extract ExitPlanMode message (highest priority)
 	for i := len(messages) - 1; i >= 0; i-- {
 		if exitPlanMsg, ok := messages[i].(services.ExitPlanModeMessage); ok {
@@ -467,7 +507,7 @@ func (c *ClaudeService) handleClaudeClientError(err error, operation string) err
 		}
 	}
 
-	// Second priority: Try to extract the result message
+	// Second priority: Try to extract the result message (when is_error is true)
 	for i := len(messages) - 1; i >= 0; i-- {
 		if resultMsg, ok := messages[i].(services.ResultMessage); ok {
 			if resultMsg.Result != "" {

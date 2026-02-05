@@ -44,3 +44,26 @@ func IsClaudeCommandErr(err error) (*ErrClaudeCommandErr, bool) {
 	}
 	return nil, false
 }
+
+// ErrClaudeCLISuccessfulResponse represents a case where the Claude CLI exited with
+// a non-zero code, but the JSON response indicates success (is_error: false).
+// This can happen due to Claude CLI bugs during finalization/cleanup.
+// The caller should treat this as a successful response and extract the result.
+type ErrClaudeCLISuccessfulResponse struct {
+	Result    string // The successful response text
+	SessionID string // The session ID from the response
+}
+
+func (e *ErrClaudeCLISuccessfulResponse) Error() string {
+	return fmt.Sprintf("CLI exited non-zero but response was successful: %s", e.Result)
+}
+
+// IsClaudeCLISuccessfulResponse checks if an error is actually a successful response
+// that was incorrectly flagged due to CLI exit code issues
+func IsClaudeCLISuccessfulResponse(err error) (*ErrClaudeCLISuccessfulResponse, bool) {
+	var successErr *ErrClaudeCLISuccessfulResponse
+	if errors.As(err, &successErr) {
+		return successErr, true
+	}
+	return nil, false
+}

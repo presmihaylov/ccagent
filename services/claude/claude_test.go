@@ -893,6 +893,87 @@ func TestClaudeService_handleClaudeClientError(t *testing.T) {
 	}
 }
 
+// TestClaudeService_handleClaudeClientError_IsErrorFalse tests that when the CLI exits
+// non-zero but the JSON response has is_error=false, we return a special error type
+// that can be detected and treated as success by callers.
+// This handles the Claude CLI bug: https://github.com/anthropics/claude-code-action/issues/846
+func TestClaudeService_handleClaudeClientError_IsErrorFalse(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "claude_test_logs_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	service := NewClaudeService(nil, tmpDir, "", nil, nil)
+
+	tests := []struct {
+		name               string
+		inputError         error
+		operation          string
+		expectSuccessErr   bool
+		expectedResult     string
+		expectedSessionID  string
+		expectedErrContain string
+	}{
+		{
+			name: "CLI exit non-zero but is_error=false should return success error",
+			inputError: &core.ErrClaudeCommandErr{
+				Output: `{"type":"system","subtype":"init","session_id":"sess_123"}
+{"type":"assistant","message":{"id":"msg_123","type":"message","content":[{"type":"text","text":"Les données ANPR sont bien renseignées."}]},"session_id":"sess_123"}
+{"type":"result","subtype":"success","is_error":false,"result":"Les données ANPR sont bien renseignées.","session_id":"sess_123"}`,
+				Err: fmt.Errorf("exit status 1"),
+			},
+			operation:         "failed to start new Claude session",
+			expectSuccessErr:  true,
+			expectedResult:    "Les données ANPR sont bien renseignées.",
+			expectedSessionID: "sess_123",
+		},
+		{
+			name: "CLI exit non-zero with is_error=true should return regular error",
+			inputError: &core.ErrClaudeCommandErr{
+				Output: `{"type":"system","subtype":"init","session_id":"sess_456"}
+{"type":"assistant","message":{"id":"msg_456","type":"message","content":[{"type":"text","text":"Auth failed"}]},"session_id":"sess_456"}
+{"type":"result","subtype":"success","is_error":true,"result":"Your account does not have access.","session_id":"sess_456"}`,
+				Err: fmt.Errorf("exit status 1"),
+			},
+			operation:          "failed to start new Claude session",
+			expectSuccessErr:   false,
+			expectedErrContain: "Your account does not have access.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.handleClaudeClientError(tt.inputError, tt.operation)
+
+			if result == nil {
+				t.Fatal("Expected error result but got nil")
+			}
+
+			if tt.expectSuccessErr {
+				successErr, ok := core.IsClaudeCLISuccessfulResponse(result)
+				if !ok {
+					t.Fatalf("Expected ErrClaudeCLISuccessfulResponse but got: %T - %v", result, result)
+				}
+				if successErr.Result != tt.expectedResult {
+					t.Errorf("Expected result %q, got %q", tt.expectedResult, successErr.Result)
+				}
+				if successErr.SessionID != tt.expectedSessionID {
+					t.Errorf("Expected session ID %q, got %q", tt.expectedSessionID, successErr.SessionID)
+				}
+			} else {
+				_, ok := core.IsClaudeCLISuccessfulResponse(result)
+				if ok {
+					t.Fatal("Did not expect ErrClaudeCLISuccessfulResponse but got one")
+				}
+				if !strings.Contains(result.Error(), tt.expectedErrContain) {
+					t.Errorf("Expected error to contain %q, got: %v", tt.expectedErrContain, result.Error())
+				}
+			}
+		})
+	}
+}
+
 func TestClaudeService_ParseErrorHandling(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "claude_test_logs_*")
 	if err != nil {
