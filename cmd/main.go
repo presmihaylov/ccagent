@@ -15,9 +15,8 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/gammazero/workerpool"
 	"github.com/jessevdk/go-flags"
-	"github.com/zishang520/engine.io-client-go/transports"
-	"github.com/zishang520/engine.io/v2/types"
-	"github.com/zishang520/socket.io-client-go/socket"
+	"github.com/zishang520/socket.io/clients/socket/v3"
+	"github.com/zishang520/socket.io/v3/pkg/types"
 
 	"eksecd/clients"
 	claudeclient "eksecd/clients/claude"
@@ -862,7 +861,7 @@ func (cr *CmdRunner) startSocketIOClient(serverURLStr, apiKey string) error {
 
 	// Set up Socket.IO client options
 	opts := socket.DefaultOptions()
-	opts.SetTransports(types.NewSet(transports.Polling, transports.WebSocket))
+	opts.SetTransports(types.NewSet(socket.Polling, socket.WebSocket))
 
 	// Disable automatic reconnection - handle reconnection externally with backoff
 	opts.SetReconnection(false)

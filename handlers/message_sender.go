@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/zishang520/socket.io-client-go/socket"
+	"github.com/zishang520/socket.io/clients/socket/v3"
 
 	"eksecd/core/log"
 )
