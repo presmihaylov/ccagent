@@ -505,6 +505,56 @@ func TestReclaimOrphanedPoolWorktrees(t *testing.T) {
 	_ = pool.CleanupPool()
 }
 
+func TestCleanupStaleJobWorktrees(t *testing.T) {
+	mainRepo, worktreeBase, cleanup := setupTestGitRepoWithRemote(t)
+	defer cleanup()
+
+	gitClient := clients.NewGitClient()
+	gitClient.SetRepoPathProvider(func() string { return mainRepo })
+
+	// Create a valid job worktree first
+	validJobPath := filepath.Join(worktreeBase, "j_valid123")
+	branchName := "eksecd/test-branch-valid"
+	baseRef := "origin/main"
+	err := gitClient.CreateWorktree(validJobPath, branchName, baseRef)
+	if err != nil {
+		t.Fatalf("Failed to create valid worktree: %v", err)
+	}
+
+	// Create a broken job worktree (directory exists but .git points to non-existent path)
+	brokenJobPath := filepath.Join(worktreeBase, "j_broken456")
+	if err := os.MkdirAll(brokenJobPath, 0755); err != nil {
+		t.Fatalf("Failed to create broken job directory: %v", err)
+	}
+	// Create a .git file pointing to a non-existent gitdir
+	gitFilePath := filepath.Join(brokenJobPath, ".git")
+	if err := os.WriteFile(gitFilePath, []byte("gitdir: /nonexistent/path/.git/worktrees/broken"), 0644); err != nil {
+		t.Fatalf("Failed to create broken .git file: %v", err)
+	}
+
+	// Create pool and run cleanup
+	pool := NewWorktreePool(gitClient, worktreeBase, 3)
+
+	err = pool.CleanupStaleJobWorktrees()
+	if err != nil {
+		t.Fatalf("CleanupStaleJobWorktrees failed: %v", err)
+	}
+
+	// Verify valid worktree still exists
+	if _, err := os.Stat(validJobPath); os.IsNotExist(err) {
+		t.Error("Valid job worktree was incorrectly removed")
+	}
+
+	// Verify broken worktree was removed
+	if _, err := os.Stat(brokenJobPath); !os.IsNotExist(err) {
+		t.Error("Broken job worktree was not removed")
+	}
+
+	// Cleanup
+	_ = gitClient.RemoveWorktree(validJobPath)
+	_ = gitClient.DeleteLocalBranch(branchName)
+}
+
 func TestStartAndStop(t *testing.T) {
 	gitClient := clients.NewGitClient()
 	pool := NewWorktreePool(gitClient, "/tmp/nonexistent", 1)

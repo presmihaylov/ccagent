@@ -542,6 +542,13 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 		// Create context for pool lifecycle
 		cr.poolCtx, cr.poolCancel = context.WithCancel(context.Background())
 
+		// Clean up stale job worktrees with broken git references
+		// This can happen when containers are recreated - old job worktrees remain
+		// but their git links point to non-existent directories
+		if err := worktreePool.CleanupStaleJobWorktrees(); err != nil {
+			log.Warn("⚠️ Failed to clean up stale job worktrees: %v", err)
+		}
+
 		// Reclaim any orphaned pool worktrees from previous crash
 		if err := worktreePool.ReclaimOrphanedPoolWorktrees(); err != nil {
 			log.Warn("⚠️ Failed to reclaim orphaned pool worktrees: %v", err)
