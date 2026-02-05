@@ -1,3 +1,13 @@
+## [v0.0.60] - 2026-02-04
+
+### Bugfixes
+
+- Migrate from deprecated socket.io client libraries to monorepo ([#141](https://github.com/eksecai/eksecd/pull/141))
+  - Fixes critical race condition panic: `sync/atomic: store of inconsistently typed value into Value`
+  - Migrates from `engine.io-client-go@v1.1.0` and `socket.io-client-go@v1.1.0` to unified monorepo packages
+  - The monorepo uses type-safe generic atomic types preventing this class of bugs at compile time
+  - Related issue: https://github.com/zishang520/engine.io-client-go/issues/14
+
 ## [v0.0.59] - 2026-02-04
 
 ### Bugfixes
