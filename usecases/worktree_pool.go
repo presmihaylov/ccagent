@@ -427,6 +427,97 @@ func (p *WorktreePool) CleanupPool() error {
 	return nil
 }
 
+// CleanupStaleJobWorktrees scans the base path for j_* directories (job worktrees)
+// that have broken git references and removes them. This can happen when containers
+// are recreated - the volume preserves old job worktrees but the main repo's
+// .git/worktrees/ directory gets recreated fresh, breaking the git links.
+func (p *WorktreePool) CleanupStaleJobWorktrees() error {
+	log.Info("🔍 Scanning for stale job worktrees with broken git references")
+
+	// Check if worktree directory exists
+	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
+		log.Info("ℹ️ Worktree base directory doesn't exist - nothing to clean up")
+		return nil
+	}
+
+	// List all directories in base path
+	entries, err := os.ReadDir(p.basePath)
+	if err != nil {
+		return fmt.Errorf("failed to read worktree directory: %w", err)
+	}
+
+	removedCount := 0
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		// Only process j_* directories (job worktrees)
+		if !strings.HasPrefix(entry.Name(), "j_") {
+			continue
+		}
+
+		wtPath := filepath.Join(p.basePath, entry.Name())
+
+		// Check if the worktree has a valid git reference
+		// A broken worktree will have a .git file pointing to a non-existent directory
+		gitPath := filepath.Join(wtPath, ".git")
+		gitInfo, err := os.Stat(gitPath)
+		if err != nil {
+			// No .git at all - definitely broken
+			log.Info("🗑️ Removing job worktree with missing .git: %s", wtPath)
+			if err := os.RemoveAll(wtPath); err != nil {
+				log.Warn("⚠️ Failed to remove broken worktree %s: %v", wtPath, err)
+			} else {
+				removedCount++
+			}
+			continue
+		}
+
+		// If .git is a file (not a directory), it's a worktree link
+		// Check if the gitdir it points to exists
+		if !gitInfo.IsDir() {
+			gitContent, err := os.ReadFile(gitPath)
+			if err != nil {
+				log.Warn("⚠️ Failed to read .git file in %s: %v", wtPath, err)
+				continue
+			}
+
+			// Parse "gitdir: /path/to/main/repo/.git/worktrees/xxx"
+			gitdirLine := strings.TrimSpace(string(gitContent))
+			if !strings.HasPrefix(gitdirLine, "gitdir: ") {
+				log.Warn("⚠️ Invalid .git file format in %s", wtPath)
+				continue
+			}
+
+			gitdirPath := strings.TrimPrefix(gitdirLine, "gitdir: ")
+
+			// Check if the referenced gitdir exists
+			if _, err := os.Stat(gitdirPath); os.IsNotExist(err) {
+				log.Info("🗑️ Removing job worktree with broken git reference: %s (points to non-existent: %s)", wtPath, gitdirPath)
+				if err := os.RemoveAll(wtPath); err != nil {
+					log.Warn("⚠️ Failed to remove broken worktree %s: %v", wtPath, err)
+				} else {
+					removedCount++
+				}
+				continue
+			}
+		}
+
+		// Worktree appears valid
+		log.Debug("✅ Job worktree has valid git reference: %s", wtPath)
+	}
+
+	if removedCount > 0 {
+		log.Info("✅ Stale job worktree cleanup: removed %d broken worktrees", removedCount)
+	} else {
+		log.Info("✅ No stale job worktrees found")
+	}
+
+	return nil
+}
+
 // ReclaimOrphanedPoolWorktrees scans the base path for pool-* directories
 // that aren't tracked and either reclaims them to the pool or removes them.
 // This handles crash recovery scenarios.
