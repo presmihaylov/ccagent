@@ -117,13 +117,21 @@ func (p *WorktreePool) Acquire(jobID, branchName string) (string, error) {
 	default:
 	}
 
+	// Fetch latest from origin before staleness check to ensure we have
+	// the most recent commits. Without this fetch, we would compare against
+	// a stale local origin/main ref, missing newly merged PRs on GitHub.
+	if err := p.gitClient.FetchOrigin(); err != nil {
+		log.Warn("⚠️ Failed to fetch from origin before staleness check: %v", err)
+		// Continue anyway - we'll still check staleness against local refs
+	}
+
 	// Check staleness and refresh if needed
 	currentCommit, err := p.getCurrentOriginCommit()
 	if err != nil {
 		log.Warn("⚠️ Failed to get current origin commit for staleness check: %v", err)
 	} else if pooledWT.BaseCommit != currentCommit {
 		log.Info("🔄 Worktree %s is stale, refreshing...", pooledWT.Path)
-		if err := p.refreshWorktree(pooledWT.Path); err != nil {
+		if err := p.refreshWorktreeAfterFetch(pooledWT.Path); err != nil {
 			log.Warn("⚠️ Failed to refresh stale worktree: %v", err)
 			// Continue anyway - it might still work
 		}
@@ -292,13 +300,9 @@ func (p *WorktreePool) replenish() error {
 	return nil
 }
 
-// refreshWorktree resets a worktree to the latest origin/main.
-func (p *WorktreePool) refreshWorktree(wtPath string) error {
-	// Fetch latest
-	if err := p.gitClient.FetchOrigin(); err != nil {
-		return fmt.Errorf("fetch failed: %w", err)
-	}
-
+// refreshWorktreeAfterFetch resets a worktree to the latest origin/main.
+// Use this when the caller has already fetched from origin.
+func (p *WorktreePool) refreshWorktreeAfterFetch(wtPath string) error {
 	// Get default branch
 	defaultBranch, err := p.gitClient.GetDefaultBranch()
 	if err != nil {
@@ -315,6 +319,12 @@ func (p *WorktreePool) refreshWorktree(wtPath string) error {
 
 // refreshStaleWorktrees checks and refreshes any stale worktrees in the pool.
 func (p *WorktreePool) refreshStaleWorktrees() {
+	// Fetch latest from origin first to get up-to-date commit info
+	if err := p.gitClient.FetchOrigin(); err != nil {
+		log.Warn("⚠️ Failed to fetch from origin for periodic staleness check: %v", err)
+		return
+	}
+
 	currentCommit, err := p.getCurrentOriginCommit()
 	if err != nil {
 		log.Warn("⚠️ Failed to get current origin commit for staleness check: %v", err)
@@ -328,7 +338,7 @@ func (p *WorktreePool) refreshStaleWorktrees() {
 	for i := range p.ready {
 		if p.ready[i].BaseCommit != currentCommit {
 			log.Debug("🔄 Refreshing stale worktree: %s", p.ready[i].Path)
-			if err := p.refreshWorktree(p.ready[i].Path); err != nil {
+			if err := p.refreshWorktreeAfterFetch(p.ready[i].Path); err != nil {
 				log.Warn("⚠️ Failed to refresh worktree %s: %v", p.ready[i].Path, err)
 				continue
 			}
