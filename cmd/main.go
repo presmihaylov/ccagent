@@ -515,6 +515,9 @@ func NewCmdRunner(agentType, permissionMode, model, repoPath string) (*CmdRunner
 	)
 	log.Info("🔀 Initialized job dispatcher for per-job message sequencing")
 
+	// Wire up the job evictor so MessageHandler can signal dispatcher to stop failed jobs
+	cr.messageHandler.SetJobEvictor(cr.dispatcher)
+
 	// Initialize worktree pool if concurrency enabled and in repo mode
 	// Note: repoContext is already set above, we just refresh it here
 	repoContext = appState.GetRepositoryContext()

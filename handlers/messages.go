@@ -16,6 +16,13 @@ import (
 	"eksecd/utils"
 )
 
+// JobEvictor is an interface for evicting jobs from the dispatcher.
+// This allows the message handler to signal the dispatcher to stop
+// processing a job when an unrecoverable error occurs.
+type JobEvictor interface {
+	EvictJob(jobID string)
+}
+
 type MessageHandler struct {
 	claudeService   services.CLIAgent
 	gitUseCase      *usecases.GitUseCase
@@ -23,6 +30,7 @@ type MessageHandler struct {
 	envManager      *env.EnvManager
 	messageSender   *MessageSender
 	agentsApiClient *clients.AgentsApiClient
+	jobEvictor      JobEvictor
 }
 
 func NewMessageHandler(
@@ -41,6 +49,12 @@ func NewMessageHandler(
 		messageSender:   messageSender,
 		agentsApiClient: agentsApiClient,
 	}
+}
+
+// SetJobEvictor sets the job evictor for the message handler.
+// This must be called after both the MessageHandler and JobDispatcher are created.
+func (mh *MessageHandler) SetJobEvictor(evictor JobEvictor) {
+	mh.jobEvictor = evictor
 }
 
 // processAttachmentsForPrompt fetches attachments from API and returns file paths and formatted text
@@ -345,6 +359,11 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 			log.Error("❌ Failed to mark job as failed: %v", updateErr)
 		} else {
 			log.Info("💾 Marked job %s as failed due to Claude session error", payload.JobID)
+		}
+
+		// Evict the job from dispatcher to immediately free up the worker slot
+		if mh.jobEvictor != nil {
+			mh.jobEvictor.EvictJob(payload.JobID)
 		}
 
 		return fmt.Errorf("error starting Claude session: %w", err)
@@ -658,6 +677,11 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 			log.Error("❌ Failed to mark job as failed: %v", updateErr)
 		} else {
 			log.Info("💾 Marked job %s as failed due to Claude session error", payload.JobID)
+		}
+
+		// Evict the job from dispatcher to immediately free up the worker slot
+		if mh.jobEvictor != nil {
+			mh.jobEvictor.EvictJob(payload.JobID)
 		}
 
 		return fmt.Errorf("error continuing Claude session: %w", err)

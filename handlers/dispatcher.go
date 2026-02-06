@@ -145,6 +145,15 @@ func (d *JobDispatcher) cleanup(jobID string) {
 	}
 }
 
+// EvictJob forcefully removes a job from the dispatcher, closing its channel
+// and causing the processor goroutine to exit. This should be called when a
+// job encounters an unrecoverable error (e.g., API error) to immediately free
+// up the worker slot instead of waiting for the next message.
+func (d *JobDispatcher) EvictJob(jobID string) {
+	log.Info("🚫 Evicting job %s from dispatcher", jobID)
+	d.cleanup(jobID)
+}
+
 // extractJobID extracts the job ID from a message based on its type
 func (d *JobDispatcher) extractJobID(msg models.BaseMessage) string {
 	switch msg.Type {
