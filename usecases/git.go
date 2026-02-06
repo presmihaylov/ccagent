@@ -1132,7 +1132,15 @@ func (g *GitUseCase) AbandonJobAndCleanup(jobID, branchName string) error {
 
 // GetWorktreeBasePath returns the base path for eksecd worktrees.
 // Worktrees are stored in ~/.eksec_worktrees/
+// If AGENT_EXEC_USER is set (managed mode), worktrees are stored in that user's home
+// directory to ensure they persist on the mounted volume.
 func (g *GitUseCase) GetWorktreeBasePath() (string, error) {
+	// In managed mode, use the agent execution user's home for persistent storage
+	if execUser := os.Getenv("AGENT_EXEC_USER"); execUser != "" {
+		return filepath.Join("/home", execUser, ".eksec_worktrees"), nil
+	}
+
+	// Default: use current user's home directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
