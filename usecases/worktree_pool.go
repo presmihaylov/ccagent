@@ -300,16 +300,6 @@ func (p *WorktreePool) replenish() error {
 	return nil
 }
 
-// refreshWorktree fetches from origin and resets a worktree to the latest origin/main.
-func (p *WorktreePool) refreshWorktree(wtPath string) error {
-	// Fetch latest
-	if err := p.gitClient.FetchOrigin(); err != nil {
-		return fmt.Errorf("fetch failed: %w", err)
-	}
-
-	return p.refreshWorktreeAfterFetch(wtPath)
-}
-
 // refreshWorktreeAfterFetch resets a worktree to the latest origin/main.
 // Use this when the caller has already fetched from origin.
 func (p *WorktreePool) refreshWorktreeAfterFetch(wtPath string) error {
