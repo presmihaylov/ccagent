@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -271,12 +272,12 @@ func (p *ClaudeCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 
 	// Read existing config if it exists
 	var existingConfig map[string]interface{}
-	if content, err := os.ReadFile(claudeConfigPath); err == nil {
+	if content, err := readFileAsTargetUser(claudeConfigPath); err == nil {
 		if err := json.Unmarshal(content, &existingConfig); err != nil {
 			log.Info("⚠️  Failed to parse existing .claude.json, creating new config: %v", err)
 			existingConfig = make(map[string]interface{})
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to read existing .claude.json: %w", err)
 	} else {
 		existingConfig = make(map[string]interface{})
@@ -408,12 +409,12 @@ func (p *OpenCodeMCPProcessor) ProcessMCPConfigs(targetHomeDir string) error {
 
 	// Read existing config if it exists
 	var existingConfig map[string]interface{}
-	if content, err := os.ReadFile(opencodeConfigPath); err == nil {
+	if content, err := readFileAsTargetUser(opencodeConfigPath); err == nil {
 		if err := json.Unmarshal(content, &existingConfig); err != nil {
 			log.Info("⚠️  Failed to parse existing opencode.json, creating new config: %v", err)
 			existingConfig = make(map[string]interface{})
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to read existing opencode.json: %w", err)
 	} else {
 		existingConfig = make(map[string]interface{})

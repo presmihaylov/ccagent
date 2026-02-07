@@ -177,7 +177,7 @@ func ExtractZipToDirectory(zipPath, targetDir string) error {
 		}
 
 		// Create parent directories
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		if err := mkdirAllAsTargetUser(filepath.Dir(fullPath)); err != nil {
 			return fmt.Errorf("failed to create directory for %s: %w", targetPath, err)
 		}
 
@@ -238,7 +238,7 @@ func extractZipFile(file *zip.File, targetPath string) error {
 	}
 
 	// Write to target path
-	if err := os.WriteFile(targetPath, content, 0644); err != nil {
+	if err := writeFileAsTargetUser(targetPath, content, 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
@@ -289,12 +289,12 @@ func (p *ClaudeCodeSkillsProcessor) ProcessSkills(targetHomeDir string) error {
 
 	// Clean up existing skills directory to avoid stale skills
 	log.Info("🎯 Cleaning Claude Code skills directory: %s", claudeSkillsDir)
-	if err := os.RemoveAll(claudeSkillsDir); err != nil && !os.IsNotExist(err) {
+	if err := removeAllAsTargetUser(claudeSkillsDir); err != nil && !os.IsNotExist(err) {
 		log.Info("⚠️  Failed to remove existing skills directory: %v", err)
 	}
 
 	// Create fresh skills directory
-	if err := os.MkdirAll(claudeSkillsDir, 0755); err != nil {
+	if err := mkdirAllAsTargetUser(claudeSkillsDir); err != nil {
 		return fmt.Errorf("failed to create Claude skills directory: %w", err)
 	}
 
@@ -307,7 +307,7 @@ func (p *ClaudeCodeSkillsProcessor) ProcessSkills(targetHomeDir string) error {
 		log.Info("🎯 Extracting skill: %s -> %s", fileName, targetSkillDir)
 
 		// Create skill directory
-		if err := os.MkdirAll(targetSkillDir, 0755); err != nil {
+		if err := mkdirAllAsTargetUser(targetSkillDir); err != nil {
 			log.Info("⚠️  Failed to create skill directory %s: %v", targetSkillDir, err)
 			continue
 		}
@@ -373,7 +373,7 @@ func (p *OpenCodeSkillsProcessor) ProcessSkills(targetHomeDir string) error {
 
 	// Clean up existing skills directory to avoid stale skills
 	log.Info("🎯 Cleaning OpenCode skills directory: %s", opencodeSkillsDir)
-	if err := os.RemoveAll(opencodeSkillsDir); err != nil && !os.IsNotExist(err) {
+	if err := removeAllAsTargetUser(opencodeSkillsDir); err != nil && !os.IsNotExist(err) {
 		log.Info("⚠️  Failed to remove existing skills directory: %v", err)
 	}
 
