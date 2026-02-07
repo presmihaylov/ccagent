@@ -1,3 +1,18 @@
+## [v0.0.65] - 2026-02-07
+
+### Changes
+
+- Remove all token refresh logic from ccagent ([#147](https://github.com/eksecai/eksecd/pull/147))
+  - Backend is now the sole OAuth token refresh authority
+  - Removes `RefreshToken()` API client method, `startTokenMonitoringRoutine()`, `handleRefreshToken()` handler
+  - Removes `MessageTypeRefreshToken` constant and `RefreshTokenPayload`
+  - Renames `FetchAndRefreshAgentTokens()` to `FetchAndSetAgentToken()` then removes it as dead code
+  - Eliminates race condition where multiple components independently refreshed tokens
+
+### Bugfixes
+
+- Fix permission bug causing container crash loops ([#148](https://github.com/eksecai/eksecd/pull/148))
+
 ## [v0.0.60] - 2026-02-04
 
 ### Bugfixes
