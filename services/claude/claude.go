@@ -546,35 +546,3 @@ func (c *ClaudeService) AgentName() string {
 	return "claude"
 }
 
-// FetchAndSetAgentToken fetches the current token and sets it in the environment
-// This should be called before starting or continuing conversations
-func (c *ClaudeService) FetchAndSetAgentToken() error {
-	if c.agentsApiClient == nil {
-		log.Debug("No agents API client configured, skipping token fetch")
-		return nil
-	}
-	if c.agentsApiClient.IsSelfHosted() {
-		log.Info("🏠 Self-hosted installation detected, skipping token fetch")
-		return nil
-	}
-	if clients.AgentHTTPProxy() != "" {
-		log.Info("🔒 Secret proxy mode detected, skipping token fetch (proxy handles secrets)")
-		return nil
-	}
-
-	log.Info("🔑 Fetching Anthropic token before Claude operation")
-	tokenResp, err := c.agentsApiClient.FetchToken()
-	if err != nil {
-		log.Error("❌ Failed to fetch token: %v", err)
-		return fmt.Errorf("failed to fetch token: %w", err)
-	}
-
-	if err := c.envManager.Set(tokenResp.EnvKey, tokenResp.Token); err != nil {
-		log.Error("❌ Failed to update environment variable %s: %v", tokenResp.EnvKey, err)
-		return fmt.Errorf("failed to update environment variable %s: %w", tokenResp.EnvKey, err)
-	}
-	log.Info("✅ Successfully set token in environment (env key: %s, expires: %s)",
-		tokenResp.EnvKey, tokenResp.ExpiresAt.Format(time.RFC3339))
-
-	return nil
-}

@@ -254,12 +254,6 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 	}
 	log.Info("🔄 Refreshed environment variables before starting conversation")
 
-	// Fetch and set agent token before starting conversation
-	if err := mh.claudeService.FetchAndSetAgentToken(); err != nil {
-		log.Error("❌ Failed to fetch and set agent token: %v", err)
-		return fmt.Errorf("failed to fetch and set agent token: %w", err)
-	}
-
 	// Persist job state with message BEFORE calling Claude
 	// This enables crash recovery and future reprocessing
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
@@ -578,12 +572,6 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 		return fmt.Errorf("failed to refresh environment variables: %w", err)
 	}
 	log.Info("🔄 Refreshed environment variables before continuing conversation")
-
-	// Fetch and set agent token before continuing conversation
-	if err := mh.claudeService.FetchAndSetAgentToken(); err != nil {
-		log.Error("❌ Failed to fetch and set agent token: %v", err)
-		return fmt.Errorf("failed to fetch and set agent token: %w", err)
-	}
 
 	// Persist updated message BEFORE calling Claude
 	// This enables crash recovery and future reprocessing

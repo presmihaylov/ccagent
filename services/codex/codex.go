@@ -299,8 +299,3 @@ func (c *CodexService) AgentName() string {
 	return "codex"
 }
 
-// FetchAndSetAgentToken is a no-op for Codex since it doesn't require Anthropic token management
-func (c *CodexService) FetchAndSetAgentToken() error {
-	// Codex doesn't require Anthropic token management, so this is a no-op
-	return nil
-}

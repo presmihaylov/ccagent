@@ -35,8 +35,4 @@ type CLIAgent interface {
 	// AgentName returns the identifier for the concrete agent implementation
 	// (e.g., "claude" or "cursor") so callers can adapt behavior per agent
 	AgentName() string
-
-	// FetchAndSetAgentToken fetches the current agent token and sets it in the environment
-	// This should be called before starting or continuing conversations
-	FetchAndSetAgentToken() error
 }

@@ -600,13 +600,3 @@ func TestCodexService_AgentName(t *testing.T) {
 	}
 }
 
-func TestCodexService_FetchAndSetAgentToken(t *testing.T) {
-	mockClient := &services.MockCodexClient{}
-	service := NewCodexService(mockClient, "/tmp", "")
-
-	// This is a no-op for Codex, should never return an error
-	err := service.FetchAndSetAgentToken()
-	if err != nil {
-		t.Errorf("Expected no error from FetchAndSetAgentToken, but got: %v", err)
-	}
-}

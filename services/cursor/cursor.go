@@ -296,8 +296,3 @@ func (c *CursorService) AgentName() string {
 	return "cursor"
 }
 
-// FetchAndSetAgentToken is a no-op for Cursor since it doesn't require token management
-func (c *CursorService) FetchAndSetAgentToken() error {
-	// Cursor doesn't require token management, so this is a no-op
-	return nil
-}
