@@ -608,13 +608,3 @@ func TestOpenCodeService_AgentName(t *testing.T) {
 	}
 }
 
-func TestOpenCodeService_FetchAndRefreshAgentTokens(t *testing.T) {
-	mockClient := &services.MockOpenCodeClient{}
-	service := NewOpenCodeService(mockClient, "/tmp", "")
-
-	// This is a no-op for OpenCode, should never return an error
-	err := service.FetchAndRefreshAgentTokens()
-	if err != nil {
-		t.Errorf("Expected no error from FetchAndRefreshAgentTokens, but got: %v", err)
-	}
-}

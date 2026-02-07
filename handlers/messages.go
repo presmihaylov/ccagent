@@ -209,10 +209,6 @@ func (mh *MessageHandler) HandleMessage(msg models.BaseMessage) {
 		if err := mh.handleCheckIdleJobs(msg); err != nil {
 			log.Info("❌ Error handling CheckIdleJobs message: %v", err)
 		}
-	case models.MessageTypeRefreshToken:
-		if err := mh.handleRefreshToken(msg); err != nil {
-			log.Error("❌ Error handling RefreshToken message: %v", err)
-		}
 	default:
 		log.Info("⚠️ Unhandled message type: %s", msg.Type)
 	}
@@ -257,12 +253,6 @@ func (mh *MessageHandler) handleStartConversation(msg models.BaseMessage) error 
 		return fmt.Errorf("failed to refresh environment variables: %w", err)
 	}
 	log.Info("🔄 Refreshed environment variables before starting conversation")
-
-	// Fetch and refresh agent tokens before starting conversation
-	if err := mh.claudeService.FetchAndRefreshAgentTokens(); err != nil {
-		log.Error("❌ Failed to fetch and refresh agent tokens: %v", err)
-		return fmt.Errorf("failed to fetch and refresh agent tokens: %w", err)
-	}
 
 	// Persist job state with message BEFORE calling Claude
 	// This enables crash recovery and future reprocessing
@@ -583,12 +573,6 @@ func (mh *MessageHandler) handleUserMessage(msg models.BaseMessage) error {
 	}
 	log.Info("🔄 Refreshed environment variables before continuing conversation")
 
-	// Fetch and refresh agent tokens before continuing conversation
-	if err := mh.claudeService.FetchAndRefreshAgentTokens(); err != nil {
-		log.Error("❌ Failed to fetch and refresh agent tokens: %v", err)
-		return fmt.Errorf("failed to fetch and refresh agent tokens: %w", err)
-	}
-
 	// Persist updated message BEFORE calling Claude
 	// This enables crash recovery and future reprocessing
 	if err := mh.appState.UpdateJobData(payload.JobID, models.JobData{
@@ -808,62 +792,6 @@ func (mh *MessageHandler) handleCheckIdleJobs(msg models.BaseMessage) error {
 	}
 
 	log.Info("📋 Completed successfully - checked all jobs for idleness")
-	return nil
-}
-
-func (mh *MessageHandler) handleRefreshToken(msg models.BaseMessage) error {
-	// Skip token operations for self-hosted installations
-	if mh.agentsApiClient.IsSelfHosted() {
-		log.Info("🏠 Self-hosted installation detected, skipping token refresh")
-		return nil
-	}
-
-	// Skip token operations when running with secret proxy (managed container mode)
-	// In this mode, the secret proxy handles token fetching and injection via HTTP MITM.
-	if clients.AgentHTTPProxy() != "" {
-		log.Info("🔒 Secret proxy mode detected, skipping token refresh (proxy handles secrets)")
-		return nil
-	}
-
-	log.Info("🔄 Starting to handle token refresh")
-
-	// Fetch current token to check expiration
-	tokenResp, err := mh.agentsApiClient.FetchToken()
-	if err != nil {
-		log.Error("❌ Failed to fetch current token: %v", err)
-		return fmt.Errorf("failed to fetch current token: %w", err)
-	}
-
-	// Check if token expires within 1 hour
-	now := time.Now()
-	expiresIn := tokenResp.ExpiresAt.Sub(now)
-	oneHour := 1 * time.Hour
-
-	log.Info("🔍 Token expires in %v (expires at: %s)", expiresIn, tokenResp.ExpiresAt.Format(time.RFC3339))
-
-	if expiresIn > oneHour {
-		log.Info("✅ Token does not need refresh yet (expires in %v)", expiresIn)
-		return nil
-	}
-
-	log.Info("🔄 Token expires within 1 hour, refreshing...")
-
-	// Refresh the token
-	newTokenResp, err := mh.agentsApiClient.RefreshToken()
-	if err != nil {
-		log.Error("❌ Failed to refresh token: %v", err)
-		return fmt.Errorf("failed to refresh token: %w", err)
-	}
-
-	// Update environment variable with new token
-	if err := mh.envManager.Set(newTokenResp.EnvKey, newTokenResp.Token); err != nil {
-		log.Error("❌ Failed to update environment variable %s: %v", newTokenResp.EnvKey, err)
-		return fmt.Errorf("failed to update environment variable %s: %w", newTokenResp.EnvKey, err)
-	}
-
-	log.Info("✅ Successfully refreshed token (env key: %s, new expiration: %s)",
-		newTokenResp.EnvKey, newTokenResp.ExpiresAt.Format(time.RFC3339))
-
 	return nil
 }
 
