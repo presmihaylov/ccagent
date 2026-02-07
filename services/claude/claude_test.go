@@ -837,6 +837,8 @@ func TestClaudeService_handleClaudeClientError(t *testing.T) {
 		inputError      error
 		operation       string
 		expectedContain string
+		expectSuccess   bool
+		expectedResult  string
 	}{
 		{
 			name:            "nil error",
@@ -851,13 +853,14 @@ func TestClaudeService_handleClaudeClientError(t *testing.T) {
 			expectedContain: "test operation: regular error",
 		},
 		{
-			name: "claude command error with valid output",
+			name: "claude command error with valid output and no result event recovers as success",
 			inputError: &core.ErrClaudeCommandErr{
 				Output: `{"type":"assistant","message":{"id":"msg_123","type":"message","content":[{"type":"text","text":"Claude error message"}]},"session_id":"session_123"}`,
 				Err:    fmt.Errorf("command failed"),
 			},
-			operation:       "test operation",
-			expectedContain: "test operation: Claude error message",
+			operation:      "test operation",
+			expectSuccess:  true,
+			expectedResult: "Claude error message",
 		},
 		{
 			name: "claude command error with invalid output",
@@ -886,7 +889,18 @@ func TestClaudeService_handleClaudeClientError(t *testing.T) {
 				return
 			}
 
-			if !strings.Contains(result.Error(), tt.expectedContain) {
+			if tt.expectSuccess {
+				successErr, ok := core.IsClaudeCLISuccessfulResponse(result)
+				if !ok {
+					t.Fatalf(
+						"Expected ErrClaudeCLISuccessfulResponse but got: %T - %v",
+						result, result,
+					)
+				}
+				if successErr.Result != tt.expectedResult {
+					t.Errorf("Expected result %q, got %q", tt.expectedResult, successErr.Result)
+				}
+			} else if !strings.Contains(result.Error(), tt.expectedContain) {
 				t.Errorf("Expected error to contain %q, got: %v", tt.expectedContain, result.Error())
 			}
 		})
@@ -971,6 +985,183 @@ func TestClaudeService_handleClaudeClientError_IsErrorFalse(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestClaudeService_handleClaudeClientError_NoResultEvent tests recovery when the CLI
+// crashes mid-stream before emitting the final result JSON event.
+func TestClaudeService_handleClaudeClientError_NoResultEvent(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "claude_test_logs_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	service := NewClaudeService(nil, tmpDir, "", nil, nil)
+
+	tests := []struct {
+		name              string
+		inputError        error
+		operation         string
+		expectSuccessErr  bool
+		expectedResult    string
+		expectedSessionID string
+	}{
+		{
+			name: "CLI crash with valid assistant message and no result event",
+			inputError: &core.ErrClaudeCommandErr{
+				Output: `{"type":"system","subtype":"init","session_id":"sess_abc"}
+{"type":"assistant","message":{"id":"msg_001","type":"message","content":[{"type":"text","text":"I found 3 issues in the codebase that need fixing."}],"stop_reason":"end_turn"},"session_id":"sess_abc"}`,
+				Err: fmt.Errorf("exit status 1"),
+			},
+			operation:         "failed to continue Claude session",
+			expectSuccessErr:  true,
+			expectedResult:    "I found 3 issues in the codebase that need fixing.",
+			expectedSessionID: "sess_abc",
+		},
+		{
+			name: "CLI crash with multiple assistant messages and no result event",
+			inputError: &core.ErrClaudeCommandErr{
+				Output: `{"type":"system","subtype":"init","session_id":"sess_multi"}
+{"type":"user","message":{"role":"user","content":"Analyze the code"},"session_id":"sess_multi"}
+{"type":"assistant","message":{"id":"msg_010","type":"message","content":[{"type":"text","text":"Let me analyze the code structure."}],"stop_reason":"tool_use"},"session_id":"sess_multi"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"file contents here"}]},"session_id":"sess_multi"}
+{"type":"assistant","message":{"id":"msg_011","type":"message","content":[{"type":"text","text":"The code has a clean architecture."}],"stop_reason":"end_turn"},"session_id":"sess_multi"}`,
+				Err: fmt.Errorf("exit status 1"),
+			},
+			operation:         "failed to continue Claude session",
+			expectSuccessErr:  true,
+			expectedResult:    "The code has a clean architecture.",
+			expectedSessionID: "sess_multi",
+		},
+		{
+			name: "CLI crash with no assistant messages should not recover",
+			inputError: &core.ErrClaudeCommandErr{
+				Output: `{"type":"system","subtype":"init","session_id":"sess_empty"}`,
+				Err:    fmt.Errorf("exit status 1"),
+			},
+			operation:        "failed to continue Claude session",
+			expectSuccessErr: false,
+		},
+		{
+			name: "CLI crash with tool_use only should not recover",
+			inputError: &core.ErrClaudeCommandErr{
+				Output: `{"type":"system","subtype":"init","session_id":"sess_toolonly"}
+{"type":"assistant","message":{"id":"msg_020","type":"message","content":[{"type":"tool_use","id":"tu_1","name":"Read","input":{"file_path":"/tmp/test.go"}}],"stop_reason":"tool_use"},"session_id":"sess_toolonly"}`,
+				Err: fmt.Errorf("exit status 1"),
+			},
+			operation:        "failed to continue Claude session",
+			expectSuccessErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.handleClaudeClientError(tt.inputError, tt.operation)
+			if result == nil {
+				t.Fatal("Expected error result but got nil")
+			}
+			if tt.expectSuccessErr {
+				successErr, ok := core.IsClaudeCLISuccessfulResponse(result)
+				if !ok {
+					t.Fatalf(
+						"Expected ErrClaudeCLISuccessfulResponse but got: %T - %v",
+						result, result,
+					)
+				}
+				if successErr.Result != tt.expectedResult {
+					t.Errorf("Expected result %q, got %q", tt.expectedResult, successErr.Result)
+				}
+				if successErr.SessionID != tt.expectedSessionID {
+					t.Errorf("Expected session ID %q, got %q", tt.expectedSessionID, successErr.SessionID)
+				}
+			} else {
+				_, ok := core.IsClaudeCLISuccessfulResponse(result)
+				if ok {
+					t.Fatal("Did not expect ErrClaudeCLISuccessfulResponse")
+				}
+			}
+		})
+	}
+}
+
+// TestClaudeService_ContinueConversation_RecoverFromCLICrash tests e2e recovery.
+func TestClaudeService_ContinueConversation_RecoverFromCLICrash(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "claude_test_logs_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cliOutput := `{"type":"system","subtype":"init","session_id":"sess_crash"}
+{"type":"assistant","message":{"id":"msg_100","type":"message","content":[{"type":"text","text":"Examining the codebase now."}],"stop_reason":"tool_use"},"session_id":"sess_crash"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"src/main.go contents"}]},"session_id":"sess_crash"}
+{"type":"assistant","message":{"id":"msg_101","type":"message","content":[{"type":"text","text":"I identified and fixed the bug."}],"stop_reason":"end_turn"},"session_id":"sess_crash"}`
+
+	mockClient := &services.MockClaudeClient{
+		ContinueSessionFunc: func(
+			sessionID, prompt string, options *clients.ClaudeOptions,
+		) (string, error) {
+			return cliOutput, &core.ErrClaudeCommandErr{
+				Err:    fmt.Errorf("exit status 1"),
+				Output: cliOutput,
+			}
+		},
+	}
+
+	service := NewClaudeService(mockClient, tmpDir, "", nil, nil)
+	result, err := service.ContinueConversation("sess_crash", "fix the bug")
+	if err != nil {
+		t.Fatalf("Expected successful recovery but got error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Expected result but got nil")
+	}
+	if result.SessionID != "sess_crash" {
+		t.Errorf("Expected session ID %q, got %q", "sess_crash", result.SessionID)
+	}
+	expected := "I identified and fixed the bug."
+	if result.Output != expected {
+		t.Errorf("Expected output %q, got %q", expected, result.Output)
+	}
+}
+
+// TestClaudeService_StartNewConversation_RecoverFromCLICrash tests the same for start.
+func TestClaudeService_StartNewConversation_RecoverFromCLICrash(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "claude_test_logs_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cliOutput := `{"type":"system","subtype":"init","session_id":"sess_new_crash"}
+{"type":"assistant","message":{"id":"msg_200","type":"message","content":[{"type":"text","text":"Project configured successfully."}],"stop_reason":"end_turn"},"session_id":"sess_new_crash"}`
+
+	mockClient := &services.MockClaudeClient{
+		StartNewSessionFunc: func(
+			prompt string, options *clients.ClaudeOptions,
+		) (string, error) {
+			return cliOutput, &core.ErrClaudeCommandErr{
+				Err:    fmt.Errorf("exit status 1"),
+				Output: cliOutput,
+			}
+		},
+	}
+
+	service := NewClaudeService(mockClient, tmpDir, "", nil, nil)
+	result, err := service.StartNewConversation("set up the project")
+	if err != nil {
+		t.Fatalf("Expected successful recovery but got error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Expected result but got nil")
+	}
+	if result.SessionID != "sess_new_crash" {
+		t.Errorf("Expected session ID %q, got %q", "sess_new_crash", result.SessionID)
+	}
+	expected := "Project configured successfully."
+	if result.Output != expected {
+		t.Errorf("Expected output %q, got %q", expected, result.Output)
 	}
 }
 

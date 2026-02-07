@@ -496,6 +496,33 @@ func (c *ClaudeService) handleClaudeClientError(err error, operation string) err
 		}
 	}
 
+	// Check if CLI crashed mid-stream before emitting a result event.
+	// The CLI may have produced valid assistant messages but crashed/died
+	// before writing the final {"type":"result",...} JSON event.
+	// In this case, we should recover the valid response instead of failing.
+	hasResultMessage := false
+	for _, msg := range messages {
+		if _, ok := msg.(services.ResultMessage); ok {
+			hasResultMessage = true
+			break
+		}
+	}
+
+	if !hasResultMessage {
+		output, extractErr := c.extractClaudeResult(messages)
+		if extractErr == nil && output != "" && output != "(agent returned no response)" {
+			log.Info(
+				"⚠️ CLI exited non-zero with no result event, "+
+					"recovering assistant response. Session: %s",
+				sessionID,
+			)
+			return &core.ErrClaudeCLISuccessfulResponse{
+				Result:    output,
+				SessionID: sessionID,
+			}
+		}
+	}
+
 	// First priority: Try to extract ExitPlanMode message (highest priority)
 	for i := len(messages) - 1; i >= 0; i-- {
 		if exitPlanMsg, ok := messages[i].(services.ExitPlanModeMessage); ok {
@@ -545,4 +572,3 @@ func (c *ClaudeService) handleClaudeClientError(err error, operation string) err
 func (c *ClaudeService) AgentName() string {
 	return "claude"
 }
-
