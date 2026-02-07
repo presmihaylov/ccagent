@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -81,6 +80,59 @@ func ParseFrontMatter(filePath string) (*RuleFrontMatter, error) {
 	}
 
 	return frontMatter, nil
+}
+
+// ReadRuleBody reads a rule file and returns its title, description, and body
+// content with front matter stripped. If the file has front matter with a title,
+// that title is returned. Otherwise, the title is derived from the filename
+// (e.g. "code-style.md" becomes "code-style"). The description is extracted
+// from front matter if present, otherwise it defaults to an empty string.
+func ReadRuleBody(filePath string) (title string, description string, body string, err error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read rule file: %w", err)
+	}
+
+	text := string(content)
+
+	// Default title from filename without extension
+	title = strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+
+	// Check for front matter
+	if strings.HasPrefix(text, "---\n") {
+		// Find the closing delimiter
+		endIdx := strings.Index(text[4:], "\n---\n")
+		if endIdx != -1 {
+			frontMatterBlock := text[4 : 4+endIdx]
+
+			// Extract title and description from front matter
+			for _, line := range strings.Split(frontMatterBlock, "\n") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					key := strings.ToLower(strings.TrimSpace(parts[0]))
+					value := strings.TrimSpace(parts[1])
+					switch key {
+					case "title":
+						if value != "" {
+							title = value
+						}
+					case "description":
+						description = value
+					}
+				}
+			}
+
+			// Body is everything after the closing ---
+			body = strings.TrimLeft(text[4+endIdx+4:], "\n")
+		} else {
+			// No closing delimiter found, treat entire content as body
+			body = text
+		}
+	} else {
+		body = text
+	}
+
+	return title, description, body, nil
 }
 
 // GetCcagentRulesDir returns the path to the eksecd rules directory
@@ -239,11 +291,6 @@ type OpenCodeRulesProcessor struct {
 	workDir string
 }
 
-// OpenCodeConfig represents the opencode.json configuration structure
-type OpenCodeConfig struct {
-	Instructions []string `json:"instructions"`
-}
-
 // NewOpenCodeRulesProcessor creates a new OpenCode rules processor
 func NewOpenCodeRulesProcessor(workDir string) *OpenCodeRulesProcessor {
 	return &OpenCodeRulesProcessor{
@@ -252,9 +299,9 @@ func NewOpenCodeRulesProcessor(workDir string) *OpenCodeRulesProcessor {
 }
 
 // ProcessRules implements RulesProcessor for OpenCode
-// It creates an opencode.json with an instructions array that references the eksecd
-// rules directory directly using a glob pattern. OpenCode will load rules from there
-// without needing to copy files.
+// It builds a single AGENTS.md file at ~/.config/opencode/AGENTS.md containing
+// all rules inlined under a "Rules" section with title, description, and body
+// for each rule. OpenCode natively reads AGENTS.md from the global config directory.
 // targetHomeDir specifies the home directory to deploy config to.
 // If empty, uses the current user's home directory.
 func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
@@ -283,7 +330,7 @@ func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 		}
 	}
 
-	log.Info("📋 Deploying OpenCode config to home directory: %s", homeDir)
+	log.Info("📋 Deploying OpenCode AGENTS.md to home directory: %s", homeDir)
 
 	opencodeConfigDir := filepath.Join(homeDir, ".config", "opencode")
 
@@ -292,29 +339,45 @@ func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 		return fmt.Errorf("failed to create OpenCode config directory: %w", err)
 	}
 
-	// Generate opencode.json with instructions pointing to the eksecd rules directory
-	// Using glob pattern with ~ prefix which OpenCode expands to home directory
-	opencodeConfigPath := filepath.Join(opencodeConfigDir, "opencode.json")
+	// Build AGENTS.md content from all rule files
+	var sb strings.Builder
+	sb.WriteString("# Rules\n\n")
+	sb.WriteString("The following is a list of rules that you need to strictly follow when they are relevant to your task.\n")
 
-	config := OpenCodeConfig{
-		Instructions: []string{"~/.config/eksecd/rules/*.md"},
+	for _, ruleFile := range ruleFiles {
+		title, description, body, err := ReadRuleBody(ruleFile)
+		if err != nil {
+			return fmt.Errorf("failed to read rule file %s: %w", ruleFile, err)
+		}
+
+		sb.WriteString("\n## ")
+		sb.WriteString(title)
+		sb.WriteString("\n\n")
+		if description != "" {
+			sb.WriteString(description)
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(body)
+		sb.WriteString("\n")
 	}
 
-	configJSON, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal opencode.json: %w", err)
-	}
+	agentsMdPath := filepath.Join(opencodeConfigDir, "AGENTS.md")
+	log.Info("📋 Creating AGENTS.md at: %s", agentsMdPath)
 
-	log.Info("📋 Creating opencode.json at: %s", opencodeConfigPath)
-
-	if err := writeFileAsTargetUser(opencodeConfigPath, configJSON, 0644); err != nil {
-		return fmt.Errorf("failed to write opencode.json: %w", err)
+	if err := writeFileAsTargetUser(agentsMdPath, []byte(sb.String()), 0644); err != nil {
+		return fmt.Errorf("failed to write AGENTS.md: %w", err)
 	}
 
 	// Clean up old OpenCode rules directory if it exists (from previous approach)
 	oldOpencodeRulesDir := filepath.Join(opencodeConfigDir, "rules")
 	if err := removeAllAsTargetUser(oldOpencodeRulesDir); err != nil && !os.IsNotExist(err) {
 		log.Info("⚠️  Failed to remove old OpenCode rules directory: %v", err)
+	}
+
+	// Clean up old opencode.json if it exists (from previous approach)
+	oldOpencodeJsonPath := filepath.Join(opencodeConfigDir, "opencode.json")
+	if err := removeAllAsTargetUser(oldOpencodeJsonPath); err != nil && !os.IsNotExist(err) {
+		log.Info("⚠️  Failed to remove old opencode.json: %v", err)
 	}
 
 	log.Info("✅ Successfully processed %d rule(s) for OpenCode", len(ruleFiles))
