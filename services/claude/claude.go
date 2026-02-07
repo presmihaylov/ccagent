@@ -546,78 +546,35 @@ func (c *ClaudeService) AgentName() string {
 	return "claude"
 }
 
-// FetchAndRefreshAgentTokens fetches the current token and refreshes it if needed
+// FetchAndSetAgentToken fetches the current token and sets it in the environment
 // This should be called before starting or continuing conversations
-func (c *ClaudeService) FetchAndRefreshAgentTokens() error {
-	// Skip if no API client configured (for backward compatibility)
+func (c *ClaudeService) FetchAndSetAgentToken() error {
 	if c.agentsApiClient == nil {
-		log.Debug("No agents API client configured, skipping token refresh")
+		log.Debug("No agents API client configured, skipping token fetch")
 		return nil
 	}
-
-	// Skip token operations for self-hosted installations
 	if c.agentsApiClient.IsSelfHosted() {
-		log.Info("🏠 Self-hosted installation detected, skipping token refresh")
+		log.Info("🏠 Self-hosted installation detected, skipping token fetch")
 		return nil
 	}
-
-	// Skip token operations when running with secret proxy (managed container mode)
-	// In this mode, the secret proxy handles token fetching and injection via HTTP MITM.
-	// The eksecd container only has placeholder env vars (e.g., ANTHROPIC_API_KEY=CCASECRET_ANTHROPIC_API_KEY)
-	// and the proxy replaces these with real values at the network layer.
 	if clients.AgentHTTPProxy() != "" {
-		log.Info("🔒 Secret proxy mode detected, skipping token refresh (proxy handles secrets)")
+		log.Info("🔒 Secret proxy mode detected, skipping token fetch (proxy handles secrets)")
 		return nil
 	}
 
-	log.Info("🔄 Fetching Anthropic token before Claude operation")
-
-	// Fetch current token to check expiration
+	log.Info("🔑 Fetching Anthropic token before Claude operation")
 	tokenResp, err := c.agentsApiClient.FetchToken()
 	if err != nil {
-		log.Error("❌ Failed to fetch current token: %v", err)
-		return fmt.Errorf("failed to fetch current token: %w", err)
+		log.Error("❌ Failed to fetch token: %v", err)
+		return fmt.Errorf("failed to fetch token: %w", err)
 	}
 
-	// Check if token expires within 1 hour
-	now := time.Now()
-	expiresIn := tokenResp.ExpiresAt.Sub(now)
-	oneHour := 1 * time.Hour
-
-	log.Info("🔍 Token expires in %v (expires at: %s)", expiresIn, tokenResp.ExpiresAt.Format(time.RFC3339))
-
-	var finalToken, finalEnvKey string
-	var finalExpiresAt time.Time
-
-	if expiresIn > oneHour {
-		log.Info("✅ Token does not need refresh yet (expires in %v)", expiresIn)
-		// Use existing token but still set it in environment (might have been updated elsewhere)
-		finalToken = tokenResp.Token
-		finalEnvKey = tokenResp.EnvKey
-		finalExpiresAt = tokenResp.ExpiresAt
-	} else {
-		log.Info("🔄 Token expires within 1 hour, refreshing...")
-
-		// Refresh the token
-		newTokenResp, err := c.agentsApiClient.RefreshToken()
-		if err != nil {
-			log.Error("❌ Failed to refresh token: %v", err)
-			return fmt.Errorf("failed to refresh token: %w", err)
-		}
-
-		finalToken = newTokenResp.Token
-		finalEnvKey = newTokenResp.EnvKey
-		finalExpiresAt = newTokenResp.ExpiresAt
+	if err := c.envManager.Set(tokenResp.EnvKey, tokenResp.Token); err != nil {
+		log.Error("❌ Failed to update environment variable %s: %v", tokenResp.EnvKey, err)
+		return fmt.Errorf("failed to update environment variable %s: %w", tokenResp.EnvKey, err)
 	}
-
-	// Always update environment variable with token (whether refreshed or not)
-	// This ensures the environment is in sync even if token was updated independently
-	if err := c.envManager.Set(finalEnvKey, finalToken); err != nil {
-		log.Error("❌ Failed to update environment variable %s: %v", finalEnvKey, err)
-		return fmt.Errorf("failed to update environment variable %s: %w", finalEnvKey, err)
-	}
-	log.Info("✅ Successfully set token in environment (env key: %s, expiration: %s)",
-		finalEnvKey, finalExpiresAt.Format(time.RFC3339))
+	log.Info("✅ Successfully set token in environment (env key: %s, expires: %s)",
+		tokenResp.EnvKey, tokenResp.ExpiresAt.Format(time.RFC3339))
 
 	return nil
 }

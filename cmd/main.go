@@ -768,11 +768,6 @@ func main() {
 	log.Info("🌐 WebSocket URL: %s", cmdRunner.wsURL)
 	log.Info("🔑 Agent ID: %s", cmdRunner.agentID)
 
-	// Start token monitoring routine independently (runs for app lifetime)
-	tokenCtx, tokenCancel := context.WithCancel(context.Background())
-	defer tokenCancel()
-	cmdRunner.startTokenMonitoringRoutine(tokenCtx, cmdRunner.blockingWorkerPool)
-
 	// Start periodic cleanup routine (runs every 10 minutes) - only in repo mode
 	if repoCtx.IsRepoMode {
 		cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
@@ -1091,39 +1086,6 @@ func (cr *CmdRunner) startPingRoutine(ctx context.Context, socketClient *socket.
 					}
 					return
 				}
-			}
-		}
-	}()
-}
-
-func (cr *CmdRunner) startTokenMonitoringRoutine(ctx context.Context, blockingWorkerPool *workerpool.WorkerPool) {
-	// Skip token monitoring for self-hosted installations
-	if cr.agentsApiClient.IsSelfHosted() {
-		log.Info("🏠 Self-hosted installation detected, skipping token monitoring routine")
-		return
-	}
-
-	log.Info("🔑 Starting token monitoring routine (checks every 10 minutes)")
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				log.Info("🔑 Token monitoring routine stopped")
-				return
-			case <-ticker.C:
-				log.Info("🔍 Checking token expiration...")
-				// Schedule token refresh check on blocking queue
-				// This ensures it runs sequentially with other conversation messages
-				blockingWorkerPool.Submit(func() {
-					refreshMsg := models.BaseMessage{
-						ID:      core.NewID("msg"),
-						Type:    models.MessageTypeRefreshToken,
-						Payload: models.RefreshTokenPayload{},
-					}
-					cr.messageHandler.HandleMessage(refreshMsg)
-				})
 			}
 		}
 	}()

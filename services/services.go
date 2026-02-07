@@ -36,7 +36,7 @@ type CLIAgent interface {
 	// (e.g., "claude" or "cursor") so callers can adapt behavior per agent
 	AgentName() string
 
-	// FetchAndRefreshAgentTokens fetches and refreshes agent tokens if needed
+	// FetchAndSetAgentToken fetches the current agent token and sets it in the environment
 	// This should be called before starting or continuing conversations
-	FetchAndRefreshAgentTokens() error
+	FetchAndSetAgentToken() error
 }
