@@ -1,9 +1,9 @@
 package utils
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -129,6 +129,108 @@ Description: Use this guide
 
 	if frontMatter.Description != "Use this guide" {
 		t.Errorf("Expected description, got: %s", frontMatter.Description)
+	}
+}
+
+// Test ReadRuleBody
+
+func TestReadRuleBody_WithFrontMatter(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "code-style.md")
+
+	content := `---
+title: Code Style Guidelines
+description: Use this to learn coding standards
+---
+
+# Code Style
+Follow these guidelines.`
+
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	title, description, body, err := ReadRuleBody(testFile)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if title != "Code Style Guidelines" {
+		t.Errorf("Expected title 'Code Style Guidelines', got: %s", title)
+	}
+
+	if description != "Use this to learn coding standards" {
+		t.Errorf("Expected description 'Use this to learn coding standards', got: %s", description)
+	}
+
+	expectedBody := "# Code Style\nFollow these guidelines."
+	if body != expectedBody {
+		t.Errorf("Expected body %q, got: %q", expectedBody, body)
+	}
+}
+
+func TestReadRuleBody_WithoutFrontMatter(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "my-rules.md")
+
+	content := `# Some Rules
+Do these things.`
+
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	title, description, body, err := ReadRuleBody(testFile)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Title derived from filename
+	if title != "my-rules" {
+		t.Errorf("Expected title 'my-rules', got: %s", title)
+	}
+
+	// Description should be empty when no front matter
+	if description != "" {
+		t.Errorf("Expected empty description, got: %s", description)
+	}
+
+	if body != content {
+		t.Errorf("Expected body %q, got: %q", content, body)
+	}
+}
+
+func TestReadRuleBody_FrontMatterWithoutTitle(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "testing.md")
+
+	content := `---
+description: Some description
+---
+
+Write tests.`
+
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	title, description, body, err := ReadRuleBody(testFile)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Title derived from filename when front matter has no title
+	if title != "testing" {
+		t.Errorf("Expected title 'testing', got: %s", title)
+	}
+
+	// Description should be extracted from front matter
+	if description != "Some description" {
+		t.Errorf("Expected description 'Some description', got: %s", description)
+	}
+
+	if body != "Write tests." {
+		t.Errorf("Expected body 'Write tests.', got: %q", body)
 	}
 }
 
@@ -469,10 +571,10 @@ func TestOpenCodeRulesProcessor_NoRules(t *testing.T) {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify opencode.json was not created when no rules
-	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
-	if _, err := os.Stat(opencodeConfigPath); !os.IsNotExist(err) {
-		t.Errorf("Expected opencode.json not to exist when no rules")
+	// Verify AGENTS.md was not created when no rules
+	agentsMdPath := filepath.Join(tempDir, ".config", "opencode", "AGENTS.md")
+	if _, err := os.Stat(agentsMdPath); !os.IsNotExist(err) {
+		t.Errorf("Expected AGENTS.md not to exist when no rules")
 	}
 }
 
@@ -526,35 +628,111 @@ Write tests for everything.`
 		t.Fatalf("Expected no error, got: %v", err)
 	}
 
-	// Verify opencode.json was created with correct instructions
-	opencodeConfigPath := filepath.Join(tempDir, ".config", "opencode", "opencode.json")
-	content, err := os.ReadFile(opencodeConfigPath)
+	// Verify AGENTS.md was created
+	agentsMdPath := filepath.Join(tempDir, ".config", "opencode", "AGENTS.md")
+	agentsMdContent, err := os.ReadFile(agentsMdPath)
 	if err != nil {
-		t.Fatalf("Expected opencode.json to exist, got error: %v", err)
+		t.Fatalf("Expected AGENTS.md to exist, got error: %v", err)
 	}
 
-	var config OpenCodeConfig
-	if err := json.Unmarshal(content, &config); err != nil {
-		t.Fatalf("Failed to parse opencode.json: %v", err)
+	agentsMd := string(agentsMdContent)
+
+	// Verify the Rules header and preamble
+	if !strings.Contains(agentsMd, "# Rules") {
+		t.Errorf("Expected AGENTS.md to contain '# Rules' header")
 	}
 
-	// Verify instructions array contains the glob pattern pointing to eksecd rules
-	if len(config.Instructions) != 1 {
-		t.Errorf("Expected 1 instruction, got: %d", len(config.Instructions))
+	if !strings.Contains(agentsMd, "strictly follow when they are relevant") {
+		t.Errorf("Expected AGENTS.md to contain updated preamble about following rules when relevant")
 	}
 
-	expectedInstruction := "~/.config/eksecd/rules/*.md"
-	if len(config.Instructions) > 0 && config.Instructions[0] != expectedInstruction {
-		t.Errorf("Expected instruction '%s', got: '%s'", expectedInstruction, config.Instructions[0])
+	// Verify rule titles appear as subsections
+	if !strings.Contains(agentsMd, "## Code Style Guidelines") {
+		t.Errorf("Expected AGENTS.md to contain '## Code Style Guidelines' subsection")
+	}
+
+	if !strings.Contains(agentsMd, "## Testing Best Practices") {
+		t.Errorf("Expected AGENTS.md to contain '## Testing Best Practices' subsection")
+	}
+
+	// Verify descriptions appear after titles
+	if !strings.Contains(agentsMd, "Use this to learn coding standards") {
+		t.Errorf("Expected AGENTS.md to contain description 'Use this to learn coding standards'")
+	}
+
+	if !strings.Contains(agentsMd, "How to write effective tests") {
+		t.Errorf("Expected AGENTS.md to contain description 'How to write effective tests'")
+	}
+
+	// Verify rule bodies are inlined (front matter stripped)
+	if !strings.Contains(agentsMd, "# Code Style\nFollow these guidelines.") {
+		t.Errorf("Expected AGENTS.md to contain rule body content")
+	}
+
+	if !strings.Contains(agentsMd, "# Testing\nWrite tests for everything.") {
+		t.Errorf("Expected AGENTS.md to contain rule body content")
+	}
+
+	// Verify front matter is NOT present
+	if strings.Contains(agentsMd, "---") {
+		t.Errorf("Expected AGENTS.md not to contain front matter delimiters")
 	}
 }
 
-func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
+func TestOpenCodeRulesProcessor_RulesWithoutFrontMatter(t *testing.T) {
 	// Create temporary directories
 	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "workspace")
 	rulesDir := filepath.Join(tempDir, ".config", "eksecd", "rules")
-	opencodeRulesDir := filepath.Join(tempDir, ".config", "opencode", "rules")
+
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatalf("Failed to create work directory: %v", err)
+	}
+
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		t.Fatalf("Failed to create rules directory: %v", err)
+	}
+
+	// Create rule without front matter
+	rule := `# Simple Rule
+Do something simple.`
+
+	if err := os.WriteFile(filepath.Join(rulesDir, "simple-rule.md"), []byte(rule), 0644); err != nil {
+		t.Fatalf("Failed to create rule: %v", err)
+	}
+
+	// Temporarily override home directory for test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Process rules
+	processor := NewOpenCodeRulesProcessor(workDir)
+	if err := processor.ProcessRules(""); err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify AGENTS.md uses filename-derived title
+	agentsMdPath := filepath.Join(tempDir, ".config", "opencode", "AGENTS.md")
+	content, err := os.ReadFile(agentsMdPath)
+	if err != nil {
+		t.Fatalf("Expected AGENTS.md to exist, got error: %v", err)
+	}
+
+	agentsMd := string(content)
+
+	if !strings.Contains(agentsMd, "## simple-rule") {
+		t.Errorf("Expected AGENTS.md to use filename-derived title '## simple-rule', got:\n%s", agentsMd)
+	}
+}
+
+func TestOpenCodeRulesProcessor_CleansOldArtifacts(t *testing.T) {
+	// Create temporary directories
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "workspace")
+	rulesDir := filepath.Join(tempDir, ".config", "eksecd", "rules")
+	opencodeConfigDir := filepath.Join(tempDir, ".config", "opencode")
+	opencodeRulesDir := filepath.Join(opencodeConfigDir, "rules")
 
 	if err := os.MkdirAll(workDir, 0755); err != nil {
 		t.Fatalf("Failed to create work directory: %v", err)
@@ -572,6 +750,12 @@ func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 	oldRulePath := filepath.Join(opencodeRulesDir, "old-rule.md")
 	if err := os.WriteFile(oldRulePath, []byte("# Old"), 0644); err != nil {
 		t.Fatalf("Failed to create old rule: %v", err)
+	}
+
+	// Create an old opencode.json (from previous approach)
+	oldOpencodeJsonPath := filepath.Join(opencodeConfigDir, "opencode.json")
+	if err := os.WriteFile(oldOpencodeJsonPath, []byte(`{"instructions":["~/.config/eksecd/rules/*.md"]}`), 0644); err != nil {
+		t.Fatalf("Failed to create old opencode.json: %v", err)
 	}
 
 	// Create a fresh rule in eksecd rules directory
@@ -594,6 +778,17 @@ func TestOpenCodeRulesProcessor_CleansOldRulesDirectory(t *testing.T) {
 	// Verify old opencode rules directory was removed
 	if _, err := os.Stat(opencodeRulesDir); !os.IsNotExist(err) {
 		t.Errorf("Expected old opencode rules directory to be removed")
+	}
+
+	// Verify old opencode.json was removed
+	if _, err := os.Stat(oldOpencodeJsonPath); !os.IsNotExist(err) {
+		t.Errorf("Expected old opencode.json to be removed")
+	}
+
+	// Verify AGENTS.md was created
+	agentsMdPath := filepath.Join(opencodeConfigDir, "AGENTS.md")
+	if _, err := os.Stat(agentsMdPath); os.IsNotExist(err) {
+		t.Errorf("Expected AGENTS.md to exist")
 	}
 
 	// Verify fresh rule still exists in eksecd rules directory
