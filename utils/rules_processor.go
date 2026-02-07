@@ -202,12 +202,12 @@ func (p *ClaudeCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 
 	// Clean up existing rules directory to avoid stale rules
 	log.Info("📋 Cleaning Claude Code rules directory: %s", claudeRulesDir)
-	if err := os.RemoveAll(claudeRulesDir); err != nil && !os.IsNotExist(err) {
+	if err := removeAllAsTargetUser(claudeRulesDir); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove existing rules directory: %w", err)
 	}
 
 	// Create fresh rules directory
-	if err := os.MkdirAll(claudeRulesDir, 0755); err != nil {
+	if err := mkdirAllAsTargetUser(claudeRulesDir); err != nil {
 		return fmt.Errorf("failed to create Claude rules directory: %w", err)
 	}
 
@@ -225,7 +225,7 @@ func (p *ClaudeCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 		}
 
 		// Write to destination
-		if err := os.WriteFile(destPath, content, 0644); err != nil {
+		if err := writeFileAsTargetUser(destPath, content, 0644); err != nil {
 			return fmt.Errorf("failed to write rule file %s: %w", destPath, err)
 		}
 	}
@@ -313,7 +313,7 @@ func (p *OpenCodeRulesProcessor) ProcessRules(targetHomeDir string) error {
 
 	// Clean up old OpenCode rules directory if it exists (from previous approach)
 	oldOpencodeRulesDir := filepath.Join(opencodeConfigDir, "rules")
-	if err := os.RemoveAll(oldOpencodeRulesDir); err != nil && !os.IsNotExist(err) {
+	if err := removeAllAsTargetUser(oldOpencodeRulesDir); err != nil && !os.IsNotExist(err) {
 		log.Info("⚠️  Failed to remove old OpenCode rules directory: %v", err)
 	}
 

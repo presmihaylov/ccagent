@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,12 +63,12 @@ func (p *OpenCodePermissionsProcessor) ProcessPermissions(targetHomeDir string) 
 
 	// Read existing config if it exists
 	var existingConfig map[string]interface{}
-	if content, err := os.ReadFile(opencodeConfigPath); err == nil {
+	if content, err := readFileAsTargetUser(opencodeConfigPath); err == nil {
 		if err := json.Unmarshal(content, &existingConfig); err != nil {
 			log.Info("⚠️  Failed to parse existing opencode.json, creating new config: %v", err)
 			existingConfig = make(map[string]interface{})
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to read existing opencode.json: %w", err)
 	} else {
 		existingConfig = make(map[string]interface{})
